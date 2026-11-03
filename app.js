@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.5.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -573,11 +573,16 @@ function facetChipsHtml(ctx) {
 
 /* ------------------------------------------------------------ view: cellar */
 
+function drinkSoonHtml() {
+  if (U.search.trim() || activeCount('cellar')) return '';
+  const list = S.wines.filter(w => w.count > 0 && ['Past peak', 'Drink soon'].includes(statusOf(w))).sort(urgencyCmp);
+  if (!list.length) return '';
+  return `<section><h2>Drink soon <span class="muted small" style="font-weight:400">${list.length}</span></h2><div>${list.map(wineRow).join('')}</div></section>`;
+}
+
 function viewCellar() {
   const inStock = S.wines.filter(w => w.count > 0);
   const bottles = inStock.reduce((a, w) => a + w.count, 0);
-  const urgentAll = inStock.filter(w => ['Past peak', 'Drink soon'].includes(statusOf(w))).sort(urgencyCmp);
-  const urgent = urgentAll.slice(0, 4);
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1><p class="muted">${bottles} bottles · ${inStock.length} wines</p></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
   if (!S.wines.length) {
@@ -588,8 +593,7 @@ function viewCellar() {
   return `<main class="screen has-nav">${head}
     <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search wine, grape or food" value="${esc(U.search)}"></label>${btn}</div>
     ${filters}
-    ${urgent.length ? `<section><div class="sec-head"><h2>Drink soon <span class="muted small" style="font-weight:400">${urgentAll.length}</span></h2><a href="#/window" class="small" style="display:inline-flex;align-items:center;gap:2px">Drinking window${ICON.chevron}</a></div>
-      <div class="grid2">${urgent.map(w => `<a class="card card-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w, true)}<div class="row-text"><span class="row-title" style="font-size:13px">${esc(wineTitle(w))}</span><span class="row-sub">${esc(w.vintage || '')}${w.vintage ? ' · ' : ''}${w.count} btl</span>${pill(w)}</div></a>`).join('')}</div></section>` : ''}
+    <div id="drink-soon">${drinkSoonHtml()}</div>
     <section><h2>All wines</h2><div id="wine-list">${cellarList()}</div></section>
   </main><a class="fab" href="#/add" aria-label="Add a new wine">${ICON.plusBig}</a>${nav('cellar')}`;
 }
@@ -1796,8 +1800,9 @@ const ACTS = {
 const INPUTS = {
   search: el => {
     U.search = el.value;
-    const l = $('#wine-list'), f = $('#facet-chips-cellar');
+    const l = $('#wine-list'), f = $('#facet-chips-cellar'), d = $('#drink-soon');
     if (l) l.innerHTML = cellarList();
+    if (d) d.innerHTML = drinkSoonHtml();
     if (f) f.innerHTML = facetChipsHtml('cellar');
   },
   facetq: el => { const ctx = el.dataset.ctx, st = U.f[ctx]; st.q[st.tab] = el.value; const f = $('#facet-chips-' + ctx); if (f) f.innerHTML = facetChipsHtml(ctx); },
