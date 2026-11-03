@@ -39,7 +39,8 @@ var ACTIONS = {
   image: actionImage_,
   analyze: actionAnalyze_,
   addLocation: actionAddLocation_,
-  deleteLocation: actionDeleteLocation_
+  deleteLocation: actionDeleteLocation_,
+  moveLocation: actionMoveLocation_
 };
 
 // ---------------------------------------------------------------- setup
@@ -323,6 +324,20 @@ function actionDeleteLocation_(req) {
       if (String(vals[i][0]) === name) sh.deleteRow(i + 1);
     }
     return readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String);
+  });
+}
+
+function actionMoveLocation_(req) {
+  var from = String(req.from || '').trim(), to = String(req.to || '').trim();
+  if (!from || !to) throw new Error('Missing location');
+  return withLock_(function () {
+    var t = table_(SHEETS.wines);
+    var col = t.headers.indexOf('location');
+    var moved = 0;
+    t.rows.forEach(function (r, i) {
+      if (String(r[col]).toLowerCase() === from.toLowerCase()) { t.sh.getRange(i + 2, col + 1).setValue(to); moved++; }
+    });
+    return { moved: moved };
   });
 }
 

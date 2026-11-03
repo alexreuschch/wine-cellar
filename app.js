@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -812,7 +812,7 @@ function purchaseHtml(w) {
   }
   const cell = (label, value) => `<div class="kv"><span>${label}</span><p style="font-weight:600">${value}</p></div>`;
   const date = w.purchaseDate ? esc(fmtDate(w.purchaseDate)) : 'Not set';
-  return `<section><h2 style="display:flex;align-items:center;gap:6px">${gift ? `${ICON.gift}Gift received` : 'Purchase'}</h2><div class="card form-grid" style="gap:14px">
+  return `<section><h2 style="display:flex;align-items:center;gap:6px">${gift ? `<span class="gift-mark" style="margin:0">${ICON.gift}</span>Gift received` : 'Purchase'}</h2><div class="card form-grid" style="gap:14px">
     ${gift ? cell('From', esc(namesOf(w.giftFrom).join(', ') || 'Not set')) : cell('Retailer', esc(w.retailer || 'Not set'))}
     ${cell(gift ? 'Received on' : 'Purchase date', date)}
     ${cell('Purchase price', gift ? `${money(0)} <span class="muted small" style="font-weight:400">gift</span>` : (w.purchasePrice !== null ? money(w.purchasePrice) : 'Not set'))}
@@ -1079,6 +1079,12 @@ function refreshView() {
 
 /* ------------------------------------------------------------ add and edit */
 
+function defaultLocation() {
+  const last = store.get('wc-lastloc', '');
+  if (S.locations.includes(last)) return last;
+  return S.locations.length === 1 ? S.locations[0] : '';
+}
+
 function newDraft(mode, w) {
   const src = w || normWine({ id: '', type: 'Red', count: 1 });
   return {
@@ -1088,7 +1094,7 @@ function newDraft(mode, w) {
       producer: src.producer, name: src.name, vintage: src.vintage, type: src.type, region: src.region, grapes: src.grapes,
       taste: src.taste, tasteTags: src.tasteTags.join(', '), pairings: src.pairings.join(', '),
       drinkFrom: str(src.drinkFrom), drinkUntil: str(src.drinkUntil), peakFrom: str(src.peakFrom), peakUntil: str(src.peakUntil),
-      location: src.location || (mode === 'add' && S.locations.includes(store.get('wc-lastloc', '')) ? store.get('wc-lastloc', '') : ''), shelf: src.shelf !== null ? src.shelf : '', position: src.position,
+      location: src.location || (mode === 'add' ? defaultLocation() : ''), shelf: src.shelf !== null ? src.shelf : '', position: src.position,
       retailer: src.retailer, purchaseDate: src.purchaseDate || (mode === 'add' ? todayISO() : ''),
       purchasePrice: src.purchasePrice !== null ? src.purchasePrice.toFixed(2) : '', streetPrice: src.streetPrice !== null ? src.streetPrice.toFixed(2) : ''
     },
@@ -1161,7 +1167,7 @@ function formBody() {
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
     <div class="box"><span class="box-title">Storage</span>
-      <label class="field">Location<select name="location" data-change="location"><option value=""${f.location ? '' : ' selected'}>No location</option>${locs.map(l => `<option${l === f.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>
+      <label class="field">Location<select name="location" data-change="location">${f.location ? '' : '<option value="" selected disabled>Choose a location</option>'}${locs.map(l => `<option${l === f.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>
       <div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="shelf-val" style="min-width:48px">${esc(str(f.shelf) === '' ? 'None' : f.shelf)}</span><button data-act="shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         ${field('Position', 'position', { ph: 'Back row, left' })}
@@ -1481,6 +1487,7 @@ function updateBanner() {
 async function saveWineForm() {
   const f = D.fields;
   if (!f.name.trim() && !f.producer.trim()) { toast('Enter at least a producer or a wine name.'); return; }
+  if (!str(f.location).trim()) { toast('Choose a location. New ones can be added in the list.'); const l = $('[name=location]'); if (l) l.focus(); return; }
   for (const r of D.ratings) {
     if (str(r.score).trim() === '') continue;
     const v = Number(String(r.score).replace(',', '.'));
@@ -1532,16 +1539,22 @@ async function saveWineForm() {
 function locationsHtml() {
   const used = {};
   S.wines.forEach(w => { if (w.location && w.count > 0) used[lc(w.location)] = (used[lc(w.location)] || 0) + w.count; });
+  const small = 'height:36px;padding:0 12px;font-size:13px';
   const rows = S.locations.map(l => {
     const n = used[lc(l)] || 0;
-    return `<div class="between loc-row"><span>${esc(l)} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span>${n
-      ? '<span class="muted tiny">in use</span>'
+    const others = S.locations.filter(x => x !== l);
+    const head = `<div class="between"><span>${esc(l)} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span>${n
+      ? `<span style="display:flex;gap:6px"><button class="btn" style="${small}" data-act="loc-show" data-v="${esc(l)}">Show</button><button class="btn" style="${small}" data-act="loc-move-open" data-v="${esc(l)}">Move</button></span>`
       : `<button class="icon-btn" data-act="loc-del" data-v="${esc(l)}" aria-label="Delete ${esc(l)}">${ICON.trash}</button>`}</div>`;
+    const move = U.locMove === l ? (others.length
+      ? `<div class="move-box"><span class="tiny muted">Move all wines from ${esc(l)} to</span><div style="display:flex;gap:8px"><label class="field" style="flex:1"><span class="sr-only">Target location</span><select id="move-to">${others.map(o => `<option>${esc(o)}</option>`).join('')}</select></label><button class="btn accent" data-act="loc-move" data-v="${esc(l)}">Move</button><button class="icon-btn" data-act="loc-move-cancel" aria-label="Cancel">${ICON.x}</button></div></div>`
+      : `<div class="move-box"><span class="small muted">Add another location first, then move the wines there.</span></div>`) : '';
+    return `<div class="loc-row">${head}${move}</div>`;
   }).join('');
   return `<section class="box"><span class="box-title">Locations</span>
     ${rows || '<p class="muted small" style="margin:0">No locations yet. Add where you keep your wine, for example Wine fridge, Basement or Kitchen.</p>'}
     <div style="display:flex;gap:8px;align-items:flex-end"><label class="field" style="flex:1"><span class="sr-only">New location</span><input id="new-loc" placeholder="New location" autocapitalize="words" enterkeyhint="done"></label><button class="btn accent" data-act="loc-add">Add</button></div>
-    <p class="muted tiny" style="margin:0">A location can be deleted once no bottles in stock are stored there.</p>
+    <p class="muted tiny" style="margin:0">A location can be deleted once no bottles in stock are stored there. Use Move to bring its wines to another location first.</p>
   </section>`;
 }
 
@@ -1587,6 +1600,25 @@ const ACTS = {
     refreshView();
     try { S.locations = await api('addLocation', { name }); persist(); refreshView(); }
     catch (e) { S.locations = S.locations.filter(l => l !== name); persist(); refreshView(); toast('Not saved: ' + e.message); }
+  },
+  'loc-show': el => {
+    U.filters = { wine: [], grape: [], food: [], location: [lc(el.dataset.v)] };
+    U.filterOpen = false;
+    U.search = '';
+    go('#/cellar');
+  },
+  'loc-move-open': el => { U.locMove = el.dataset.v; refreshView(); },
+  'loc-move-cancel': () => { U.locMove = null; refreshView(); },
+  'loc-move': async el => {
+    const from = el.dataset.v, to = $('#move-to').value;
+    if (!to || !confirm(`Move all wines from ${from} to ${to}?`)) return;
+    const moved = S.wines.filter(w => lc(w.location) === lc(from));
+    moved.forEach(w => { w.location = to; });
+    U.locMove = null;
+    persist();
+    refreshView();
+    try { await api('moveLocation', { from, to }); toast(`${moved.length} ${moved.length === 1 ? 'wine' : 'wines'} moved to ${to}`); }
+    catch (e) { moved.forEach(w => { w.location = from; }); persist(); refreshView(); toast('Not moved: ' + e.message); }
   },
   'loc-del': async el => {
     const name = el.dataset.v;

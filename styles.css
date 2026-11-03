@@ -263,3 +263,5 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .ftab .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--gold); color: var(--on-gold); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
 .search.compact { height: 40px; background: var(--bg); }
 .loc-row { min-height: 44px; border-bottom: 1px solid var(--line-soft); }
+.loc-row { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 6px 0; }
+.move-box { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: var(--bg); }
