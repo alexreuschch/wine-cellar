@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.6.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -94,7 +94,7 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [] };
+const S = { wines: [], removals: [], locations: [], settings: { currency: 'CHF' } };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
@@ -149,8 +149,10 @@ function normWine(w) {
   };
 }
 
-const CURRENCY = 'CHF';
-const money = v => `${CURRENCY} ${Number(v).toFixed(2)}`;
+const CURRENCIES = [['CHF', 'CHF'], ['EUR', 'EUR'], ['USD', 'USD'], ['GBP', 'GBP'], ['', 'No currency']];
+const cur = () => (S.settings && typeof S.settings.currency === 'string' ? S.settings.currency : 'CHF');
+const money = v => (cur() ? `${cur()} ` : '') + Number(v).toFixed(2);
+const curLabel = () => (cur() ? ` (${cur()})` : '');
 const parseMoney = v => { const s = str(v).trim().replace(/[^\d.,-]/g, '').replace(',', '.'); return s === '' || isNaN(Number(s)) ? null : Number(s); };
 
 function serialWine(w) {
@@ -193,8 +195,9 @@ function loadCache() {
   S.wines = (c.wines || []).map(normWine);
   S.removals = (c.removals || []).map(normRemoval);
   if (Array.isArray(c.locations)) S.locations = c.locations;
+  if (c.settings) S.settings = Object.assign({ currency: 'CHF' }, c.settings);
 }
-function persist() { store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations }); }
+function persist() { store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, settings: S.settings }); }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
   const i = S.wines.findIndex(x => x.id === w.id);
@@ -342,6 +345,7 @@ async function sync(silent) {
     S.wines = (d.wines || []).map(normWine).filter(w => w.id);
     S.removals = (d.removals || []).map(normRemoval).filter(r => r.id);
     S.locations = Array.isArray(d.locations) ? d.locations : [];
+    if (d.settings) S.settings = Object.assign({ currency: 'CHF' }, d.settings);
     persist();
     if (!isFormRoute()) render();
     if (!silent) toast('Up to date');
@@ -877,8 +881,8 @@ function acquisitionBox() {
       <label class="field full">${gift ? 'Received on' : 'Purchase date'}<input type="date" name="purchaseDate" data-input="field" value="${esc(f.purchaseDate)}"></label>
       ${gift
         ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>`
-        : `<label class="field">Purchase price (${CURRENCY})<input name="purchasePrice" data-input="field" inputmode="decimal" placeholder="45.00" value="${esc(f.purchasePrice)}"></label>`}
-      <label class="field">Street price (${CURRENCY})<input name="streetPrice" data-input="field" inputmode="decimal" placeholder="52.00" value="${esc(f.streetPrice)}"></label>
+        : `<label class="field">Purchase price${curLabel()}<input name="purchasePrice" data-input="field" inputmode="decimal" placeholder="45.00" value="${esc(f.purchasePrice)}"></label>`}
+      <label class="field">Street price${curLabel()}<input name="streetPrice" data-input="field" inputmode="decimal" placeholder="52.00" value="${esc(f.streetPrice)}"></label>
     </div>
   </div>`;
 }
@@ -1604,6 +1608,9 @@ function viewSettings(first) {
   return `<main class="screen${first ? '' : ' has-nav'}" style="gap:16px">
     ${first ? '' : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}
     <h1 class="title">${first ? 'Connect your cellar' : 'Settings'}</h1>
+    ${first ? '' : `<section class="box"><span class="box-title">General</span>
+      <label class="field">Currency for prices<select data-change="currency">${CURRENCIES.map(([v, l]) => `<option value="${v}"${v === cur() ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+      <p class="muted tiny" style="margin:0">Only changes how prices are labeled. Amounts are not converted.</p></section>`}
     ${first ? '' : locationsHtml()}
     ${first ? '' : '<h2 style="font-size:15px;font-weight:600;margin-top:8px">Connection</h2>'}
     <p class="muted" style="margin:0">Paste the web app URL and the token from your Google Apps Script. Both stay on this device.</p>
@@ -1829,6 +1836,12 @@ const INPUTS = {
 const CHANGES = {
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
   rsys: el => { if (D) D.ratings[Number(el.dataset.i)].sys = el.value; },
+  currency: async el => {
+    S.settings = Object.assign({}, S.settings, { currency: el.value });
+    persist();
+    try { await api('setSettings', { settings: { currency: el.value } }); toast('Currency saved'); }
+    catch (e) { toast('Saved on this device only. Update the script to share it across devices.'); }
+  },
   'show-finished': el => { U.showFinished = el.checked; refreshView(); },
   'top-finished': el => { U.topFinished = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },

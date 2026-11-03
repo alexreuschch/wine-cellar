@@ -40,7 +40,8 @@ var ACTIONS = {
   analyze: actionAnalyze_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
-  moveLocation: actionMoveLocation_
+  moveLocation: actionMoveLocation_,
+  setSettings: actionSetSettings_
 };
 
 // ---------------------------------------------------------------- setup
@@ -160,8 +161,24 @@ function actionLoad_() {
   return {
     wines: readAll_(SHEETS.wines),
     removals: readAll_(SHEETS.removals),
-    locations: readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String)
+    locations: readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String),
+    settings: settings_()
   };
+}
+
+function settings_() {
+  var c = props_().getProperty('CURRENCY');
+  return { currency: c === null ? 'CHF' : (c === 'NONE' ? '' : c) };
+}
+
+function actionSetSettings_(req) {
+  var s = req.settings || {};
+  if (s.currency !== undefined) {
+    var c = String(s.currency);
+    if (['CHF', 'EUR', 'USD', 'GBP', ''].indexOf(c) < 0) throw new Error('Unsupported currency');
+    props_().setProperty('CURRENCY', c || 'NONE');
+  }
+  return settings_();
 }
 
 function actionSaveWine_(req) {
