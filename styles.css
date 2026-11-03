@@ -248,7 +248,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
 
 .badge { display: inline-flex; align-items: center; gap: 4px; }
 .badge svg { width: 12px; height: 12px; }
-.badge.received { background: #3A2E18; color: var(--gold); }
+.badge.received { background: #1F3A2B; color: #8FD9AE; }
 .gift-mark { display: inline-flex; vertical-align: -2px; color: var(--gold); margin-left: 6px; }
 .toggle button { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .static { height: 46px; display: flex; align-items: center; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 15px; }
