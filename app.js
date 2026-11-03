@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -51,8 +51,15 @@ const ICON = {
   clock: svg('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', 22, 1.8),
   trophy: svg('<path d="M8 4h8v5a4 4 0 0 1-8 0V4zM12 13v4M9 20h6M8 6H5a3 3 0 0 0 3 3M16 6h3a3 3 0 0 1-3 3"/>', 22, 1.8),
   book: svg('<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM5 17a3 3 0 0 1 3-3h10"/>', 22, 1.8),
-  spark: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', 18, 1.8)
+  spark: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', 18, 1.8),
+  filter: svg('<path d="M4 5h16l-6 7v6l-4 2v-8z"/>', 20, 1.9),
+  heart: svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', 18, 1.9),
+  bottle: svg('<path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"/>', 14, 1.8)
 };
+const HEART_PATH = 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z';
+const HEART_ON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${HEART_PATH}"/></svg>`;
+const HEART_SM = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-left:3px;vertical-align:-1px"><path d="${HEART_PATH}"/></svg>`;
+const FIN = `<span class="fin" title="Finished" aria-label="Finished">${ICON.bottle}</span>`;
 const STAR_PATH = 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z';
 
 /* ------------------------------------------------------------ helpers */
@@ -85,7 +92,11 @@ const store = {
 
 let CFG = store.get('wc-config', null);
 const S = { wines: [], removals: [], locations: ['Wine fridge'] };
-const U = { type: 'All', search: '', showFinished: false, winFilter: 'All', topType: 'All', topMode: 'mine', topSys: null, addRatingOpen: false };
+const U = {
+  search: '', showFinished: false, filterOpen: false, filters: { wine: [], grape: [], food: [] }, filterAll: {},
+  winFilter: 'All', topType: 'All', topMode: 'mine', topSys: null, topFinished: false, addRatingOpen: false,
+  jSearch: '', jPerson: null, jFav: false, jAllPeople: false
+};
 let D = null;   // add or edit draft
 let RS = null;  // removal sheet state
 let lastRouteKey = '';
@@ -146,7 +157,21 @@ function serialWine(w) {
 }
 
 function normRemoval(r) {
-  return { id: str(r.id), wineId: str(r.wineId), date: str(r.date).slice(0, 10), type: str(r.type) || 'Other', occasion: str(r.occasion), people: str(r.people), food: str(r.food), note: str(r.note), wineName: str(r.wineName) };
+  return { id: str(r.id), wineId: str(r.wineId), date: str(r.date).slice(0, 10), type: str(r.type) || 'Other', occasion: str(r.occasion), people: str(r.people), hearts: str(r.hearts), food: str(r.food), note: str(r.note), wineName: str(r.wineName) };
+}
+
+const lc = s => String(s).toLowerCase();
+const namesOf = s => splitList(s).map(n => n.replace(/\s+/g, ' '));
+function knownPeople() {
+  const m = new Map();
+  S.removals.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(r => namesOf(r.people).forEach(n => {
+    const k = lc(n);
+    const e = m.get(k) || { name: n, n: 0 };
+    e.name = n;
+    e.n += 1;
+    m.set(k, e);
+  }));
+  return [...m.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
 }
 
 function loadCache() {
@@ -380,34 +405,97 @@ function afterRender(r) {
   if (r.p === 'wine') {
     const w = wineById(r.id);
     if (!w) return;
-    setupRating(w);
     const img = $('#label-img');
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
-  if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form' && D.ai) updateBanner();
+  if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); if (D.ai) updateBanner(); }
 }
 
 /* ------------------------------------------------------------ view: cellar */
 
+const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const grapeNames = w => String(w.grapes || '').split(/[,;\/+&]/)
+  .map(s => cap(s.replace(/\d+([.,]\d+)?\s*%?/g, '').replace(/\s+/g, ' ').trim()))
+  .filter(s => s.length > 1);
+const foodNames = w => w.pairings.map(s => cap(s.trim())).filter(Boolean);
+const FACETS = {
+  wine: { label: 'Wine', of: w => [w.type] },
+  grape: { label: 'Grape', of: grapeNames },
+  food: { label: 'Food', of: foodNames }
+};
+const typeIndex = n => { const i = TYPES.indexOf(n); return i < 0 ? 99 : i; };
+
+function facetValues(pool, key) {
+  const m = new Map();
+  pool.forEach(w => {
+    const seen = new Set();
+    FACETS[key].of(w).forEach(v => {
+      const k = lc(v);
+      if (seen.has(k)) return;
+      seen.add(k);
+      const e = m.get(k) || { key: k, name: v, n: 0 };
+      e.n += 1;
+      m.set(k, e);
+    });
+  });
+  const list = [...m.values()];
+  return key === 'wine'
+    ? list.sort((a, b) => typeIndex(a.name) - typeIndex(b.name))
+    : list.sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+}
+
+const activeFilterCount = () => Object.values(U.filters).reduce((a, x) => a + x.length, 0);
+const passesFilters = w => Object.keys(FACETS).every(k => !U.filters[k].length || FACETS[k].of(w).some(v => U.filters[k].includes(lc(v))));
+const cellarPool = () => S.wines.filter(w => U.showFinished || w.count > 0);
+
 function viewCellar() {
   const inStock = S.wines.filter(w => w.count > 0);
   const bottles = inStock.reduce((a, w) => a + w.count, 0);
-  const types = TYPES.filter(t => S.wines.some(w => w.type === t));
-  if (U.type !== 'All' && !types.includes(U.type)) U.type = 'All';
   const urgent = inStock.filter(w => ['Past peak', 'Drink soon'].includes(statusOf(w))).sort(urgencyCmp).slice(0, 4);
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1><p class="muted">${bottles} bottles · ${inStock.length} wines</p></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
   if (!S.wines.length) {
-    return `<main class="screen has-nav">${head}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and Claude fills in the details for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
+    return `<main class="screen has-nav">${head}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
+  const filters = filterArea();
+  const n = activeFilterCount();
   return `<main class="screen has-nav">${head}
-    <label class="search">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Wine, grape or food" value="${esc(U.search)}"></label>
-    <div class="chips">${['All', ...types].map(t => chip(t, U.type === t, 'type', t)).join('')}</div>
+    <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search wine, grape or food" value="${esc(U.search)}"></label>
+      <button class="filter-btn${U.filterOpen || n ? ' on' : ''}" data-act="filter-toggle" aria-expanded="${U.filterOpen}" aria-label="Filter">${ICON.filter}${n ? `<span class="count">${n}</span>` : ''}</button></div>
+    ${filters}
     ${urgent.length ? `<section><div class="sec-head"><h2>Drink now</h2><a href="#/window" class="small">See all</a></div>
       <div class="grid2">${urgent.map(w => `<a class="card card-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w, true)}<div class="row-text"><span class="row-title" style="font-size:13px">${esc(wineTitle(w))}</span><span class="row-sub">${esc(w.vintage || '')}${w.vintage ? ' · ' : ''}${w.count} btl</span>${pill(w)}</div></a>`).join('')}</div></section>` : ''}
     <section><h2>All wines</h2><div id="wine-list">${cellarList()}</div></section>
   </main><a class="fab" href="#/add" aria-label="Add a new wine">${ICON.plusBig}</a>${nav('cellar')}`;
+}
+
+function filterArea() {
+  const pool = cellarPool();
+  const facets = {};
+  Object.keys(FACETS).forEach(k => {
+    facets[k] = facetValues(pool, k);
+    U.filters[k] = U.filters[k].filter(v => facets[k].some(x => x.key === v));
+  });
+  const active = [];
+  Object.keys(FACETS).forEach(k => U.filters[k].forEach(v => active.push({ k, v, name: facets[k].find(x => x.key === v).name })));
+  const clear = active.length ? `<button class="chip" data-act="filter-clear">Clear filters</button>` : '';
+  if (!U.filterOpen) {
+    return active.length
+      ? `<div class="chips">${active.map(a => `<button class="chip on" data-act="filter-chip" data-k="${a.k}" data-v="${esc(a.v)}" aria-label="Remove filter ${esc(a.name)}">${esc(a.name)}${ICON.x}</button>`).join('')}${clear}</div>`
+      : '';
+  }
+  const sections = Object.keys(FACETS).map(k => {
+    const vals = facets[k];
+    if (!vals.length) return '';
+    const all = U.filterAll[k] || vals.length <= 14;
+    const shown = all ? vals : vals.slice(0, 12);
+    return `<div class="facet"><span class="facet-title">${FACETS[k].label}</span><div class="chips">${shown.map(x => `<button class="chip${U.filters[k].includes(x.key) ? ' on' : ''}" data-act="filter-chip" data-k="${k}" data-v="${esc(x.key)}">${esc(x.name)} <span class="n">${x.n}</span></button>`).join('')}${all ? '' : `<button class="chip" data-act="filter-more" data-k="${k}">Show all ${vals.length}</button>`}</div></div>`;
+  }).join('');
+  const done = S.wines.filter(w => w.count === 0).length;
+  return `<div class="card filter-panel">${sections || '<p class="muted small" style="margin:0">Add grapes and food pairings to your wines to filter by them.</p>'}
+    ${done ? `<label class="switch"><input type="checkbox" data-change="show-finished"${U.showFinished ? ' checked' : ''}>Include finished wines (${done})</label>` : ''}
+    ${clear ? `<div>${clear}</div>` : ''}</div>`;
 }
 
 function matches(w, q) {
@@ -418,19 +506,20 @@ function matches(w, q) {
 
 function wineRow(w) {
   return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
-    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}</span><span class="row-sub">${esc(wineSub(w))}</span>${pill(w)}</div></a>
+    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span>${w.count > 0 ? pill(w) : ''}</div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove one bottle">${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add one bottle">${ICON.plus}</button></div>
   </div>`;
 }
 
 function cellarList() {
-  const list = S.wines.filter(w => (U.type === 'All' || w.type === U.type) && matches(w, U.search))
+  const list = S.wines.filter(w => matches(w, U.search) && passesFilters(w))
     .sort((a, b) => wineTitle(a).localeCompare(wineTitle(b)) || str(a.vintage).localeCompare(str(b.vintage)));
   const stock = list.filter(w => w.count > 0), done = list.filter(w => w.count === 0);
-  let html = stock.length ? stock.map(wineRow).join('') : `<p class="muted small">${U.search ? 'No wine matches your search.' : 'No bottles in stock.'}</p>`;
+  const filtered = U.search || activeFilterCount();
+  let html = stock.length ? stock.map(wineRow).join('') : `<p class="muted small">${filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
   if (done.length) {
-    html += `<button class="btn ghost" data-act="toggle-finished">${U.showFinished ? 'Hide' : 'Show'} finished wines (${done.length})</button>`;
     if (U.showFinished) html += done.map(wineRow).join('');
+    html += `<button class="btn ghost" data-act="toggle-finished">${U.showFinished ? 'Hide' : 'Show'} finished wines (${done.length})</button>`;
   }
   return html;
 }
@@ -461,16 +550,19 @@ function viewWindow() {
 function viewTop() {
   const types = TYPES.filter(t => S.wines.some(w => w.type === t));
   if (U.topType !== 'All' && !types.includes(U.topType)) U.topType = 'All';
-  const pool = S.wines.filter(w => U.topType === 'All' || w.type === U.topType);
+  const anyDone = S.wines.some(w => w.count === 0);
+  const pool = S.wines.filter(w => (U.topType === 'All' || w.type === U.topType) && (U.topFinished || w.count > 0));
   const typeWord = U.topType === 'All' ? 'wines' : U.topType.toLowerCase() + ' wines';
   const lead = `<h1 class="title">Top rated</h1>
     <div class="chips">${['All', ...types].map(t => chip(t, U.topType === t, 'top-type', t)).join('')}</div>
-    <div class="toggle"><button class="${U.topMode === 'mine' ? 'on' : ''}" data-act="top-mode" data-v="mine">My rating</button><button class="${U.topMode === 'ext' ? 'on' : ''}" data-act="top-mode" data-v="ext">External</button></div>`;
+    <div class="toggle"><button class="${U.topMode === 'mine' ? 'on' : ''}" data-act="top-mode" data-v="mine">My rating</button><button class="${U.topMode === 'ext' ? 'on' : ''}" data-act="top-mode" data-v="ext">External</button></div>
+    ${anyDone ? `<label class="switch"><input type="checkbox" data-change="top-finished"${U.topFinished ? ' checked' : ''}>Include finished wines</label>
+      ${U.topFinished ? `<p class="muted tiny" style="margin:-14px 0 0;display:flex;align-items:center;gap:2px">${FIN}<span style="margin-left:4px">marks a finished wine with no bottles left</span></p>` : ''}` : ''}`;
   let body = '';
   if (U.topMode === 'mine') {
     const rated = pool.filter(w => w.myRating !== null).sort((a, b) => b.myRating - a.myRating);
     body = rated.length ? rated.map((w, i) => topRow(w, i, segsHtml(w.myRating), `<b>${w.myRating}%</b>`, w.ratings.map(r => `${r.sys} ${fmtScore(r.sys, r.score)}`).join(' · '))).join('')
-      : `<div class="empty"><h2>No ratings yet</h2><p>Open a wine and drag the rating bar to rate it.</p></div>`;
+      : `<div class="empty"><h2>No ratings yet</h2><p>Open a wine, tap Edit and drag the rating bar to rate it.</p></div>`;
   } else {
     const counts = {};
     pool.forEach(w => w.ratings.forEach(r => { counts[r.sys] = (counts[r.sys] || 0) + 1; }));
@@ -490,18 +582,36 @@ function viewTop() {
 }
 
 function topRow(w, i, visual, score, sub) {
-  return `<a class="journal-row" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
-    <div class="row-text" style="gap:5px"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? ' <span class="muted tiny">(finished)</span>' : ''}</span>${visual}${sub ? `<span class="muted tiny ellipsis">${esc(sub)}</span>` : ''}</div>
+  return `<a class="journal-row${w.count === 0 ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
+    <div class="row-text" style="gap:5px"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${visual}${sub ? `<span class="muted tiny ellipsis">${esc(sub)}</span>` : ''}</div>
     <div class="score">${score}</div></a>`;
 }
 
 /* ------------------------------------------------------------ view: journal */
 
-function viewJournal() {
-  const list = S.removals.slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-  if (!list.length) {
-    return `<main class="screen has-nav"><h1 class="title">Journal</h1><div class="empty"><h2>No bottles removed yet</h2><p>When you take a bottle out with minus, it shows up here with occasion, people and food.</p></div></main>${nav('journal')}`;
-  }
+function peopleLine(r) {
+  const names = namesOf(r.people);
+  if (!names.length) return '';
+  const hearts = namesOf(r.hearts).map(lc);
+  return (r.type === 'Gift' ? 'Given to ' : 'With ') + names.map(n => esc(n) + (hearts.includes(lc(n)) ? `<span class="heart-on" aria-label="favorite wine">${HEART_SM}</span>` : '')).join(', ');
+}
+
+function journalEntries() {
+  const q = lc(U.jSearch.trim());
+  return S.removals.slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).filter(r => {
+    const ppl = namesOf(r.people).map(lc), hearts = namesOf(r.hearts).map(lc);
+    if (U.jPerson && !ppl.includes(U.jPerson)) return false;
+    if (U.jFav && !(U.jPerson ? hearts.includes(U.jPerson) : hearts.length)) return false;
+    if (!q) return true;
+    const w = wineById(r.wineId);
+    const hay = lc([r.people, r.occasion, r.food, r.note, r.type, w ? fullName(w) : r.wineName].join(' '));
+    return q.split(/\s+/).every(p => hay.includes(p));
+  });
+}
+
+function journalList() {
+  const list = journalEntries();
+  if (!list.length) return '<p class="muted small">No entries match.</p>';
   let html = '', month = '';
   list.forEach(r => {
     const d = parseISO(r.date);
@@ -509,13 +619,44 @@ function viewJournal() {
     if (m !== month) { html += `<h2 class="month">${m}</h2>`; month = m; }
     const w = wineById(r.wineId);
     const name = w ? `${wineTitle(w)} ${w.vintage}` : (r.wineName || 'Deleted wine');
-    const line = [r.occasion, r.people].filter(Boolean).join(' · ');
-    const inner = `<div class="day"><b>${d ? d.getDate() : ''}</b><span>${d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : ''}</span></div>
-      <div class="row-text" style="gap:3px"><div class="between"><span class="row-title">${esc(name)}</span>${typeBadge(r.type)}</div>
-      ${line ? `<span class="small">${esc(line)}</span>` : ''}${r.food ? `<span class="tiny" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small muted ellipsis">${esc(r.note)}</span>` : ''}</div>`;
-    html += w ? `<a class="journal-row" href="#/wine/${encodeURIComponent(w.id)}">${inner}</a>` : `<div class="journal-row">${inner}</div>`;
+    const ppl = peopleLine(r);
+    html += `<button class="journal-row as-btn" data-act="edit-removal" data-id="${esc(r.id)}" aria-label="Edit entry ${esc(name)}">
+      <span class="day"><b>${d ? d.getDate() : ''}</b><span>${d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : ''}</span></span>
+      <span class="row-text" style="gap:3px"><span class="between"><span class="row-title">${esc(name)}</span>${typeBadge(r.type)}</span>
+      ${r.occasion ? `<span class="small">${esc(r.occasion)}</span>` : ''}${ppl ? `<span class="small muted">${ppl}</span>` : ''}${r.food ? `<span class="tiny" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small muted ellipsis">${esc(r.note)}</span>` : ''}</span></button>`;
   });
-  return `<main class="screen has-nav"><h1 class="title">Journal</h1><div>${html}</div></main>${nav('journal')}`;
+  return html;
+}
+
+function personSummary(p) {
+  const rs = S.removals.filter(r => namesOf(r.people).map(lc).includes(p));
+  const person = knownPeople().find(x => lc(x.name) === p);
+  const gifts = rs.filter(r => r.type === 'Gift').length;
+  const shared = rs.length - gifts;
+  const favIds = [...new Set(rs.filter(r => namesOf(r.hearts).map(lc).includes(p)).map(r => r.wineId))];
+  const favs = favIds.map(id => wineById(id)).filter(Boolean);
+  return `<div class="card" style="display:flex;flex-direction:column;gap:8px">
+    <div class="between"><h2 style="font-size:17px;font-weight:600">${esc(person ? person.name : p)}</h2><button class="icon-btn" data-act="j-person" data-v="${esc(p)}" aria-label="Show everyone">${ICON.x}</button></div>
+    <p class="muted small" style="margin:-8px 0 0">${shared} shared · ${gifts} given as ${gifts === 1 ? 'gift' : 'gifts'}</p>
+    ${favs.length ? `<span class="tiny muted">Favorite wines</span><div class="tags">${favs.map(w => `<a class="tag fav" href="#/wine/${encodeURIComponent(w.id)}">${HEART_SM}${esc(wineTitle(w))} ${esc(w.vintage)}</a>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+function viewJournal() {
+  if (!S.removals.length) {
+    return `<main class="screen has-nav"><h1 class="title">Journal</h1><div class="empty"><h2>No bottles removed yet</h2><p>When you take a bottle out with minus, it shows up here with occasion, people and food.</p></div></main>${nav('journal')}`;
+  }
+  const people = knownPeople();
+  if (U.jPerson && !people.some(p => lc(p.name) === U.jPerson)) U.jPerson = null;
+  const showAll = U.jAllPeople || people.length <= 12;
+  const shown = showAll ? people : people.slice(0, 10);
+  const anyHeart = S.removals.some(r => namesOf(r.hearts).length);
+  return `<main class="screen has-nav"><h1 class="title">Journal</h1>
+    <label class="search">${ICON.search}<input type="search" data-input="jsearch" aria-label="Search the journal" placeholder="Person, wine, occasion or food" value="${esc(U.jSearch)}"></label>
+    ${people.length ? `<div class="facet"><span class="facet-title">People</span><div class="chips">${shown.map(p => `<button class="chip${U.jPerson === lc(p.name) ? ' on' : ''}" data-act="j-person" data-v="${esc(lc(p.name))}">${esc(p.name)} <span class="n">${p.n}</span></button>`).join('')}${showAll ? '' : `<button class="chip" data-act="j-more">Show all ${people.length}</button>`}</div></div>` : ''}
+    ${anyHeart ? `<label class="switch"><input type="checkbox" data-change="j-fav"${U.jFav ? ' checked' : ''}>Only favorite wines<span class="heart-on">${HEART_SM}</span></label>` : ''}
+    ${U.jPerson ? personSummary(U.jPerson) : ''}
+    <div id="journal-list">${journalList()}</div></main>${nav('journal')}`;
 }
 
 /* ------------------------------------------------------------ view: wine detail */
@@ -528,32 +669,31 @@ function viewWine(id) {
   const hist = S.removals.filter(r => r.wineId === w.id).sort((a, b) => b.date.localeCompare(a.date));
   const usedSys = w.ratings.map(r => r.sys);
   const freeSys = SYSTEMS.filter(x => !usedSys.includes(x.key));
+  const editHref = '#/edit/' + encodeURIComponent(w.id);
   const label = w.thumb || w.labelFileId
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
   const where = [w.shelf !== null ? `Shelf ${w.shelf}` : '', w.position].filter(Boolean).join(' · ');
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type].filter(Boolean).join(' · ');
   return `<main class="screen">
-    <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="#/edit/${encodeURIComponent(w.id)}">Edit</a></div>
+    <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
-    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}</h1><p class="meta">${esc(meta)}</p></div>
+    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${w.count === 0 ? FIN : ''}</h1><p class="meta">${esc(meta)}</p></div>
     <div class="grid2">
       <div class="card"><span class="tiny muted">In stock</span><div class="between" style="margin-top:6px">
         <button class="btn" style="width:42px;padding:0" data-act="minus" data-id="${esc(w.id)}" aria-label="Remove one bottle">${ICON.minus}</button>
         <span style="font-size:26px;font-weight:600">${w.count}</span>
         <button class="btn" style="width:42px;padding:0" data-act="plus" data-id="${esc(w.id)}" aria-label="Add one bottle">${ICON.plus}</button></div></div>
-      <div class="card"><span class="tiny muted">Location</span><p style="margin:8px 0 0;font-size:17px;font-weight:600">${esc(w.location || 'Not set')}</p><p class="muted small" style="margin:2px 0 0">${esc(where)}</p></div>
+      <div class="card"><span class="tiny muted">Location</span><p style="margin:8px 0 0;font-size:17px;font-weight:600">${esc(w.location || 'Not set')}</p>${where ? `<p class="muted small" style="margin:2px 0 0">${esc(where)}</p>` : ''}</div>
     </div>
-    <section id="rating">
-      <div class="rating-head"><h2>My rating</h2><span class="rating-val${w.myRating === null ? ' none' : ''}" id="rating-val">${w.myRating === null ? 'Not rated' : w.myRating + '%'}</span></div>
-      <div class="rating-bar" id="rating-bar">${segsHtml(w.myRating, 30, 'lg')}</div>
-      <div class="scale"><span>0</span><span>50</span><span>100</span></div>
-      <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
+    <section>
+      <div class="rating-head"><h2>My rating</h2>${w.myRating === null ? `<a class="small" href="${editHref}">Rate in Edit</a>` : `<span class="rating-val">${w.myRating}%</span>`}</div>
+      ${w.myRating === null ? '' : segsHtml(w.myRating, 22, 'lg')}
     </section>
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
       ${p ? `${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div><p class="muted tiny" style="margin:0">${windowText(w)}</p>`
-        : `<p class="muted small" style="margin:0">No drinking window set yet. <a href="#/edit/${encodeURIComponent(w.id)}">Add one</a></p>`}
+        : `<p class="muted small" style="margin:0">No drinking window set yet. <a href="${editHref}">Add one</a></p>`}
     </section>
     <section>
       <h2>External ratings</h2>
@@ -570,12 +710,15 @@ function viewWine(id) {
       ${w.taste ? `<div class="kv"><span>Taste</span><p style="line-height:1.5">${esc(w.taste)}</p></div>` : ''}
       ${w.tasteTags.length ? `<div class="tags">${w.tasteTags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
       ${w.pairings.length ? `<div class="kv"><span>Pairs with</span><div class="tags" style="margin-top:6px">${w.pairings.map(t => `<span class="food">${esc(t)}</span>`).join('')}</div></div>` : ''}
-      ${!w.grapes && !w.taste && !w.pairings.length ? `<p class="muted small" style="margin:0">No profile yet. <a href="#/edit/${encodeURIComponent(w.id)}">Edit</a> to add grapes, taste and food pairings.</p>` : ''}
+      ${!w.grapes && !w.taste && !w.pairings.length ? `<p class="muted small" style="margin:0">No profile yet. <a href="${editHref}">Edit</a> to add grapes, taste and food pairings.</p>` : ''}
     </section>
     <section style="gap:0">
       <h2 style="margin-bottom:4px">Bottles removed</h2>
-      ${hist.length ? hist.map(r => `<div class="hist"><div class="hist-head"><span class="tiny muted">${esc(fmtDate(r.date))}</span><span style="display:flex;align-items:center;gap:4px">${typeBadge(r.type)}<button class="del" data-act="rm-removal" data-id="${esc(r.id)}" aria-label="Delete entry">${ICON.trash}</button></span></div>
-        ${r.occasion ? `<span style="font-size:14px;font-weight:600">${esc(r.occasion)}</span>` : ''}${r.people ? `<span class="small muted">${esc(r.type === 'Gift' ? 'Given to ' + r.people : 'With ' + r.people)}</span>` : ''}${r.food ? `<span class="small" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small">${esc(r.note)}</span>` : ''}</div>`).join('')
+      ${hist.length ? hist.map(r => {
+        const ppl = peopleLine(r);
+        return `<button class="hist as-btn" data-act="edit-removal" data-id="${esc(r.id)}" aria-label="Edit entry from ${esc(fmtDate(r.date))}"><span class="hist-head"><span class="tiny muted">${esc(fmtDate(r.date))}</span>${typeBadge(r.type)}</span>
+        ${r.occasion ? `<span style="font-size:14px;font-weight:600">${esc(r.occasion)}</span>` : ''}${ppl ? `<span class="small muted">${ppl}</span>` : ''}${r.food ? `<span class="small" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small">${esc(r.note)}</span>` : ''}</button>`;
+      }).join('') + '<p class="muted tiny" style="margin:8px 0 0">Tap an entry to edit it.</p>'
         : '<p class="muted small" style="margin:0">No bottles removed yet.</p>'}
     </section>
   </main>`;
@@ -601,84 +744,149 @@ function purchaseHtml(w) {
 
 const fmtDate = s => { const d = parseISO(s); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : s; };
 
-let ratingState = null;
-function setupRating(w) {
+/* ------------------------------------------------------------ my rating (edit form only) */
+
+function setupRating() {
   const bar = $('#rating-bar');
-  if (!bar) return;
-  ratingState = { id: w.id, v: w.myRating, timer: null };
-  let drag = false;
+  if (!bar || !D) return;
+  let start = null, drag = false;
   const setX = x => {
     const r = bar.getBoundingClientRect();
-    setRating(Math.round(clamp((x - r.left) / r.width, 0, 1) * 100), false);
+    setRating(Math.round(clamp((x - r.left) / r.width, 0, 1) * 100));
   };
-  bar.addEventListener('pointerdown', e => { drag = true; bar.setPointerCapture(e.pointerId); setX(e.clientX); });
-  bar.addEventListener('pointermove', e => { if (drag) setX(e.clientX); });
-  const end = () => { if (drag) { drag = false; scheduleRatingSave(); } };
-  bar.addEventListener('pointerup', end);
-  bar.addEventListener('pointercancel', end);
-}
-function setRating(v, save = true) {
-  if (!ratingState) return;
-  ratingState.v = v;
-  const val = $('#rating-val');
-  if (val) { val.textContent = v + '%'; val.classList.remove('none'); }
-  const bar = $('#rating-bar');
-  if (bar) bar.innerHTML = segsHtml(v, 30, 'lg');
-  if (save) scheduleRatingSave();
-}
-function scheduleRatingSave() {
-  if (!ratingState) return;
-  clearTimeout(ratingState.timer);
-  const { id, v } = ratingState;
-  ratingState.timer = setTimeout(async () => {
-    const w = wineById(id);
-    if (!w) return;
-    const prev = w.myRating;
-    w.myRating = v;
-    persist();
-    try { upsertWine(normWine(await api('update', { id, fields: { myRating: v } }))); persist(); }
-    catch (e) { w.myRating = prev; persist(); toast('Rating not saved: ' + e.message); }
-  }, 700);
+  bar.addEventListener('pointerdown', e => { start = { x: e.clientX, y: e.clientY }; drag = false; });
+  bar.addEventListener('pointermove', e => {
+    if (!start) return;
+    const dx = Math.abs(e.clientX - start.x), dy = Math.abs(e.clientY - start.y);
+    if (!drag && dx > 6 && dx > dy) { drag = true; try { bar.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } }
+    if (drag) setX(e.clientX);
+  });
+  bar.addEventListener('pointerup', e => { if (start && !drag) setX(e.clientX); start = null; drag = false; });
+  bar.addEventListener('pointercancel', () => { start = null; drag = false; });
 }
 
-/* ------------------------------------------------------------ removal sheet */
+function setRating(v) {
+  if (!D) return;
+  D.myRating = v;
+  const val = $('#rating-val');
+  if (val) { val.textContent = v === null ? 'Not rated' : v + '%'; val.classList.toggle('none', v === null); }
+  const bar = $('#rating-bar');
+  if (bar) bar.innerHTML = segsHtml(v, 30, 'lg');
+}
+
+/* ------------------------------------------------------------ removal sheet and journal entries */
 
 function openRemoveSheet(id) {
   const w = wineById(id);
   if (!w || w.count < 1) return;
-  RS = { id, type: 'Dinner', occasion: '', people: '', food: '', note: '' };
+  RS = { mode: 'add', wineId: id, type: 'Dinner', occasion: '', people: [], food: '', note: '', date: todayISO(), typing: '', showAll: false };
   renderSheet();
 }
+
+function openEditRemoval(id) {
+  const r = S.removals.find(x => x.id === id);
+  if (!r) return;
+  const hearts = namesOf(r.hearts).map(lc);
+  RS = {
+    mode: 'edit', id: r.id, wineId: r.wineId, type: REMOVAL_TYPES.includes(r.type) ? r.type : 'Other',
+    occasion: r.occasion, people: namesOf(r.people).map(n => ({ name: n, heart: hearts.includes(lc(n)) })),
+    food: r.food, note: r.note, date: r.date || todayISO(), typing: '', showAll: false
+  };
+  renderSheet();
+}
+
 function renderSheet() {
   const root = $('#sheet-root');
   if (!RS) { root.innerHTML = ''; return; }
-  const w = wineById(RS.id);
+  const w = wineById(RS.wineId);
+  const r = RS.mode === 'edit' ? S.removals.find(x => x.id === RS.id) : null;
   const gift = RS.type === 'Gift';
+  const name = w ? `${wineTitle(w)} ${w.vintage}`.trim() : ((r && r.wineName) || 'Deleted wine');
+  const cur = route();
+  const link = RS.mode === 'edit' && w && !(cur.p === 'wine' && cur.id === w.id) ? ` · <a href="#/wine/${encodeURIComponent(w.id)}">View wine</a>` : '';
+  const sub = RS.mode === 'edit' ? esc(name) + link : `${esc(name)} · ${w.count - 1} left`;
   root.innerHTML = `<div class="sheet-backdrop" data-act="sheet-close"></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
     <div class="grab"></div>
-    <div style="display:flex;gap:12px;align-items:center">${thumbHtml(w)}<div style="flex:1;min-width:0"><h2 id="sheet-title" style="font-size:18px;font-weight:600">Bottle removed</h2><p class="muted small ellipsis" style="margin:2px 0 0">${esc(wineTitle(w))} ${esc(w.vintage)} · ${w.count - 1} left</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
+    <div style="display:flex;gap:12px;align-items:center">${w ? thumbHtml(w) : ''}<div style="flex:1;min-width:0"><h2 id="sheet-title" style="font-size:18px;font-weight:600">${RS.mode === 'edit' ? 'Edit entry' : 'Bottle removed'}</h2><p class="muted small ellipsis" style="margin:2px 0 0">${sub}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
+    ${RS.mode === 'edit' ? `<label class="field">Date<input type="date" name="date" data-input="rs" value="${esc(RS.date)}"></label>` : ''}
     <div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">Type</span><div class="grid2" style="gap:8px">${REMOVAL_TYPES.map(t => `<button class="btn${t === RS.type ? ' primary' : ''}" style="height:44px;font-size:14px" data-act="rs-type" data-v="${t}">${t}</button>`).join('')}</div></div>
     <label class="field">Occasion<input name="occasion" data-input="rs" placeholder="${esc(OCCASION_HINTS[RS.type])}" value="${esc(RS.occasion)}"></label>
-    <label class="field">${gift ? 'Given to' : 'Shared with'}<input name="people" data-input="rs" placeholder="Names" value="${esc(RS.people)}"></label>
+    <div class="field"><span>${gift ? 'Given to' : 'Shared with'}</span>
+      <div id="people-chips" class="chips">${peopleChipsHtml()}</div>
+      <input id="people-input" data-input="people" aria-label="${gift ? 'Given to' : 'Shared with'}" placeholder="Type a name" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(RS.typing)}">
+      <div id="people-sugg">${peopleSuggHtml()}</div>
+    </div>
     ${gift ? '' : `<label class="field">Food<input name="food" data-input="rs" placeholder="Duck breast with cherry sauce" value="${esc(RS.food)}"></label>`}
     <label class="field">Note<textarea name="note" data-input="rs" rows="3" placeholder="Decanted, how it showed, anything to remember">${esc(RS.note)}</textarea></label>
-    <div class="grid2"><button class="btn" data-act="rs-skip">Skip</button><button class="btn primary" data-act="rs-save">Save</button></div>
+    ${RS.mode === 'edit'
+      ? `<div class="grid2"><button class="btn danger" data-act="rs-delete">Delete entry</button><button class="btn primary" data-act="rs-save">Save</button></div>`
+      : `<div class="grid2"><button class="btn" data-act="rs-skip">Skip</button><button class="btn primary" data-act="rs-save">Save</button></div>`}
   </div>`;
 }
+
+function peopleChipsHtml() {
+  if (!RS.people.length) return '';
+  return RS.people.map((p, i) => `<span class="person"><button class="heart${p.heart ? ' on' : ''}" data-act="p-heart" data-i="${i}" aria-pressed="${p.heart}" aria-label="Favorite wine of ${esc(p.name)}">${p.heart ? HEART_ON : ICON.heart}</button>${esc(p.name)}<button class="x" data-act="p-rm" data-i="${i}" aria-label="Remove ${esc(p.name)}">${ICON.x}</button></span>`).join('')
+    + '<p class="tiny muted" style="flex-basis:100%;margin:0">Tap the heart if it is their favorite wine.</p>';
+}
+
+function peopleSuggHtml() {
+  const t = lc(RS.typing.trim());
+  const chosen = RS.people.map(p => lc(p.name));
+  const known = knownPeople().filter(p => !chosen.includes(lc(p.name)));
+  let list;
+  if (t) {
+    list = known.filter(p => lc(p.name).includes(t))
+      .sort((a, b) => (lc(b.name).startsWith(t) ? 1 : 0) - (lc(a.name).startsWith(t) ? 1 : 0) || b.n - a.n)
+      .slice(0, 8);
+  } else {
+    list = RS.showAll ? known : known.slice(0, 6);
+  }
+  const typed = RS.typing.trim();
+  const add = t && !known.some(p => lc(p.name) === t) && !chosen.includes(t) ? `<button class="chip" data-act="p-add-typed">${ICON.plus}Add “${esc(typed)}”</button>` : '';
+  const more = !t && !RS.showAll && known.length > 6 ? `<button class="chip" data-act="p-all">Show all ${known.length}</button>` : '';
+  if (!list.length && !add && !more) return '';
+  return `<div class="chips">${list.map(p => `<button class="chip" data-act="p-pick" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join('')}${add}${more}</div>`;
+}
+
+function updatePeople() {
+  const c = $('#people-chips'), s = $('#people-sugg'), i = $('#people-input');
+  if (c) c.innerHTML = peopleChipsHtml();
+  if (s) s.innerHTML = peopleSuggHtml();
+  if (i) i.value = RS.typing;
+}
+
+function addPerson(raw) {
+  if (!RS) return;
+  const clean = String(raw || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  RS.typing = '';
+  if (clean && !RS.people.some(p => lc(p.name) === lc(clean))) {
+    const known = knownPeople().find(p => lc(p.name) === lc(clean));
+    RS.people.push({ name: known ? known.name : clean, heart: false });
+  }
+  updatePeople();
+}
+
 function closeSheet() { RS = null; renderSheet(); }
 
+const removalFields = st => ({
+  type: st.type,
+  occasion: st.occasion.trim(),
+  people: st.people.map(p => p.name).join(', '),
+  hearts: st.people.filter(p => p.heart).map(p => p.name).join(', '),
+  food: st.type === 'Gift' ? '' : st.food.trim(),
+  note: st.note.trim()
+});
+
 async function saveRemoval(withDetails) {
-  const w = wineById(RS.id);
+  if (RS.typing.trim()) addPerson(RS.typing);
   const st = RS;
+  const w = wineById(st.wineId);
   closeSheet();
   if (!w || w.count < 1) return;
   if (!withDetails) { adjustCount(w.id, -1); return; }
-  const removal = {
-    id: newId('r'), wineId: w.id, date: todayISO(), type: st.type,
-    occasion: st.occasion.trim(), people: st.people.trim(), food: st.type === 'Gift' ? '' : st.food.trim(), note: st.note.trim(),
-    wineName: fullName(w)
-  };
+  const removal = Object.assign({ id: newId('r'), wineId: w.id, date: todayISO(), wineName: fullName(w) }, removalFields(st));
   w.count -= 1;
   S.removals.push(removal);
   persist();
@@ -695,6 +903,41 @@ async function saveRemoval(withDetails) {
     refreshView();
     toast('Not saved: ' + e.message);
   }
+}
+
+async function saveRemovalEdit() {
+  if (RS.typing.trim()) addPerson(RS.typing);
+  const st = RS;
+  const r = S.removals.find(x => x.id === st.id);
+  closeSheet();
+  if (!r) return;
+  const fields = Object.assign({ date: st.date || r.date }, removalFields(st));
+  const prev = Object.assign({}, r);
+  Object.assign(r, fields);
+  persist();
+  refreshView();
+  try {
+    Object.assign(r, normRemoval(await api('updateRemoval', { id: r.id, fields })));
+    persist();
+    refreshView();
+  } catch (e) {
+    Object.assign(r, prev);
+    persist();
+    refreshView();
+    toast('Not saved: ' + e.message);
+  }
+}
+
+async function deleteRemoval() {
+  const id = RS.id;
+  if (!confirm('Delete this entry? The bottle count stays the same.')) return;
+  closeSheet();
+  const prev = S.removals.slice();
+  S.removals = S.removals.filter(r => r.id !== id);
+  persist();
+  refreshView();
+  try { await api('deleteRemoval', { id }); }
+  catch (e) { S.removals = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
 }
 
 async function adjustCount(id, delta) {
@@ -717,6 +960,11 @@ function refreshView() {
     const active = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.input === 'search';
     if (active && list) { list.innerHTML = cellarList(); return; }
   }
+  if (r.p === 'journal') {
+    const list = $('#journal-list');
+    const active = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.input === 'jsearch';
+    if (active && list) { list.innerHTML = journalList(); return; }
+  }
   render();
   window.scrollTo(0, y);
 }
@@ -732,11 +980,12 @@ function newDraft(mode, w) {
       producer: src.producer, name: src.name, vintage: src.vintage, type: src.type, region: src.region, grapes: src.grapes,
       taste: src.taste, tasteTags: src.tasteTags.join(', '), pairings: src.pairings.join(', '),
       drinkFrom: str(src.drinkFrom), drinkUntil: str(src.drinkUntil), peakFrom: str(src.peakFrom), peakUntil: str(src.peakUntil),
-      location: src.location || S.locations[0] || '', shelf: src.shelf !== null ? src.shelf : 1, position: src.position,
+      location: src.location || S.locations[0] || '', shelf: src.shelf !== null ? src.shelf : '', position: src.position,
       retailer: src.retailer, purchaseDate: src.purchaseDate || (mode === 'add' ? todayISO() : ''),
       purchasePrice: src.purchasePrice !== null ? src.purchasePrice.toFixed(2) : '', streetPrice: src.streetPrice !== null ? src.streetPrice.toFixed(2) : ''
     },
     count: mode === 'add' ? 1 : src.count,
+    myRating: src.myRating,
     ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score) })),
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
     src: null, corners: null, cornersTouched: false,
@@ -799,14 +1048,20 @@ function formBody() {
       <label class="field full">Taste<textarea name="taste" data-input="field" rows="3">${esc(f.taste)}</textarea></label>
       ${field('Taste tags', 'tasteTags', { full: true, ph: 'elegant, medium body, fresh acidity' })}
     </div>
-    <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with Claude</button>
+    <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
     <div class="box"><span class="box-title">Storage</span>
       <label class="field">Location<select name="location" data-change="location">${locs.map(l => `<option${l === f.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>
       <div class="store-row">
-        <div class="field">Shelf<div class="stepper"><button data-act="shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="shelf-val">${esc(f.shelf)}</span><button data-act="shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
+        <div class="field">Shelf (optional)<div class="stepper"><button data-act="shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="shelf-val" style="min-width:48px">${esc(str(f.shelf) === '' ? 'None' : f.shelf)}</span><button data-act="shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         ${field('Position', 'position', { ph: 'Back row, left' })}
       </div>
+    </div>
+    <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
+      <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
+      <div class="scale"><span>0</span><span>50</span><span>100</span></div>
+      <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
+      <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
     </div>
     <div class="box"><span class="box-title">Purchase</span>
       <label class="field">Retailer<input name="retailer" data-input="field" list="retailers" placeholder="Wine shop, winery or online store" value="${esc(f.retailer)}"></label>
@@ -1092,7 +1347,7 @@ async function runAnalysis() {
     applyAnalysis(draft, res || {});
   } catch (e) {
     draft.ai = 'error';
-    draft.aiMsg = e.message.replace(/\.?$/, '.');
+    draft.aiMsg = e.message.replace(/Claude API/g, 'AI service').replace(/Claude Console/g, 'API console').replace(/\.?$/, '.');
   }
   if (D === draft) updateBanner();
 }
@@ -1116,9 +1371,9 @@ function updateBanner() {
   if (!b || !D) return;
   b.hidden = false;
   b.className = 'banner' + (D.ai === 'error' ? ' error' : '');
-  b.innerHTML = D.ai === 'busy' ? '<span class="spinner"></span>Claude is working on the details…'
-    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage found on the label. Enter it below, then tap Update details with Claude to get the right drinking window.' : 'Filled in by Claude. Review and correct.')
-    : `Label analysis failed: ${esc(D.aiMsg)} You can fill in the details yourself.`;
+  b.innerHTML = D.ai === 'busy' ? '<span class="spinner"></span>Searching and completing details…'
+    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage found on the label. Enter it below, then tap Update details with AI to get the right drinking window.' : 'Details completed. Review and correct.')
+    : `Details could not be completed: ${esc(D.aiMsg)} You can fill them in yourself.`;
 }
 
 async function saveWineForm() {
@@ -1150,7 +1405,7 @@ async function saveWineForm() {
     count: D.count,
     ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => ({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })),
     thumb: D.thumb || (base ? base.thumb : ''),
-    myRating: base ? base.myRating : null
+    myRating: D.myRating
   }));
   busy(true, 'Saving…');
   try {
@@ -1188,7 +1443,18 @@ function viewSettings(first) {
 
 const ACTS = {
   refresh: () => sync(false),
-  type: el => { U.type = el.dataset.v; render(); },
+  'filter-toggle': () => { U.filterOpen = !U.filterOpen; refreshView(); },
+  'filter-chip': el => {
+    const a = U.filters[el.dataset.k];
+    const i = a.indexOf(el.dataset.v);
+    if (i >= 0) a.splice(i, 1); else a.push(el.dataset.v);
+    refreshView();
+  },
+  'filter-more': el => { U.filterAll[el.dataset.k] = true; refreshView(); },
+  'filter-clear': () => { U.filters = { wine: [], grape: [], food: [] }; refreshView(); },
+  'j-person': el => { U.jPerson = U.jPerson === el.dataset.v ? null : el.dataset.v; refreshView(); },
+  'j-more': () => { U.jAllPeople = true; refreshView(); },
+  'edit-removal': el => openEditRemoval(el.dataset.id),
   'toggle-finished': () => { U.showFinished = !U.showFinished; refreshView(); },
   plus: el => adjustCount(el.dataset.id, 1),
   minus: el => openRemoveSheet(el.dataset.id),
@@ -1198,10 +1464,11 @@ const ACTS = {
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
 
   rate: el => {
-    if (!ratingState) return;
-    const base = ratingState.v === null ? 50 : ratingState.v;
+    if (!D) return;
+    const base = D.myRating === null ? 50 : D.myRating;
     setRating(clamp(base + Number(el.dataset.d), 0, 100));
   },
+  'rate-clear': () => setRating(null),
   'open-add-rating': () => { U.addRatingOpen = true; refreshView(); const s = $('#new-score'); if (s) s.focus(); },
   'close-add-rating': () => { U.addRatingOpen = false; refreshView(); },
   'save-rating': async () => {
@@ -1229,21 +1496,17 @@ const ACTS = {
     try { upsertWine(normWine(await api('update', { id: w.id, fields: { ratings: JSON.stringify(w.ratings) } }))); persist(); }
     catch (e) { w.ratings = prev; persist(); refreshView(); toast('Not saved: ' + e.message); }
   },
-  'rm-removal': async el => {
-    if (!confirm('Delete this entry? The bottle count stays the same.')) return;
-    const id = el.dataset.id;
-    const prev = S.removals.slice();
-    S.removals = S.removals.filter(r => r.id !== id);
-    persist();
-    refreshView();
-    try { await api('deleteRemoval', { id }); }
-    catch (e) { S.removals = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
-  },
+  'p-heart': el => { const p = RS.people[Number(el.dataset.i)]; if (p) { p.heart = !p.heart; updatePeople(); } },
+  'p-rm': el => { RS.people.splice(Number(el.dataset.i), 1); updatePeople(); },
+  'p-pick': el => addPerson(el.dataset.v),
+  'p-add-typed': () => addPerson(RS.typing),
+  'p-all': () => { RS.showAll = true; updatePeople(); },
 
   'sheet-close': () => closeSheet(),
   'rs-type': el => { RS.type = el.dataset.v; renderSheet(); },
   'rs-skip': () => saveRemoval(false),
-  'rs-save': () => saveRemoval(true),
+  'rs-save': () => (RS.mode === 'edit' ? saveRemovalEdit() : saveRemoval(true)),
+  'rs-delete': () => deleteRemoval(),
 
   'cancel-form': () => {
     const back = D && D.mode === 'edit' ? '#/wine/' + encodeURIComponent(D.id) : '#/cellar';
@@ -1257,8 +1520,8 @@ const ACTS = {
   'use-full': () => finishCrop(null),
   shelf: el => {
     const v = clamp((Number(D.fields.shelf) || 0) + Number(el.dataset.d), 0, 99);
-    D.fields.shelf = v;
-    $('#shelf-val').textContent = v;
+    D.fields.shelf = v === 0 ? '' : v;
+    $('#shelf-val').textContent = v === 0 ? 'None' : v;
   },
   bottles: el => {
     D.count = clamp(D.count + Number(el.dataset.d), 0, 999);
@@ -1318,6 +1581,15 @@ const ACTS = {
 const INPUTS = {
   search: el => { U.search = el.value; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
   rs: el => { if (RS) RS[el.name] = el.value; },
+  people: el => {
+    if (!RS) return;
+    const parts = el.value.split(',');
+    if (parts.length > 1) { parts.slice(0, -1).forEach(addPerson); el.value = parts[parts.length - 1]; }
+    RS.typing = el.value;
+    const s = $('#people-sugg');
+    if (s) s.innerHTML = peopleSuggHtml();
+  },
+  jsearch: el => { U.jSearch = el.value; const l = $('#journal-list'); if (l) l.innerHTML = journalList(); },
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
   rscore: el => { if (D) D.ratings[Number(el.dataset.i)].score = el.value; }
 };
@@ -1325,6 +1597,9 @@ const INPUTS = {
 const CHANGES = {
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
   rsys: el => { if (D) D.ratings[Number(el.dataset.i)].sys = el.value; },
+  'show-finished': el => { U.showFinished = el.checked; refreshView(); },
+  'top-finished': el => { U.topFinished = el.checked; refreshView(); },
+  'j-fav': el => { U.jFav = el.checked; refreshView(); },
   location: async el => {
     if (!D) return;
     if (el.value !== '__new') { D.fields.location = el.value; return; }
@@ -1368,6 +1643,9 @@ function init() {
   document.addEventListener('change', e => {
     const el = e.target.closest('[data-change]');
     if (el && CHANGES[el.dataset.change]) CHANGES[el.dataset.change](el, e);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.target && e.target.id === 'people-input' && e.key === 'Enter') { e.preventDefault(); addPerson(e.target.value); }
   });
   window.addEventListener('hashchange', () => { if (RS) closeSheet(); render(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && CFG && !isFormRoute()) sync(true); });
