@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -385,6 +385,7 @@ function afterRender(r) {
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
+  if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form' && D.ai) updateBanner();
 }
 
 /* ------------------------------------------------------------ view: cellar */
@@ -776,9 +777,7 @@ function viewForm(mode, id) {
 function formBody() {
   const f = D.fields;
   const field = (label, key, opts = {}) => `<label class="field${opts.full ? ' full' : ''}">${label}<input name="${key}" data-input="field" value="${esc(f[key])}"${opts.num ? ' inputmode="numeric"' : ''}${opts.ph ? ` placeholder="${esc(opts.ph)}"` : ''}></label>`;
-  const banner = D.ai === 'busy' ? `<div class="banner" id="ai-banner"><span class="spinner"></span>Claude is reading the label…</div>`
-    : D.ai === 'ok' ? `<div class="banner" id="ai-banner">${ICON.spark}Filled in by Claude. Review and correct.</div>`
-    : D.ai === 'error' ? `<div class="banner error" id="ai-banner">Label analysis failed: ${esc(D.aiMsg)} You can fill in the details yourself.</div>` : '<div id="ai-banner" hidden></div>';
+  const banner = '<div id="ai-banner" hidden></div>';
   const locs = S.locations.slice();
   if (f.location && !locs.includes(f.location)) locs.push(f.location);
   return `
@@ -800,6 +799,8 @@ function formBody() {
       <label class="field full">Taste<textarea name="taste" data-input="field" rows="3">${esc(f.taste)}</textarea></label>
       ${field('Taste tags', 'tasteTags', { full: true, ph: 'elegant, medium body, fresh acidity' })}
     </div>
+    <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with Claude</button>
+    <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
     <div class="box"><span class="box-title">Storage</span>
       <label class="field">Location<select name="location" data-change="location">${locs.map(l => `<option${l === f.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>
       <div class="store-row">
@@ -1072,13 +1073,22 @@ async function finishCrop(quad) {
   }
 }
 
+const HINT_KEYS = ['producer', 'name', 'vintage', 'type', 'region', 'grapes'];
+
 async function runAnalysis() {
   const draft = D;
+  const hints = {};
+  HINT_KEYS.forEach(k => {
+    const v = str(draft.fields[k]).trim();
+    if (v && (draft.touched.has(k) || draft.mode === 'edit')) hints[k] = v;
+  });
+  if (!draft.imageB64 && !hints.producer && !hints.name) { toast('Add a label photo or enter the producer or wine name first.'); return; }
   draft.ai = 'busy';
   updateBanner();
   try {
-    const res = await api('analyze', { image: draft.imageB64 });
+    const res = await api('analyze', { image: draft.imageB64 || null, hints });
     draft.ai = 'ok';
+    draft.noVintage = !str(draft.fields.vintage).trim() && (res.vintage === null || res.vintage === undefined || res.vintage === '');
     applyAnalysis(draft, res || {});
   } catch (e) {
     draft.ai = 'error';
@@ -1106,8 +1116,8 @@ function updateBanner() {
   if (!b || !D) return;
   b.hidden = false;
   b.className = 'banner' + (D.ai === 'error' ? ' error' : '');
-  b.innerHTML = D.ai === 'busy' ? '<span class="spinner"></span>Claude is reading the label…'
-    : D.ai === 'ok' ? ICON.spark + 'Filled in by Claude. Review and correct.'
+  b.innerHTML = D.ai === 'busy' ? '<span class="spinner"></span>Claude is working on the details…'
+    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage found on the label. Enter it below, then tap Update details with Claude to get the right drinking window.' : 'Filled in by Claude. Review and correct.')
     : `Label analysis failed: ${esc(D.aiMsg)} You can fill in the details yourself.`;
 }
 
@@ -1262,6 +1272,7 @@ const ACTS = {
   },
   rrm: el => { D.ratings.splice(Number(el.dataset.i), 1); render(); },
   'save-wine': () => saveWineForm(),
+  'ai-refresh': () => { if (D && D.ai !== 'busy') runAnalysis(); },
   'delete-wine': async () => {
     const w = wineById(D.id);
     if (!w || !confirm(`Delete ${fullName(w)}? Its journal entries stay.`)) return;
