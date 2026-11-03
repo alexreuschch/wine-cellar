@@ -245,3 +245,21 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .heart-on { display: inline-flex; }
 .tag.fav { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
 .tag.fav svg { color: #E8647A; margin-left: 0; }
+
+.badge { display: inline-flex; align-items: center; gap: 4px; }
+.badge svg { width: 12px; height: 12px; }
+.badge.received { background: #1F3A2B; color: #8FD9AE; }
+.gift-mark { display: inline-flex; vertical-align: -2px; color: var(--gold); margin-left: 6px; }
+.toggle button { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.static { height: 46px; display: flex; align-items: center; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 15px; }
+.scroll-box { max-height: 172px; overflow-y: auto; padding: 2px 2px 2px 0; }
+.person.plain { padding-left: 12px; }
+.tag.gifted { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.tag.gifted svg { color: var(--gold); }
+
+.ftabs { display: flex; gap: 4px; padding: 3px; background: var(--bg); border: 1px solid var(--line); border-radius: 11px; overflow-x: auto; }
+.ftab { flex: 1 0 auto; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.ftab.on { background: var(--line); color: var(--text); font-weight: 500; }
+.ftab .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--gold); color: var(--on-gold); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.search.compact { height: 40px; background: var(--bg); }
+.loc-row { min-height: 44px; border-bottom: 1px solid var(--line-soft); }

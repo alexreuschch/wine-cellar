@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.4.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -54,12 +54,14 @@ const ICON = {
   spark: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', 18, 1.8),
   filter: svg('<path d="M4 5h16l-6 7v6l-4 2v-8z"/>', 20, 1.9),
   heart: svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', 18, 1.9),
-  bottle: svg('<path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"/>', 14, 1.8)
+  bottle: svg('<path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"/>', 14, 1.8),
+  gift: svg('<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7C10.5 4 7 4 7 6s3 1 5 1zM12 7c1.5-3 5-3 5-1s-3 1-5 1z"/>', 14, 1.8)
 };
 const HEART_PATH = 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z';
 const HEART_ON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${HEART_PATH}"/></svg>`;
 const HEART_SM = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-left:3px;vertical-align:-1px"><path d="${HEART_PATH}"/></svg>`;
 const FIN = `<span class="fin" title="Finished" aria-label="Finished">${ICON.bottle}</span>`;
+const GIFT_MARK = `<span class="gift-mark" title="Gift received" aria-label="Gift received">${ICON.gift}</span>`;
 const STAR_PATH = 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z';
 
 /* ------------------------------------------------------------ helpers */
@@ -91,9 +93,9 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: ['Wine fridge'] };
+const S = { wines: [], removals: [], locations: [] };
 const U = {
-  search: '', showFinished: false, filterOpen: false, filters: { wine: [], grape: [], food: [] }, filterAll: {},
+  search: '', showFinished: false, filterOpen: false, filters: { wine: [], grape: [], food: [], location: [] }, filterAll: {}, filterTab: 'wine', facetQ: {},
   winFilter: 'All', topType: 'All', topMode: 'mine', topSys: null, topFinished: false, addRatingOpen: false,
   jSearch: '', jPerson: null, jFav: false, jAllPeople: false
 };
@@ -139,7 +141,9 @@ function normWine(w) {
     retailer: str(w.retailer),
     purchaseDate: str(w.purchaseDate).slice(0, 10),
     purchasePrice: numOrNull(w.purchasePrice),
-    streetPrice: numOrNull(w.streetPrice)
+    streetPrice: numOrNull(w.streetPrice),
+    acquired: str(w.acquired) === 'Gift' ? 'Gift' : 'Purchased',
+    giftFrom: str(w.giftFrom)
   };
 }
 
@@ -164,22 +168,29 @@ const lc = s => String(s).toLowerCase();
 const namesOf = s => splitList(s).map(n => n.replace(/\s+/g, ' '));
 function knownPeople() {
   const m = new Map();
-  S.removals.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(r => namesOf(r.people).forEach(n => {
+  const nowMs = Date.now();
+  const add = (n, date) => {
     const k = lc(n);
-    const e = m.get(k) || { name: n, n: 0 };
-    e.name = n;
+    const e = m.get(k) || { name: n, n: 0, score: 0, last: '' };
+    const d = parseISO(date);
+    const days = d ? Math.max(0, (nowMs - d.getTime()) / 864e5) : 365;
     e.n += 1;
+    e.score += 1 + 3 * Math.exp(-days / 90);
+    if (!e.last || str(date) >= e.last) { e.last = str(date); e.name = n; }
     m.set(k, e);
-  }));
-  return [...m.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  };
+  S.removals.forEach(r => namesOf(r.people).forEach(n => add(n, r.date)));
+  S.wines.filter(w => w.acquired === 'Gift').forEach(w => namesOf(w.giftFrom).forEach(n => add(n, str(w.purchaseDate || w.createdAt).slice(0, 10))));
+  return [...m.values()].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 }
+const byName = list => list.slice().sort((a, b) => a.name.localeCompare(b.name));
 
 function loadCache() {
   const c = store.get('wc-data', null);
   if (!c) return;
   S.wines = (c.wines || []).map(normWine);
   S.removals = (c.removals || []).map(normRemoval);
-  if (c.locations && c.locations.length) S.locations = c.locations;
+  if (Array.isArray(c.locations)) S.locations = c.locations;
 }
 function persist() { store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations }); }
 const wineById = id => S.wines.find(w => w.id === id);
@@ -278,7 +289,9 @@ const starsHtml = v => `<div class="stars" aria-label="${esc(v)} of 5">${[0, 1, 
   const wpx = (clamp(v - i, 0, 1) * 14).toFixed(1);
   return `<span class="star"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="#3A3034"/></svg><span class="fill" style="width:${wpx}px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="#C9A15B"/></svg></span></span>`;
 }).join('')}</div>`;
-const typeBadge = t => `<span class="badge${t === 'Gift' ? ' gift' : t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`;
+const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gift given</span>`
+  : t === 'Received' ? `<span class="badge received">${ICON.gift}Gift received</span>`
+  : `<span class="badge${t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`);
 
 function nav(active) {
   const item = (href, key, icon, label) => `<a href="${href}" class="${active === key ? 'on' : ''}">${icon}${label}</a>`;
@@ -326,7 +339,7 @@ async function sync(silent) {
     const d = await api('load');
     S.wines = (d.wines || []).map(normWine).filter(w => w.id);
     S.removals = (d.removals || []).map(normRemoval).filter(r => r.id);
-    S.locations = d.locations && d.locations.length ? d.locations : ['Wine fridge'];
+    S.locations = Array.isArray(d.locations) ? d.locations : [];
     persist();
     if (!isFormRoute()) render();
     if (!silent) toast('Up to date');
@@ -420,9 +433,10 @@ const grapeNames = w => String(w.grapes || '').split(/[,;\/+&]/)
   .filter(s => s.length > 1);
 const foodNames = w => w.pairings.map(s => cap(s.trim())).filter(Boolean);
 const FACETS = {
-  wine: { label: 'Wine', of: w => [w.type] },
-  grape: { label: 'Grape', of: grapeNames },
-  food: { label: 'Food', of: foodNames }
+  wine: { label: 'Wine', plural: 'wine types', of: w => [w.type] },
+  grape: { label: 'Grape', plural: 'grapes', of: grapeNames },
+  food: { label: 'Food', plural: 'dishes', of: foodNames },
+  location: { label: 'Location', plural: 'locations', of: w => (w.location ? [w.location] : []) }
 };
 const typeIndex = n => { const i = TYPES.indexOf(n); return i < 0 ? 99 : i; };
 
@@ -470,43 +484,69 @@ function viewCellar() {
   </main><a class="fab" href="#/add" aria-label="Add a new wine">${ICON.plusBig}</a>${nav('cellar')}`;
 }
 
+function facetCountsFor(key) {
+  const pool = cellarPool().filter(w => matches(w, U.search) && Object.keys(FACETS).every(k => k === key || !U.filters[k].length || FACETS[k].of(w).some(v => U.filters[k].includes(lc(v)))));
+  return facetValues(pool, key);
+}
+
 function filterArea() {
-  const pool = cellarPool();
-  const facets = {};
+  const base = cellarPool();
+  const allVals = {};
   Object.keys(FACETS).forEach(k => {
-    facets[k] = facetValues(pool, k);
-    U.filters[k] = U.filters[k].filter(v => facets[k].some(x => x.key === v));
+    allVals[k] = facetValues(base, k);
+    U.filters[k] = U.filters[k].filter(v => allVals[k].some(x => x.key === v));
   });
   const active = [];
-  Object.keys(FACETS).forEach(k => U.filters[k].forEach(v => active.push({ k, v, name: facets[k].find(x => x.key === v).name })));
-  const clear = active.length ? `<button class="chip" data-act="filter-clear">Clear filters</button>` : '';
+  Object.keys(FACETS).forEach(k => U.filters[k].forEach(v => active.push({ k, v, name: allVals[k].find(x => x.key === v).name })));
+  const clear = active.length ? `<button class="chip" data-act="filter-clear">Clear all filters</button>` : '';
   if (!U.filterOpen) {
     return active.length
       ? `<div class="chips">${active.map(a => `<button class="chip on" data-act="filter-chip" data-k="${a.k}" data-v="${esc(a.v)}" aria-label="Remove filter ${esc(a.name)}">${esc(a.name)}${ICON.x}</button>`).join('')}${clear}</div>`
       : '';
   }
-  const sections = Object.keys(FACETS).map(k => {
-    const vals = facets[k];
-    if (!vals.length) return '';
-    const all = U.filterAll[k] || vals.length <= 14;
-    const shown = all ? vals : vals.slice(0, 12);
-    return `<div class="facet"><span class="facet-title">${FACETS[k].label}</span><div class="chips">${shown.map(x => `<button class="chip${U.filters[k].includes(x.key) ? ' on' : ''}" data-act="filter-chip" data-k="${k}" data-v="${esc(x.key)}">${esc(x.name)} <span class="n">${x.n}</span></button>`).join('')}${all ? '' : `<button class="chip" data-act="filter-more" data-k="${k}">Show all ${vals.length}</button>`}</div></div>`;
-  }).join('');
+  const tabs = Object.keys(FACETS).filter(k => allVals[k].length);
   const done = S.wines.filter(w => w.count === 0).length;
-  return `<div class="card filter-panel">${sections || '<p class="muted small" style="margin:0">Add grapes and food pairings to your wines to filter by them.</p>'}
-    ${done ? `<label class="switch"><input type="checkbox" data-change="show-finished"${U.showFinished ? ' checked' : ''}>Include finished wines (${done})</label>` : ''}
-    ${clear ? `<div>${clear}</div>` : ''}</div>`;
+  const finished = done ? `<label class="switch"><input type="checkbox" data-change="show-finished"${U.showFinished ? ' checked' : ''}>Include finished wines (${done})</label>` : '';
+  if (!tabs.length) return `<div class="card filter-panel"><p class="muted small" style="margin:0">Add grapes, food pairings and locations to your wines to filter by them.</p>${finished}</div>`;
+  if (!tabs.includes(U.filterTab)) U.filterTab = tabs[0];
+  const k = U.filterTab;
+  const tabBar = `<div class="ftabs" role="tablist">${tabs.map(t => `<button role="tab" aria-selected="${t === k}" class="ftab${t === k ? ' on' : ''}" data-act="filter-tab" data-v="${t}">${FACETS[t].label}${U.filters[t].length ? `<span class="count">${U.filters[t].length}</span>` : ''}</button>`).join('')}</div>`;
+  const search = allVals[k].length > 12
+    ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" aria-label="Search ${FACETS[k].plural}" placeholder="Search ${FACETS[k].plural}" value="${esc(U.facetQ[k] || '')}"></label>` : '';
+  return `<div class="card filter-panel">${tabBar}${search}<div id="facet-chips">${facetChipsHtml()}</div>${finished}${clear ? `<div>${clear}</div>` : ''}</div>`;
+}
+
+function facetChipsHtml() {
+  const k = U.filterTab;
+  const vals = facetCountsFor(k);
+  const all = facetValues(cellarPool(), k);
+  const sel = U.filters[k];
+  const q = lc((U.facetQ[k] || '').trim());
+  const selected = sel.map(v => vals.find(x => x.key === v) || all.find(x => x.key === v) || { key: v, name: v, n: 0 });
+  let rest = vals.filter(x => !sel.includes(x.key) && x.n > 0);
+  let more = '', boxed = false;
+  if (q) rest = byName(rest.filter(x => lc(x.name).includes(q)));
+  else if (U.filterAll[k] && rest.length > 12) { rest = byName(rest); boxed = true; }
+  else if (rest.length > 12) { more = `<button class="chip" data-act="filter-more" data-k="${k}">Show all ${rest.length}</button>`; rest = rest.slice(0, 12); }
+  const chip = (x, on) => `<button class="chip${on ? ' on' : ''}" data-act="filter-chip" data-k="${k}" data-v="${esc(x.key)}">${esc(x.name)}${on ? ICON.x : ` <span class="n">${x.n}</span>`}</button>`;
+  const parts = [];
+  if (selected.length) parts.push(`<div class="chips">${selected.map(x => chip(x, true)).join('')}</div>`);
+  if (rest.length) parts.push(`<div class="chips${boxed ? ' scroll-box' : ''}">${rest.map(x => chip(x, false)).join('')}${more}</div>`);
+  else if (q) parts.push('<p class="muted small" style="margin:0">No match.</p>');
+  if (boxed) parts.push(`<div><button class="chip" data-act="filter-less" data-k="${k}">Show fewer</button></div>`);
+  parts.push(`<p class="muted tiny" style="margin:0">${q || boxed ? 'A to Z.' : 'Most common first.'} Numbers count the wines that match together with your other filters.</p>`);
+  return `<div style="display:flex;flex-direction:column;gap:8px">${parts.join('')}</div>`;
 }
 
 function matches(w, q) {
   if (!q) return true;
-  const hay = [w.producer, w.name, w.vintage, w.region, w.grapes, w.type, w.location, w.retailer, w.pairings.join(' '), w.tasteTags.join(' ')].join(' ').toLowerCase();
+  const hay = [w.producer, w.name, w.vintage, w.region, w.grapes, w.type, w.location, w.retailer, w.giftFrom, w.pairings.join(' '), w.tasteTags.join(' ')].join(' ').toLowerCase();
   return q.toLowerCase().split(/\s+/).every(part => hay.includes(part));
 }
 
 function wineRow(w) {
   return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
-    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span>${w.count > 0 ? pill(w) : ''}</div></a>
+    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${w.acquired === 'Gift' ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span>${w.count > 0 ? pill(w) : ''}</div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove one bottle">${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add one bottle">${ICON.plus}</button></div>
   </div>`;
 }
@@ -593,18 +633,25 @@ function peopleLine(r) {
   const names = namesOf(r.people);
   if (!names.length) return '';
   const hearts = namesOf(r.hearts).map(lc);
-  return (r.type === 'Gift' ? 'Given to ' : 'With ') + names.map(n => esc(n) + (hearts.includes(lc(n)) ? `<span class="heart-on" aria-label="favorite wine">${HEART_SM}</span>` : '')).join(', ');
+  return (r.type === 'Gift' ? 'Given to ' : r.type === 'Received' ? 'From ' : 'With ') + names.map(n => esc(n) + (hearts.includes(lc(n)) ? `<span class="heart-on" aria-label="favorite wine">${HEART_SM}</span>` : '')).join(', ');
+}
+
+function receivedEntries() {
+  return S.wines.filter(w => w.acquired === 'Gift').map(w => ({
+    id: 'g-' + w.id, wineId: w.id, date: str(w.purchaseDate || w.createdAt).slice(0, 10), type: 'Received',
+    people: w.giftFrom, hearts: '', occasion: '', food: '', note: '', received: true
+  }));
 }
 
 function journalEntries() {
   const q = lc(U.jSearch.trim());
-  return S.removals.slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).filter(r => {
+  return S.removals.concat(receivedEntries()).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).filter(r => {
     const ppl = namesOf(r.people).map(lc), hearts = namesOf(r.hearts).map(lc);
     if (U.jPerson && !ppl.includes(U.jPerson)) return false;
     if (U.jFav && !(U.jPerson ? hearts.includes(U.jPerson) : hearts.length)) return false;
     if (!q) return true;
     const w = wineById(r.wineId);
-    const hay = lc([r.people, r.occasion, r.food, r.note, r.type, w ? fullName(w) : r.wineName].join(' '));
+    const hay = lc([r.people, r.occasion, r.food, r.note, r.type, r.type === 'Gift' || r.type === 'Received' ? 'gift' : '', w ? fullName(w) : r.wineName].join(' '));
     return q.split(/\s+/).every(p => hay.includes(p));
   });
 }
@@ -620,40 +667,68 @@ function journalList() {
     const w = wineById(r.wineId);
     const name = w ? `${wineTitle(w)} ${w.vintage}` : (r.wineName || 'Deleted wine');
     const ppl = peopleLine(r);
-    html += `<button class="journal-row as-btn" data-act="edit-removal" data-id="${esc(r.id)}" aria-label="Edit entry ${esc(name)}">
-      <span class="day"><b>${d ? d.getDate() : ''}</b><span>${d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : ''}</span></span>
+    const inner = `<span class="day"><b>${d ? d.getDate() : ''}</b><span>${d ? d.toLocaleDateString('en-US', { weekday: 'short' }) : ''}</span></span>
       <span class="row-text" style="gap:3px"><span class="between"><span class="row-title">${esc(name)}</span>${typeBadge(r.type)}</span>
-      ${r.occasion ? `<span class="small">${esc(r.occasion)}</span>` : ''}${ppl ? `<span class="small muted">${ppl}</span>` : ''}${r.food ? `<span class="tiny" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small muted ellipsis">${esc(r.note)}</span>` : ''}</span></button>`;
+      ${r.occasion ? `<span class="small">${esc(r.occasion)}</span>` : ''}${ppl ? `<span class="small muted">${ppl}</span>` : ''}${r.food ? `<span class="tiny" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small muted ellipsis">${esc(r.note)}</span>` : ''}</span>`;
+    html += r.received
+      ? `<a class="journal-row as-btn" href="#/wine/${encodeURIComponent(r.wineId)}">${inner}</a>`
+      : `<button class="journal-row as-btn" data-act="edit-removal" data-id="${esc(r.id)}" aria-label="Edit entry ${esc(name)}">${inner}</button>`;
   });
   return html;
 }
 
 function personSummary(p) {
-  const rs = S.removals.filter(r => namesOf(r.people).map(lc).includes(p));
+  const all = S.removals.concat(receivedEntries()).filter(r => namesOf(r.people).map(lc).includes(p));
   const person = knownPeople().find(x => lc(x.name) === p);
-  const gifts = rs.filter(r => r.type === 'Gift').length;
-  const shared = rs.length - gifts;
-  const favIds = [...new Set(rs.filter(r => namesOf(r.hearts).map(lc).includes(p)).map(r => r.wineId))];
+  const name = person ? person.name : p;
+  const given = all.filter(r => r.type === 'Gift').length;
+  const received = all.filter(r => r.type === 'Received').length;
+  const shared = all.length - given - received;
+  const stats = [shared ? `${shared} shared` : '', given ? `${given} given as ${given === 1 ? 'gift' : 'gifts'}` : '', received ? `${received} received as ${received === 1 ? 'gift' : 'gifts'}` : ''].filter(Boolean).join(' · ');
+  const favIds = [...new Set(all.filter(r => namesOf(r.hearts).map(lc).includes(p)).map(r => r.wineId))];
   const favs = favIds.map(id => wineById(id)).filter(Boolean);
+  const fromThem = S.wines.filter(w => w.acquired === 'Gift' && namesOf(w.giftFrom).map(lc).includes(p));
   return `<div class="card" style="display:flex;flex-direction:column;gap:8px">
-    <div class="between"><h2 style="font-size:17px;font-weight:600">${esc(person ? person.name : p)}</h2><button class="icon-btn" data-act="j-person" data-v="${esc(p)}" aria-label="Show everyone">${ICON.x}</button></div>
-    <p class="muted small" style="margin:-8px 0 0">${shared} shared · ${gifts} given as ${gifts === 1 ? 'gift' : 'gifts'}</p>
+    <div class="between"><h2 style="font-size:17px;font-weight:600">${esc(name)}</h2><button class="icon-btn" data-act="j-person" data-v="${esc(p)}" aria-label="Show everyone">${ICON.x}</button></div>
+    <p class="muted small" style="margin:-8px 0 0">${stats}</p>
     ${favs.length ? `<span class="tiny muted">Favorite wines</span><div class="tags">${favs.map(w => `<a class="tag fav" href="#/wine/${encodeURIComponent(w.id)}">${HEART_SM}${esc(wineTitle(w))} ${esc(w.vintage)}</a>`).join('')}</div>` : ''}
+    ${fromThem.length ? `<span class="tiny muted">Gifts from ${esc(name)}</span><div class="tags">${fromThem.map(w => `<a class="tag gifted" href="#/wine/${encodeURIComponent(w.id)}">${ICON.gift}${esc(wineTitle(w))} ${esc(w.vintage)}</a>`).join('')}</div>` : ''}
   </div>`;
 }
 
-function viewJournal() {
-  if (!S.removals.length) {
-    return `<main class="screen has-nav"><h1 class="title">Journal</h1><div class="empty"><h2>No bottles removed yet</h2><p>When you take a bottle out with minus, it shows up here with occasion, people and food.</p></div></main>${nav('journal')}`;
-  }
+function jPeopleHtml() {
   const people = knownPeople();
-  if (U.jPerson && !people.some(p => lc(p.name) === U.jPerson)) U.jPerson = null;
-  const showAll = U.jAllPeople || people.length <= 12;
-  const shown = showAll ? people : people.slice(0, 10);
+  if (!people.length) return '';
+  const q = lc(U.jSearch.trim());
+  let list, title, more = '';
+  if (q) { list = byName(people.filter(p => lc(p.name).includes(q))); title = 'Matching people'; }
+  else if (U.jAllPeople) { list = byName(people); title = `All people, A to Z (${people.length})`; }
+  else {
+    list = people.slice(0, 8);
+    title = 'Frequent and recent';
+    if (people.length > 8) more = `<button class="chip" data-act="j-more">All people (${people.length})</button>`;
+  }
+  if (U.jPerson && !list.some(p => lc(p.name) === U.jPerson)) {
+    const sel = people.find(p => lc(p.name) === U.jPerson);
+    if (sel) list = [sel].concat(list);
+  }
+  if (!list.length) return '';
+  const chips = list.map(p => `<button class="chip${U.jPerson === lc(p.name) ? ' on' : ''}" data-act="j-person" data-v="${esc(lc(p.name))}">${esc(p.name)} <span class="n">${p.n}</span></button>`).join('');
+  const box = U.jAllPeople && !q
+    ? `<div class="chips scroll-box">${chips}</div><div><button class="chip" data-act="j-less">Show fewer</button></div>`
+    : `<div class="chips">${chips}${more}</div>`;
+  return `<div class="facet"><span class="facet-title">People · ${title}</span>${box}</div>`;
+}
+
+function viewJournal() {
+  if (!S.removals.length && !receivedEntries().length) {
+    return `<main class="screen has-nav"><h1 class="title">Journal</h1><div class="empty"><h2>No entries yet</h2><p>Bottles you take out and wines you receive as gifts show up here.</p></div></main>${nav('journal')}`;
+  }
+  if (U.jPerson && !knownPeople().some(p => lc(p.name) === U.jPerson)) U.jPerson = null;
   const anyHeart = S.removals.some(r => namesOf(r.hearts).length);
   return `<main class="screen has-nav"><h1 class="title">Journal</h1>
     <label class="search">${ICON.search}<input type="search" data-input="jsearch" aria-label="Search the journal" placeholder="Person, wine, occasion or food" value="${esc(U.jSearch)}"></label>
-    ${people.length ? `<div class="facet"><span class="facet-title">People</span><div class="chips">${shown.map(p => `<button class="chip${U.jPerson === lc(p.name) ? ' on' : ''}" data-act="j-person" data-v="${esc(lc(p.name))}">${esc(p.name)} <span class="n">${p.n}</span></button>`).join('')}${showAll ? '' : `<button class="chip" data-act="j-more">Show all ${people.length}</button>`}</div></div>` : ''}
+    <div id="j-people">${jPeopleHtml()}</div>
     ${anyHeart ? `<label class="switch"><input type="checkbox" data-change="j-fav"${U.jFav ? ' checked' : ''}>Only favorite wines<span class="heart-on">${HEART_SM}</span></label>` : ''}
     ${U.jPerson ? personSummary(U.jPerson) : ''}
     <div id="journal-list">${journalList()}</div></main>${nav('journal')}`;
@@ -678,7 +753,7 @@ function viewWine(id) {
   return `<main class="screen">
     <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
-    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${w.count === 0 ? FIN : ''}</h1><p class="meta">${esc(meta)}</p></div>
+    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${w.acquired === 'Gift' ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${esc(meta)}</p></div>
     <div class="grid2">
       <div class="card"><span class="tiny muted">In stock</span><div class="between" style="margin-top:6px">
         <button class="btn" style="width:42px;padding:0" data-act="minus" data-id="${esc(w.id)}" aria-label="Remove one bottle">${ICON.minus}</button>
@@ -725,21 +800,46 @@ function viewWine(id) {
 }
 
 function purchaseHtml(w) {
-  const has = w.retailer || w.purchaseDate || w.purchasePrice !== null || w.streetPrice !== null;
-  if (!has) return `<section><h2>Purchase</h2><p class="muted small" style="margin:0">No purchase details yet. <a href="#/edit/${encodeURIComponent(w.id)}">Add them</a></p></section>`;
+  const gift = w.acquired === 'Gift';
+  const editLink = `<a href="#/edit/${encodeURIComponent(w.id)}">Add them</a>`;
+  if (!gift && !w.retailer && !w.purchaseDate && w.purchasePrice === null && w.streetPrice === null) {
+    return `<section><h2>Purchase</h2><p class="muted small" style="margin:0">No purchase details yet. ${editLink}</p></section>`;
+  }
   let diff = '';
-  if (w.purchasePrice !== null && w.streetPrice !== null && w.purchasePrice > 0) {
+  if (!gift && w.purchasePrice !== null && w.streetPrice !== null && w.purchasePrice > 0) {
     const pct = Math.round((w.streetPrice - w.purchasePrice) / w.purchasePrice * 100);
     diff = `<span class="small" style="color:${pct >= 0 ? '#5CC489' : '#EC7A69'}">${pct >= 0 ? '+' : ''}${pct}% vs. purchase</span>`;
   }
   const cell = (label, value) => `<div class="kv"><span>${label}</span><p style="font-weight:600">${value}</p></div>`;
-  return `<section><h2>Purchase</h2><div class="card form-grid" style="gap:14px">
-    ${cell('Retailer', esc(w.retailer || 'Not set'))}
-    ${cell('Purchase date', esc(w.purchaseDate ? fmtDate(w.purchaseDate) : 'Not set'))}
-    ${cell('Purchase price', w.purchasePrice !== null ? money(w.purchasePrice) : 'Not set')}
+  const date = w.purchaseDate ? esc(fmtDate(w.purchaseDate)) : 'Not set';
+  return `<section><h2 style="display:flex;align-items:center;gap:6px">${gift ? `${ICON.gift}Gift received` : 'Purchase'}</h2><div class="card form-grid" style="gap:14px">
+    ${gift ? cell('From', esc(namesOf(w.giftFrom).join(', ') || 'Not set')) : cell('Retailer', esc(w.retailer || 'Not set'))}
+    ${cell(gift ? 'Received on' : 'Purchase date', date)}
+    ${cell('Purchase price', gift ? `${money(0)} <span class="muted small" style="font-weight:400">gift</span>` : (w.purchasePrice !== null ? money(w.purchasePrice) : 'Not set'))}
     <div class="kv"><span>Street price</span><p style="font-weight:600">${w.streetPrice !== null ? money(w.streetPrice) : 'Not set'}</p>${diff}</div>
     ${w.streetPrice !== null && w.count > 0 ? `<p class="muted tiny full" style="margin:0">Value in stock at street price: ${money(w.streetPrice * w.count)}</p>` : ''}
   </div></section>`;
+}
+
+function acquisitionBox() {
+  const f = D.fields, gift = D.acquired === 'Gift';
+  const retailers = [...new Set(S.wines.map(w => w.retailer).filter(Boolean))].sort();
+  return `<div class="box"><span class="box-title">Acquired</span>
+    <div class="toggle"><button class="${gift ? '' : 'on'}" data-act="acq" data-v="Purchased">Purchased</button><button class="${gift ? 'on' : ''}" data-act="acq" data-v="Gift">${ICON.gift}Gift received</button></div>
+    ${gift
+      ? `<div class="field"><span>Gift from</span><div id="people-chips" class="chips">${peopleChipsHtml()}</div>
+        <input id="people-input" data-input="people" aria-label="Gift from" placeholder="Type a name" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(D.gift.typing)}">
+        <div id="people-sugg">${peopleSuggHtml()}</div></div>`
+      : `<label class="field">Retailer<input name="retailer" data-input="field" list="retailers" placeholder="Wine shop, winery or online store" value="${esc(f.retailer)}"></label>
+        <datalist id="retailers">${retailers.map(r => `<option value="${esc(r)}"></option>`).join('')}</datalist>`}
+    <div class="form-grid">
+      <label class="field full">${gift ? 'Received on' : 'Purchase date'}<input type="date" name="purchaseDate" data-input="field" value="${esc(f.purchaseDate)}"></label>
+      ${gift
+        ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>`
+        : `<label class="field">Purchase price (${CURRENCY})<input name="purchasePrice" data-input="field" inputmode="decimal" placeholder="45.00" value="${esc(f.purchasePrice)}"></label>`}
+      <label class="field">Street price (${CURRENCY})<input name="streetPrice" data-input="field" inputmode="decimal" placeholder="52.00" value="${esc(f.streetPrice)}"></label>
+    </div>
+  </div>`;
 }
 
 const fmtDate = s => { const d = parseISO(s); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : s; };
@@ -779,7 +879,7 @@ function setRating(v) {
 function openRemoveSheet(id) {
   const w = wineById(id);
   if (!w || w.count < 1) return;
-  RS = { mode: 'add', wineId: id, type: 'Dinner', occasion: '', people: [], food: '', note: '', date: todayISO(), typing: '', showAll: false };
+  RS = { mode: 'add', wineId: id, type: 'Dinner', occasion: '', people: [], food: '', note: '', date: todayISO(), typing: '', showAll: false, hearts: true };
   renderSheet();
 }
 
@@ -790,7 +890,7 @@ function openEditRemoval(id) {
   RS = {
     mode: 'edit', id: r.id, wineId: r.wineId, type: REMOVAL_TYPES.includes(r.type) ? r.type : 'Other',
     occasion: r.occasion, people: namesOf(r.people).map(n => ({ name: n, heart: hearts.includes(lc(n)) })),
-    food: r.food, note: r.note, date: r.date || todayISO(), typing: '', showAll: false
+    food: r.food, note: r.note, date: r.date || todayISO(), typing: '', showAll: false, hearts: true
   };
   renderSheet();
 }
@@ -825,45 +925,53 @@ function renderSheet() {
   </div>`;
 }
 
+const PK = () => RS || (D && D.gift) || null;
+
 function peopleChipsHtml() {
-  if (!RS.people.length) return '';
-  return RS.people.map((p, i) => `<span class="person"><button class="heart${p.heart ? ' on' : ''}" data-act="p-heart" data-i="${i}" aria-pressed="${p.heart}" aria-label="Favorite wine of ${esc(p.name)}">${p.heart ? HEART_ON : ICON.heart}</button>${esc(p.name)}<button class="x" data-act="p-rm" data-i="${i}" aria-label="Remove ${esc(p.name)}">${ICON.x}</button></span>`).join('')
-    + '<p class="tiny muted" style="flex-basis:100%;margin:0">Tap the heart if it is their favorite wine.</p>';
+  const P = PK();
+  if (!P || !P.people.length) return '';
+  return P.people.map((p, i) => `<span class="person${P.hearts ? '' : ' plain'}">${P.hearts ? `<button class="heart${p.heart ? ' on' : ''}" data-act="p-heart" data-i="${i}" aria-pressed="${p.heart}" aria-label="Favorite wine of ${esc(p.name)}">${p.heart ? HEART_ON : ICON.heart}</button>` : ''}${esc(p.name)}<button class="x" data-act="p-rm" data-i="${i}" aria-label="Remove ${esc(p.name)}">${ICON.x}</button></span>`).join('')
+    + (P.hearts ? '<p class="tiny muted" style="flex-basis:100%;margin:0">Tap the heart if it is their favorite wine.</p>' : '');
 }
 
 function peopleSuggHtml() {
-  const t = lc(RS.typing.trim());
-  const chosen = RS.people.map(p => lc(p.name));
+  const P = PK();
+  if (!P) return '';
+  const t = lc(P.typing.trim());
+  const chosen = P.people.map(p => lc(p.name));
   const known = knownPeople().filter(p => !chosen.includes(lc(p.name)));
   let list;
   if (t) {
     list = known.filter(p => lc(p.name).includes(t))
-      .sort((a, b) => (lc(b.name).startsWith(t) ? 1 : 0) - (lc(a.name).startsWith(t) ? 1 : 0) || b.n - a.n)
+      .sort((a, b) => (lc(b.name).startsWith(t) ? 1 : 0) - (lc(a.name).startsWith(t) ? 1 : 0) || b.score - a.score)
       .slice(0, 8);
   } else {
-    list = RS.showAll ? known : known.slice(0, 6);
+    list = P.showAll ? byName(known) : known.slice(0, 6);
   }
-  const typed = RS.typing.trim();
+  const typed = P.typing.trim();
   const add = t && !known.some(p => lc(p.name) === t) && !chosen.includes(t) ? `<button class="chip" data-act="p-add-typed">${ICON.plus}Add “${esc(typed)}”</button>` : '';
-  const more = !t && !RS.showAll && known.length > 6 ? `<button class="chip" data-act="p-all">Show all ${known.length}</button>` : '';
+  const more = !t && !P.showAll && known.length > 6 ? `<button class="chip" data-act="p-all">All people (${known.length})</button>` : '';
   if (!list.length && !add && !more) return '';
-  return `<div class="chips">${list.map(p => `<button class="chip" data-act="p-pick" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join('')}${add}${more}</div>`;
+  return `<div class="chips${P.showAll && !t ? ' scroll-box' : ''}">${list.map(p => `<button class="chip" data-act="p-pick" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join('')}${add}${more}</div>`;
 }
 
 function updatePeople() {
+  const P = PK();
+  if (!P) return;
   const c = $('#people-chips'), s = $('#people-sugg'), i = $('#people-input');
   if (c) c.innerHTML = peopleChipsHtml();
   if (s) s.innerHTML = peopleSuggHtml();
-  if (i) i.value = RS.typing;
+  if (i) i.value = P.typing;
 }
 
 function addPerson(raw) {
-  if (!RS) return;
+  const P = PK();
+  if (!P) return;
   const clean = String(raw || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-  RS.typing = '';
-  if (clean && !RS.people.some(p => lc(p.name) === lc(clean))) {
+  P.typing = '';
+  if (clean && !P.people.some(p => lc(p.name) === lc(clean))) {
     const known = knownPeople().find(p => lc(p.name) === lc(clean));
-    RS.people.push({ name: known ? known.name : clean, heart: false });
+    P.people.push({ name: known ? known.name : clean, heart: false });
   }
   updatePeople();
 }
@@ -972,7 +1080,7 @@ function refreshView() {
 /* ------------------------------------------------------------ add and edit */
 
 function newDraft(mode, w) {
-  const src = w || normWine({ id: '', type: 'Red', count: 1, location: S.locations[0] || '' });
+  const src = w || normWine({ id: '', type: 'Red', count: 1 });
   return {
     mode, id: w ? w.id : null,
     step: mode === 'add' ? 'photo' : 'form',
@@ -980,12 +1088,14 @@ function newDraft(mode, w) {
       producer: src.producer, name: src.name, vintage: src.vintage, type: src.type, region: src.region, grapes: src.grapes,
       taste: src.taste, tasteTags: src.tasteTags.join(', '), pairings: src.pairings.join(', '),
       drinkFrom: str(src.drinkFrom), drinkUntil: str(src.drinkUntil), peakFrom: str(src.peakFrom), peakUntil: str(src.peakUntil),
-      location: src.location || S.locations[0] || '', shelf: src.shelf !== null ? src.shelf : '', position: src.position,
+      location: src.location || (mode === 'add' && S.locations.includes(store.get('wc-lastloc', '')) ? store.get('wc-lastloc', '') : ''), shelf: src.shelf !== null ? src.shelf : '', position: src.position,
       retailer: src.retailer, purchaseDate: src.purchaseDate || (mode === 'add' ? todayISO() : ''),
       purchasePrice: src.purchasePrice !== null ? src.purchasePrice.toFixed(2) : '', streetPrice: src.streetPrice !== null ? src.streetPrice.toFixed(2) : ''
     },
     count: mode === 'add' ? 1 : src.count,
     myRating: src.myRating,
+    acquired: src.acquired,
+    gift: { people: namesOf(src.giftFrom).map(n => ({ name: n, heart: false })), typing: '', showAll: false, hearts: false },
     ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score) })),
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
     src: null, corners: null, cornersTouched: false,
@@ -1051,7 +1161,7 @@ function formBody() {
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
     <div class="box"><span class="box-title">Storage</span>
-      <label class="field">Location<select name="location" data-change="location">${locs.map(l => `<option${l === f.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>
+      <label class="field">Location<select name="location" data-change="location"><option value=""${f.location ? '' : ' selected'}>No location</option>${locs.map(l => `<option${l === f.location ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>
       <div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="shelf-val" style="min-width:48px">${esc(str(f.shelf) === '' ? 'None' : f.shelf)}</span><button data-act="shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         ${field('Position', 'position', { ph: 'Back row, left' })}
@@ -1063,15 +1173,7 @@ function formBody() {
       <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
       <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
     </div>
-    <div class="box"><span class="box-title">Purchase</span>
-      <label class="field">Retailer<input name="retailer" data-input="field" list="retailers" placeholder="Wine shop, winery or online store" value="${esc(f.retailer)}"></label>
-      <datalist id="retailers">${[...new Set(S.wines.map(w => w.retailer).filter(Boolean))].sort().map(r => `<option value="${esc(r)}"></option>`).join('')}</datalist>
-      <div class="form-grid">
-        <label class="field full">Purchase date<input type="date" name="purchaseDate" data-input="field" value="${esc(f.purchaseDate)}"></label>
-        <label class="field">Purchase price (${CURRENCY})<input name="purchasePrice" data-input="field" inputmode="decimal" placeholder="45.00" value="${esc(f.purchasePrice)}"></label>
-        <label class="field">Street price (${CURRENCY})<input name="streetPrice" data-input="field" inputmode="decimal" placeholder="52.00" value="${esc(f.streetPrice)}"></label>
-      </div>
-    </div>
+    ${acquisitionBox()}
     <div class="box"><span class="box-title">External ratings</span>
       ${D.ratings.map((r, i) => `<div class="rating-row"><label class="field"><span class="sr-only">Rating system</span><select data-change="rsys" data-i="${i}">${SYSTEMS.map(x => `<option value="${esc(x.key)}"${x.key === r.sys ? ' selected' : ''}>${esc(x.key)} (of ${x.max})</option>`).join('')}</select></label>
         <label class="field"><span class="sr-only">Score</span><input data-input="rscore" data-i="${i}" inputmode="decimal" placeholder="Score" value="${esc(r.score)}"></label>
@@ -1390,8 +1492,9 @@ async function saveWineForm() {
     if (v && !/^\d{4}$/.test(v)) { toast('Drinking window years need four digits, for example 2027.'); return; }
   }
   for (const k of ['purchasePrice', 'streetPrice']) {
-    if (str(f[k]).trim() && parseMoney(f[k]) === null) { toast('Prices need a number, for example 45.50.'); return; }
+    if (!(k === 'purchasePrice' && D.acquired === 'Gift') && str(f[k]).trim() && parseMoney(f[k]) === null) { toast('Prices need a number, for example 45.50.'); return; }
   }
+  if (D.acquired === 'Gift' && D.gift.typing.trim()) addPerson(D.gift.typing);
   const base = D.mode === 'edit' ? wineById(D.id) : null;
   const w = normWine(Object.assign({}, base || {}, {
     id: base ? base.id : newId('w'),
@@ -1400,13 +1503,15 @@ async function saveWineForm() {
     tasteTags: splitList(f.tasteTags), pairings: splitList(f.pairings),
     drinkFrom: f.drinkFrom, drinkUntil: f.drinkUntil, peakFrom: f.peakFrom, peakUntil: f.peakUntil,
     location: f.location, shelf: f.shelf, position: f.position.trim(),
-    retailer: str(f.retailer).trim(), purchaseDate: f.purchaseDate,
-    purchasePrice: parseMoney(f.purchasePrice), streetPrice: parseMoney(f.streetPrice),
+    acquired: D.acquired, giftFrom: D.acquired === 'Gift' ? D.gift.people.map(p => p.name).join(', ') : '',
+    retailer: D.acquired === 'Gift' ? '' : str(f.retailer).trim(), purchaseDate: f.purchaseDate,
+    purchasePrice: D.acquired === 'Gift' ? 0 : parseMoney(f.purchasePrice), streetPrice: parseMoney(f.streetPrice),
     count: D.count,
     ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => ({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })),
     thumb: D.thumb || (base ? base.thumb : ''),
     myRating: D.myRating
   }));
+  if (f.location) store.set('wc-lastloc', f.location);
   busy(true, 'Saving…');
   try {
     const saved = normWine(await api('saveWine', { wine: serialWine(w), image: D.imageB64 || null }));
@@ -1424,11 +1529,29 @@ async function saveWineForm() {
 
 /* ------------------------------------------------------------ settings */
 
+function locationsHtml() {
+  const used = {};
+  S.wines.forEach(w => { if (w.location && w.count > 0) used[lc(w.location)] = (used[lc(w.location)] || 0) + w.count; });
+  const rows = S.locations.map(l => {
+    const n = used[lc(l)] || 0;
+    return `<div class="between loc-row"><span>${esc(l)} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span>${n
+      ? '<span class="muted tiny">in use</span>'
+      : `<button class="icon-btn" data-act="loc-del" data-v="${esc(l)}" aria-label="Delete ${esc(l)}">${ICON.trash}</button>`}</div>`;
+  }).join('');
+  return `<section class="box"><span class="box-title">Locations</span>
+    ${rows || '<p class="muted small" style="margin:0">No locations yet. Add where you keep your wine, for example Wine fridge, Basement or Kitchen.</p>'}
+    <div style="display:flex;gap:8px;align-items:flex-end"><label class="field" style="flex:1"><span class="sr-only">New location</span><input id="new-loc" placeholder="New location" autocapitalize="words" enterkeyhint="done"></label><button class="btn accent" data-act="loc-add">Add</button></div>
+    <p class="muted tiny" style="margin:0">A location can be deleted once no bottles in stock are stored there.</p>
+  </section>`;
+}
+
 function viewSettings(first) {
   const c = CFG || { url: '', token: '' };
   return `<main class="screen${first ? '' : ' has-nav'}" style="gap:16px">
     ${first ? '' : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}
     <h1 class="title">${first ? 'Connect your cellar' : 'Settings'}</h1>
+    ${first ? '' : locationsHtml()}
+    ${first ? '' : '<h2 style="font-size:15px;font-weight:600;margin-top:8px">Connection</h2>'}
     <p class="muted" style="margin:0">Paste the web app URL and the token from your Google Apps Script. Both stay on this device.</p>
     <label class="field">Script URL<input id="cfg-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url)}"></label>
     <label class="field">Token<input id="cfg-token" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(c.token)}"></label>
@@ -1451,7 +1574,30 @@ const ACTS = {
     refreshView();
   },
   'filter-more': el => { U.filterAll[el.dataset.k] = true; refreshView(); },
-  'filter-clear': () => { U.filters = { wine: [], grape: [], food: [] }; refreshView(); },
+  'filter-clear': () => { U.filters = { wine: [], grape: [], food: [], location: [] }; refreshView(); },
+  'filter-tab': el => { U.filterTab = el.dataset.v; refreshView(); },
+  'filter-less': el => { U.filterAll[el.dataset.k] = false; refreshView(); },
+  'loc-add': async () => {
+    const i = $('#new-loc');
+    const name = i.value.replace(/\s+/g, ' ').trim();
+    if (!name) { toast('Enter a name for the location.'); return; }
+    if (S.locations.some(l => lc(l) === lc(name))) { toast('This location already exists.'); return; }
+    S.locations.push(name);
+    persist();
+    refreshView();
+    try { S.locations = await api('addLocation', { name }); persist(); refreshView(); }
+    catch (e) { S.locations = S.locations.filter(l => l !== name); persist(); refreshView(); toast('Not saved: ' + e.message); }
+  },
+  'loc-del': async el => {
+    const name = el.dataset.v;
+    if (!confirm(`Delete the location ${name}?`)) return;
+    const prev = S.locations.slice();
+    S.locations = S.locations.filter(l => l !== name);
+    persist();
+    refreshView();
+    try { S.locations = await api('deleteLocation', { name }); persist(); refreshView(); }
+    catch (e) { S.locations = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
+  },
   'j-person': el => { U.jPerson = U.jPerson === el.dataset.v ? null : el.dataset.v; refreshView(); },
   'j-more': () => { U.jAllPeople = true; refreshView(); },
   'edit-removal': el => openEditRemoval(el.dataset.id),
@@ -1496,11 +1642,13 @@ const ACTS = {
     try { upsertWine(normWine(await api('update', { id: w.id, fields: { ratings: JSON.stringify(w.ratings) } }))); persist(); }
     catch (e) { w.ratings = prev; persist(); refreshView(); toast('Not saved: ' + e.message); }
   },
-  'p-heart': el => { const p = RS.people[Number(el.dataset.i)]; if (p) { p.heart = !p.heart; updatePeople(); } },
-  'p-rm': el => { RS.people.splice(Number(el.dataset.i), 1); updatePeople(); },
+  'p-heart': el => { const p = PK().people[Number(el.dataset.i)]; if (p) { p.heart = !p.heart; updatePeople(); } },
+  'p-rm': el => { PK().people.splice(Number(el.dataset.i), 1); updatePeople(); },
   'p-pick': el => addPerson(el.dataset.v),
-  'p-add-typed': () => addPerson(RS.typing),
-  'p-all': () => { RS.showAll = true; updatePeople(); },
+  'p-add-typed': () => addPerson(PK().typing),
+  'p-all': () => { PK().showAll = true; updatePeople(); },
+  acq: el => { D.acquired = el.dataset.v; render(); },
+  'j-less': () => { U.jAllPeople = false; refreshView(); },
 
   'sheet-close': () => closeSheet(),
   'rs-type': el => { RS.type = el.dataset.v; renderSheet(); },
@@ -1579,17 +1727,29 @@ const ACTS = {
 };
 
 const INPUTS = {
-  search: el => { U.search = el.value; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
+  search: el => {
+    U.search = el.value;
+    const l = $('#wine-list'), f = $('#facet-chips');
+    if (l) l.innerHTML = cellarList();
+    if (f) f.innerHTML = facetChipsHtml();
+  },
+  facetq: el => { U.facetQ[U.filterTab] = el.value; const f = $('#facet-chips'); if (f) f.innerHTML = facetChipsHtml(); },
   rs: el => { if (RS) RS[el.name] = el.value; },
   people: el => {
-    if (!RS) return;
+    const P = PK();
+    if (!P) return;
     const parts = el.value.split(',');
     if (parts.length > 1) { parts.slice(0, -1).forEach(addPerson); el.value = parts[parts.length - 1]; }
-    RS.typing = el.value;
+    P.typing = el.value;
     const s = $('#people-sugg');
     if (s) s.innerHTML = peopleSuggHtml();
   },
-  jsearch: el => { U.jSearch = el.value; const l = $('#journal-list'); if (l) l.innerHTML = journalList(); },
+  jsearch: el => {
+    U.jSearch = el.value;
+    const l = $('#journal-list'), p = $('#j-people');
+    if (l) l.innerHTML = journalList();
+    if (p) p.innerHTML = jPeopleHtml();
+  },
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
   rscore: el => { if (D) D.ratings[Number(el.dataset.i)].score = el.value; }
 };
@@ -1646,6 +1806,7 @@ function init() {
   });
   document.addEventListener('keydown', e => {
     if (e.target && e.target.id === 'people-input' && e.key === 'Enter') { e.preventDefault(); addPerson(e.target.value); }
+    if (e.target && e.target.id === 'new-loc' && e.key === 'Enter') { e.preventDefault(); ACTS['loc-add'](); }
   });
   window.addEventListener('hashchange', () => { if (RS) closeSheet(); render(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && CFG && !isFormRoute()) sync(true); });

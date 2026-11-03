@@ -16,12 +16,12 @@ var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
-  'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice'
+  'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom'
 ];
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts'];
 
 // Raise this when columns are added. The script then adds missing columns by itself on the next request.
-var SCHEMA_VERSION = '3';
+var SCHEMA_VERSION = '4';
 var LOCATION_COLS = ['name'];
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
@@ -38,7 +38,8 @@ var ACTIONS = {
   updateRemoval: actionUpdateRemoval_,
   image: actionImage_,
   analyze: actionAnalyze_,
-  addLocation: actionAddLocation_
+  addLocation: actionAddLocation_,
+  deleteLocation: actionDeleteLocation_
 };
 
 // ---------------------------------------------------------------- setup
@@ -50,8 +51,6 @@ function setup() {
 
   p.deleteProperty('SCHEMA_VERSION');
   ensureSchema_();
-  var loc = ss.getSheetByName(SHEETS.locations);
-  if (loc.getLastRow() < 2) loc.appendRow(['Wine fridge']);
 
   ss.getSheets().forEach(function (sh) {
     var n = sh.getName();
@@ -307,6 +306,23 @@ function actionAddLocation_(req) {
       list.push(name);
     }
     return list.filter(String);
+  });
+}
+
+function actionDeleteLocation_(req) {
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('Missing location name');
+  return withLock_(function () {
+    var inUse = readAll_(SHEETS.wines).some(function (w) {
+      return String(w.location).toLowerCase() === name.toLowerCase() && Number(w.count) > 0;
+    });
+    if (inUse) throw new Error('This location still has bottles in stock');
+    var sh = sheet_(SHEETS.locations);
+    var vals = sh.getDataRange().getValues();
+    for (var i = vals.length - 1; i >= 1; i--) {
+      if (String(vals[i][0]) === name) sh.deleteRow(i + 1);
+    }
+    return readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String);
   });
 }
 
