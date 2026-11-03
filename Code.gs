@@ -18,7 +18,10 @@ var WINE_COLS = [
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice'
 ];
-var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName'];
+var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts'];
+
+// Raise this when columns are added. The script then adds missing columns by itself on the next request.
+var SCHEMA_VERSION = '3';
 var LOCATION_COLS = ['name'];
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
@@ -32,6 +35,7 @@ var ACTIONS = {
   removeBottle: actionRemoveBottle_,
   deleteWine: actionDeleteWine_,
   deleteRemoval: actionDeleteRemoval_,
+  updateRemoval: actionUpdateRemoval_,
   image: actionImage_,
   analyze: actionAnalyze_,
   addLocation: actionAddLocation_
@@ -44,12 +48,9 @@ function setup() {
   var p = props_();
   p.setProperty('SHEET_ID', ss.getId());
 
-  var wines = ensureSheet_(ss, SHEETS.wines, WINE_COLS);
-  var head = wines.getRange(1, 1, 1, wines.getLastColumn()).getValues()[0].map(String);
-  wines.getRange(1, head.indexOf('purchaseDate') + 1, wines.getMaxRows(), 1).setNumberFormat('@');
-  var rem = ensureSheet_(ss, SHEETS.removals, REMOVAL_COLS);
-  rem.getRange('C:C').setNumberFormat('@');
-  var loc = ensureSheet_(ss, SHEETS.locations, LOCATION_COLS);
+  p.deleteProperty('SCHEMA_VERSION');
+  ensureSchema_();
+  var loc = ss.getSheetByName(SHEETS.locations);
   if (loc.getLastRow() < 2) loc.appendRow(['Wine fridge']);
 
   ss.getSheets().forEach(function (sh) {
@@ -92,6 +93,26 @@ function ensureSheet_(ss, name, cols) {
   return sh;
 }
 
+/** Adds missing tabs and columns without touching existing data. Runs once per schema version. */
+function ensureSchema_() {
+  var p = props_();
+  if (p.getProperty('SCHEMA_VERSION') === SCHEMA_VERSION) return;
+  withLock_(function () {
+    if (p.getProperty('SCHEMA_VERSION') === SCHEMA_VERSION) return;
+    var ss = ss_();
+    textColumn_(ensureSheet_(ss, SHEETS.wines, WINE_COLS), 'purchaseDate');
+    textColumn_(ensureSheet_(ss, SHEETS.removals, REMOVAL_COLS), 'date');
+    ensureSheet_(ss, SHEETS.locations, LOCATION_COLS);
+    p.setProperty('SCHEMA_VERSION', SCHEMA_VERSION);
+  });
+}
+
+function textColumn_(sh, name) {
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  var col = head.indexOf(name) + 1;
+  if (col > 0) sh.getRange(1, col, sh.getMaxRows(), 1).setNumberFormat('@');
+}
+
 function labelFolder_() {
   var p = props_();
   var id = p.getProperty('LABEL_FOLDER_ID');
@@ -122,6 +143,7 @@ function doPost(e) {
   var fn = ACTIONS[req.action];
   if (!fn) return json_({ ok: false, error: 'Unknown action: ' + req.action });
   try {
+    ensureSchema_();
     return json_({ ok: true, data: fn(req) });
   } catch (err) {
     return json_({ ok: false, error: String((err && err.message) || err) });
@@ -253,6 +275,22 @@ function actionDeleteRemoval_(req) {
   });
 }
 
+function actionUpdateRemoval_(req) {
+  if (!req.id) throw new Error('Missing entry id');
+  return withLock_(function () {
+    var t = table_(SHEETS.removals);
+    var idx = findIndex_(t, req.id);
+    if (idx < 0) throw new Error('Journal entry not found');
+    var obj = toObj_(t.headers, t.rows[idx]);
+    var f = req.fields || {};
+    ['date', 'type', 'occasion', 'people', 'hearts', 'food', 'note'].forEach(function (k) {
+      if (f[k] !== undefined && f[k] !== null) obj[k] = f[k];
+    });
+    writeRow_(t, idx, obj);
+    return obj;
+  });
+}
+
 function actionImage_(req) {
   if (!req.fileId) throw new Error('Missing file id');
   var blob = DriveApp.getFileById(req.fileId).getBlob();
@@ -305,7 +343,7 @@ function actionAnalyze_(req) {
   var text = callClaude_(content, 1500);
   var s = text.indexOf('{');
   var en = text.lastIndexOf('}');
-  if (s < 0 || en <= s) throw new Error('Claude returned no wine data');
+  if (s < 0 || en <= s) throw new Error('The AI returned no wine data');
   return JSON.parse(text.slice(s, en + 1));
 }
 
