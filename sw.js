@@ -1,5 +1,5 @@
 /* Wine Cellar service worker: keeps the app working offline and updates it in the background. */
-const SHELL_CACHE = 'wc-shell-v6';
+const SHELL_CACHE = 'wc-shell-v8';
 const RUNTIME_CACHE = 'wc-runtime-v1';
 const SHELL = ['./', './index.html', './app.js', './styles.css', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
@@ -22,7 +22,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
-    e.respondWith(staleWhileRevalidate(req));
+    e.respondWith(networkFirst(req));
     return;
   }
   const h = url.hostname;
@@ -32,15 +32,19 @@ self.addEventListener('fetch', e => {
   // Everything else (your Google Apps Script) always goes to the network.
 });
 
-async function staleWhileRevalidate(req) {
+/* App files: always try the newest version first, so updates show on the next start.
+   Without a connection, or if the network takes longer than 4 seconds, the saved copy is used. */
+async function networkFirst(req) {
   const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await Promise.race([
+      fetch(req, { cache: 'no-cache' }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+    ]);
+    if (res && res.ok) { cache.put(req, res.clone()); return res; }
+  } catch (e) { /* offline or slow: fall back to the saved copy */ }
   const hit = await cache.match(req, { ignoreSearch: true });
-  const net = fetch(req)
-    .then(res => { if (res && res.ok) cache.put(req, res.clone()); return res; })
-    .catch(() => null);
   if (hit) return hit;
-  const res = await net;
-  if (res) return res;
   if (req.mode === 'navigate') {
     const shell = await cache.match('./index.html');
     if (shell) return shell;
