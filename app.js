@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -803,8 +803,8 @@ function statsHtml() {
   const bottles = inStock.reduce((a, w) => a + w.count, 0);
   const t = totals();
   const up = t.costN && t.streetN && t.street > t.cost;
-  const cell = (label, value, cls = '') => `<div><span>${label}</span><b class="${cls}">${value}</b></div>`;
-  return `<div class="stats">${cell('Wines', inStock.length)}${cell('Bottles', bottles)}${cell(`Total costs ${cur()}`, t.costN ? fmtNum(t.cost, 0) : 'N/A')}${cell(`Street value ${cur()}`, t.streetN ? fmtNum(t.street, 0) : 'N/A', up ? 'up' : '')}</div>`;
+  const cell = (label, value, unit = '', cls = '') => `<div><span class="st-label">${label}</span><b class="${cls}">${value}</b><span class="st-unit">${unit || '&nbsp;'}</span></div>`;
+  return `<div class="stats">${cell('Wines', inStock.length)}${cell('Bottles', bottles)}${cell('Total Costs', t.costN ? fmtNum(t.cost, 0) : 'N/A', cur())}${cell('Total Street Value', t.streetN ? fmtNum(t.street, 0) : 'N/A', cur(), up ? 'up' : '')}</div>`;
 }
 
 function viewCellar() {
@@ -835,13 +835,15 @@ function priceLine(w) {
   const a = avgPrice(w), s = streetOf(w);
   const up = a !== null && s !== null && s > a;
   const part = (label, v, cls = '') => `<span>${label}&nbsp;<b class="${cls}">${v}</b></span>`;
-  return `<span class="price-line">${part('Ø', a !== null ? fmtNum(a) : 'N/A')} · ${part('Street', s !== null ? fmtNum(s) : 'N/A', up ? 'up' : '')}${s !== null && w.count > 0 ? ` · ${part('Total', fmtNum(s * w.count, 0), up ? 'up' : '')}` : ''}</span>`;
+  const total = s !== null && w.count > 0 ? part('Total value', fmtNum(s * w.count), up ? 'up' : '') : '';
+  return `<span class="price-row"><span class="price-left">${part('Ø Purchase price', a !== null ? fmtNum(a) : 'N/A')}${part('Streetprice', s !== null ? fmtNum(s) : 'N/A', up ? 'up' : '')}</span>${total}</span>`;
 }
 
 function wineRow(w) {
   return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
-    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span>${w.count > 0 ? pill(w) : ''}${priceLine(w)}</div></a>
+    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span></div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove a bottle"${w.count ? '' : ' disabled'}>${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add bottles">${ICON.plus}</button></div>
+    <a class="row-foot" href="#/wine/${encodeURIComponent(w.id)}">${priceLine(w)}${w.count > 0 ? pill(w) : ''}</a>
   </div>`;
 }
 
@@ -913,7 +915,7 @@ function topBody() {
 
 function topRow(w, i, visual, score, sub) {
   const s = streetOf(w);
-  const subLine = [sub, s !== null ? `Street ${money(s)}` : ''].filter(Boolean).join(' · ');
+  const subLine = [sub, s !== null ? `Streetprice ${money(s)}` : ''].filter(Boolean).join(' · ');
   return `<a class="journal-row${w.count === 0 ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
     <div class="row-text" style="gap:5px"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
     <div class="score">${score}</div></a>`;
@@ -1045,7 +1047,7 @@ function valueHtml(w) {
   return `<section><div class="sec-head"><h2>Value</h2><button class="chip" data-act="street-one" data-id="${esc(w.id)}"${busyNow ? ' disabled' : ''}>${ICON.refresh}${busyNow ? 'Updating…' : 'Update street price'}</button></div>
     <div class="card form-grid" style="gap:14px">
       <div class="kv"><span>Ø purchase price</span><p style="font-weight:600">${a !== null ? money(a) : 'N/A'}</p></div>
-      <div class="kv"><span>Street price</span><p style="font-weight:600" class="${up ? 'up' : ''}">${s !== null ? money(s) : 'N/A'}</p>${diff}</div>
+      <div class="kv"><span>Streetprice</span><p style="font-weight:600" class="${up ? 'up' : ''}">${s !== null ? money(s) : 'N/A'}</p>${diff}</div>
       ${s !== null && w.count > 0 ? `<div class="kv full"><span>Street value of ${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span><p style="font-weight:600" class="${up ? 'up' : ''}">${money(s * w.count)}</p></div>` : ''}
       ${src ? `<p class="muted tiny full" style="margin:0">${esc(src)}</p>` : ''}
     </div></section>`;
@@ -1185,7 +1187,16 @@ function openAddSheet(id, loc, mode = 'add') {
     kind: 'in', mode, wineId: id, loc: at, qty: 1, type: 'Purchase', occasion: '', food: '', note: '', date: todayISO(),
     price: '', pp: newPicker('people', ''), rp: newPicker('retailers', '', { single: true }), website: '', websiteInit: ''
   };
+  placeFromStock();
   renderSheet();
+}
+
+/** Shelf and position of the chosen location, taken from the bottles already stored there. */
+function placeFromStock() {
+  const w = wineById(RS.wineId);
+  const e = w && w.stock.find(x => lc(x.loc) === lc(RS.loc));
+  RS.shelf = e && e.shelf !== null && e.shelf !== '' ? Number(e.shelf) : null;
+  RS.pos = e ? str(e.pos) : '';
 }
 
 function openEditEntry(id, record) {
@@ -1254,7 +1265,11 @@ function renderSheet() {
       ${note}`;
   } else {
     const showSite = RS.mode !== 'add' && RS.type === 'Purchase' && RS.rp.people.length;
-    body = `${typeGrid}${locs}${qty}${date}
+    const place = RS.mode === 'add' ? `<div class="store-row">
+        <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" style="min-width:48px">${RS.shelf === null ? 'None' : RS.shelf}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
+        <label class="field">Position<input name="pos" data-input="rs" placeholder="Back row, left" value="${esc(RS.pos)}"></label>
+      </div>` : '';
+    body = `${typeGrid}${locs}${place}${qty}${date}
       ${RS.type === 'Purchase' ? picker('Retailer') : RS.type === 'Received' ? picker('From') : ''}
       ${showSite ? `<label class="field">Website of ${esc(RS.rp.people[0].name)}<input name="website" data-input="rs" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(RS.website)}"></label>` : ''}
       ${RS.type === 'Purchase' ? priceField('Purchase price per bottle') : RS.type === 'Received' ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>` : ''}
@@ -1392,13 +1407,21 @@ async function saveSheet(withDetails) {
     const entry = Object.assign({ id: newId(st.kind === 'out' ? 'r' : 'i'), wineId: w.id, wineName: fullName(w), loc: st.loc }, fields);
     const prevStock = JSON.parse(JSON.stringify(w.stock));
     localStock(w, st.loc, st.kind === 'out' ? -st.qty : st.qty);
+    const place = st.kind === 'in' ? { shelf: st.shelf === undefined ? null : st.shelf, pos: str(st.pos).trim() } : null;
+    if (place) Object.assign(w.stock.find(x => lc(x.loc) === lc(st.loc)) || {}, place);
     S.removals.push(normRemoval(entry));
     if (st.kind === 'in') store.set('wc-lastloc', st.loc);
     persist();
     refreshView();
     try {
       const d = st.kind === 'out' ? await api('removeBottle', { removal: entry }) : await api('addBottles', { entry });
-      upsertWine(normWine(d.wine));
+      let fresh = normWine(d.wine);
+      const at = place && fresh.stock.find(x => lc(x.loc) === lc(st.loc));
+      if (at && (at.shelf !== place.shelf || at.pos !== place.pos)) {
+        Object.assign(at, place);
+        fresh = normWine(await api('update', { id: w.id, fields: { stock: fresh.stock } }));
+      }
+      upsertWine(fresh);
       const saved = normRemoval(d.removal || d.entry);
       S.removals = S.removals.filter(r => r.id !== entry.id && r.id !== saved.id).concat([saved]);
       persist();
@@ -2234,7 +2257,12 @@ const ACTS = {
 
   'sheet-close': () => closeSheet(),
   'rs-type': el => { RS.type = el.dataset.v; renderSheet(); },
-  'rs-loc': el => { RS.loc = el.dataset.v; RS.qty = clamp(RS.qty, 1, qtyMax()); renderSheet(); },
+  'rs-loc': el => { RS.loc = el.dataset.v; RS.qty = clamp(RS.qty, 1, qtyMax()); if (RS.kind === 'in') placeFromStock(); renderSheet(); },
+  'rs-shelf': el => {
+    const v = clamp((RS.shelf || 0) + Number(el.dataset.d), 0, 99);
+    RS.shelf = v === 0 ? null : v;
+    $('#rs-shelf').textContent = v === 0 ? 'None' : v;
+  },
   'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').textContent = RS.qty; },
   'rs-skip': () => saveSheet(false),
   'rs-save': () => saveSheet(true),
