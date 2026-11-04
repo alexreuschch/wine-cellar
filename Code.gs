@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 5;
+var API_VERSION = 6;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', fx: 'FX' };
 
 var WINE_COLS = [
@@ -291,10 +291,20 @@ function parseStock_(s) {
   try { var a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
 }
 
+/** A storage place is location + shelf + position. Bottles of one wine can lie in several places, also within one location. */
+function placeKey_(e) {
+  var shelf = e.shelf === '' || e.shelf === null || e.shelf === undefined ? '' : String(Number(e.shelf));
+  return [String(e.loc || '').toLowerCase().trim(), shelf, String(e.pos || '').toLowerCase().trim()].join('|');
+}
+
 function setStock_(obj, stock) {
-  var clean = parseStock_(stock).map(function (e) {
-    return { loc: String(e.loc || ''), shelf: e.shelf === '' || e.shelf === null || e.shelf === undefined ? null : Number(e.shelf), pos: String(e.pos || ''), n: Math.max(0, Math.round(Number(e.n) || 0)) };
-  }).filter(function (e) { return e.n > 0; });
+  var merged = [];
+  parseStock_(stock).forEach(function (e) {
+    var x = { loc: String(e.loc || '').trim(), shelf: e.shelf === '' || e.shelf === null || e.shelf === undefined ? null : Number(e.shelf), pos: String(e.pos || '').trim(), n: Math.max(0, Math.round(Number(e.n) || 0)) };
+    var same = merged.filter(function (m) { return placeKey_(m) === placeKey_(x); })[0];
+    if (same) same.n += x.n; else merged.push(x);
+  });
+  var clean = merged.filter(function (e) { return e.n > 0; });
   obj.stock = JSON.stringify(clean);
   obj.count = clean.reduce(function (a, e) { return a + e.n; }, 0);
   if (clean.length) {
@@ -305,14 +315,22 @@ function setStock_(obj, stock) {
   return obj;
 }
 
-/** Changes the stock at one location. Returns the location actually used. */
-function changeStock_(obj, loc, delta) {
+/**
+ * Adds or removes bottles at one place. place is { loc, shelf, pos }.
+ * Without shelf and pos (older app versions) the first place at that location is used.
+ */
+function changeStock_(obj, place, delta) {
   var st = parseStock_(obj.stock);
-  var key = String(loc || '').toLowerCase();
-  var e = st.filter(function (x) { return String(x.loc).toLowerCase() === key && key; })[0];
-  if (!e && delta < 0) e = st.filter(function (x) { return Number(x.n) > 0; })[0];
-  if (!e && delta > 0) { e = { loc: String(loc || obj.location || ''), shelf: null, pos: '', n: 0 }; st.push(e); }
-  if (!e) throw new Error('No bottles in stock');
+  var p = typeof place === 'object' && place ? place : { loc: place };
+  var exact = p.shelf !== undefined || p.pos !== undefined;
+  var key = String(p.loc || '').toLowerCase().trim();
+  var e = st.filter(function (x) { return key && (exact ? placeKey_(x) === placeKey_(p) : String(x.loc).toLowerCase().trim() === key); })[0];
+  if (!e && delta < 0 && !exact) e = st.filter(function (x) { return Number(x.n) > 0; })[0];
+  if (!e && delta > 0) {
+    e = { loc: String(p.loc || obj.location || ''), shelf: p.shelf === '' || p.shelf === null || p.shelf === undefined ? null : Number(p.shelf), pos: String(p.pos || ''), n: 0 };
+    st.push(e);
+  }
+  if (!e) throw new Error('No bottles at this place');
   if (delta < 0 && Number(e.n) < -delta) throw new Error('Not enough bottles at ' + e.loc);
   e.n = Number(e.n) + delta;
   setStock_(obj, st);
@@ -397,11 +415,18 @@ function actionAdjust_(req) {
     var idx = findIndex_(t, req.id);
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
-    changeStock_(obj, req.loc, Number(req.delta) || 0);
+    changeStock_(obj, placeOf_(req), Number(req.delta) || 0);
     obj.updatedAt = new Date().toISOString();
     writeRow_(t, idx, obj);
     return obj;
   });
+}
+
+function placeOf_(x) {
+  var p = { loc: x.loc };
+  if (x.shelf !== undefined) p.shelf = x.shelf;
+  if (x.pos !== undefined) p.pos = x.pos;
+  return p;
 }
 
 function actionRemoveBottle_(req) {
@@ -413,7 +438,7 @@ function actionRemoveBottle_(req) {
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
     var qty = Math.max(1, Number(r.qty) || 1);
-    r.loc = changeStock_(obj, r.loc, -qty);
+    r.loc = changeStock_(obj, placeOf_(r), -qty);
     obj.updatedAt = new Date().toISOString();
     writeRow_(t, idx, obj);
     var removal = saveEntryRow_(Object.assign({}, r, { dir: 'out', qty: qty }));
@@ -430,7 +455,7 @@ function actionAddBottles_(req) {
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
     var qty = Math.max(1, Number(e.qty) || 1);
-    e.loc = changeStock_(obj, e.loc, qty);
+    e.loc = changeStock_(obj, placeOf_(e), qty);
     obj.updatedAt = new Date().toISOString();
     writeRow_(t, idx, obj);
     var entry = saveEntryRow_(Object.assign({}, e, { dir: 'in', qty: qty }));
@@ -540,10 +565,7 @@ function actionMoveLocation_(req) {
       var src = st.filter(function (e) { return String(e.loc).toLowerCase() === from.toLowerCase(); });
       var legacy = String(w.location).toLowerCase() === from.toLowerCase();
       if (!src.length && !legacy) return;
-      src.forEach(function (e) {
-        var dst = st.filter(function (x) { return String(x.loc).toLowerCase() === to.toLowerCase(); })[0];
-        if (dst) { dst.n = Number(dst.n) + Number(e.n); e.n = 0; } else { e.loc = to; e.shelf = null; e.pos = ''; }
-      });
+      src.forEach(function (e) { e.loc = to; e.shelf = null; e.pos = ''; });
       setStock_(w, st);
       if (String(w.location).toLowerCase() === from.toLowerCase()) w.location = to;
       writeRow_(t, i, w);
