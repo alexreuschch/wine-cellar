@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.2.1';
+const APP_VERSION = '2.2.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -612,10 +612,7 @@ const CTX = {
     facets: {
       person: { label: 'Person', plural: 'people', of: r => namesOf(r.people) },
       type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added'] },
-      wine: { label: 'Wine', plural: 'wines', of: r => [entryWine(r)] },
-      retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) },
-      occasion: { label: 'Occasion', plural: 'occasions', of: r => (r.occasion ? [cap(r.occasion.trim())] : []) },
-      food: { label: 'Food', plural: 'dishes', of: r => (r.food ? [cap(r.food.trim())] : []) }
+      retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) }
     },
     items: () => allEntries(),
     text: r => journalTextMatch(r),
@@ -1019,7 +1016,7 @@ function journalTextMatch(r) {
   const q = lc(U.jSearch.trim());
   if (!q) return true;
   const w = wineById(r.wineId);
-  const hay = lc([r.people, r.occasion, r.food, r.note, r.retailer, r.loc, entryType(r), w ? fullName(w) : r.wineName].join(' '));
+  const hay = lc([r.people, r.retailer, entryType(r), w ? fullName(w) : r.wineName].join(' '));
   return q.split(/\s+/).every(p => hay.includes(p));
 }
 
@@ -1085,7 +1082,7 @@ function viewJournal() {
   const btn = filterButton('journal');
   const ppl = sel('journal', 'person');
   return `<main class="screen has-nav"><h1 class="title">Journal</h1>
-    <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="jsearch" aria-label="Search the journal" placeholder="Person, wine, retailer or food" value="${esc(U.jSearch)}"></label>${btn}</div>
+    <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="jsearch" aria-label="Search the journal" placeholder="Person, wine, type or retailer" value="${esc(U.jSearch)}"></label>${btn}</div>
     ${filters}
     ${ppl.length === 1 ? personSummary(ppl[0]) : ''}
     <div id="journal-list">${journalList()}</div></main>${nav('journal')}`;
