@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -2839,8 +2839,28 @@ const CHANGES = {
 
 /* ------------------------------------------------------------ start */
 
+/**
+ * Opens shops and retailer websites outside the app, so the app stays open behind them.
+ * iPhone home screen apps hand the link to Safari, all others open a new browser tab.
+ */
+function openExternal(url) {
+  const ua = navigator.userAgent || '';
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  const v = /OS (\d+)_/.exec(ua);
+  if (ios && standalone && v && Number(v[1]) >= 17) {
+    window.location.href = 'x-safari-' + url;
+    return;
+  }
+  const w = window.open(url, '_blank');
+  if (w) { try { w.opener = null; } catch (e) { /* ignore */ } }
+  else toast('The link could not be opened. Allow pop-ups for this app.');
+}
+
 function init() {
   document.addEventListener('click', e => {
+    const ext = e.target.closest('a[target="_blank"]');
+    if (ext && /^https?:/i.test(ext.href)) { e.preventDefault(); openExternal(ext.href); return; }
     const el = e.target.closest('[data-act]');
     if (!el) return;
     const fn = ACTS[el.dataset.act];
