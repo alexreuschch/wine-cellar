@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 6;
+var API_VERSION = 7;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', fx: 'FX' };
 
 var WINE_COLS = [
@@ -53,6 +53,7 @@ var ACTIONS = {
   deleteLocation: actionDeleteLocation_,
   moveLocation: actionMoveLocation_,
   saveRetailer: actionSaveRetailer_,
+  deleteRetailer: actionDeleteRetailer_,
   setSettings: actionSetSettings_
 };
 
@@ -580,6 +581,23 @@ function ensureRetailer_(name) {
   if (!n) return;
   var exists = readAll_(SHEETS.retailers).some(function (r) { return String(r.name).toLowerCase() === n.toLowerCase(); });
   if (!exists) sheet_(SHEETS.retailers).appendRow([n, '']);
+}
+
+/** Deletes a retailer from the list. Only allowed when no journal entry uses it. */
+function actionDeleteRetailer_(req) {
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('Missing retailer name');
+  return withLock_(function () {
+    var used = readAll_(SHEETS.removals).some(function (r) { return String(r.retailer || '').toLowerCase().trim() === name.toLowerCase(); });
+    if (used) throw new Error('This retailer is used in the journal');
+    var sh = sheet_(SHEETS.retailers);
+    var vals = sh.getDataRange().getValues();
+    var col = vals[0].map(String).indexOf('name');
+    for (var i = vals.length - 1; i >= 1; i--) {
+      if (String(vals[i][col]).toLowerCase().trim() === name.toLowerCase()) sh.deleteRow(i + 1);
+    }
+    return readAll_(SHEETS.retailers).filter(function (r) { return r.name; });
+  });
 }
 
 function actionSaveRetailer_(req) {

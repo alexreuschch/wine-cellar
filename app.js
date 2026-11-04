@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.2.2';
+const APP_VERSION = '2.3.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -877,7 +877,7 @@ function statsHtml() {
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 6 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+  const notice = S.version && S.version < 7 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -1323,7 +1323,7 @@ function renderSheet() {
   const qty = `<div class="between"><span>${RS.mode === 'edit' || (RS.mode === 'record' && RS.id) ? 'Bottles' : out ? 'Bottles taken' : 'Bottles'}</span><div class="stepper"><button data-act="rs-qty" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span id="rs-qty">${RS.qty}</span><button data-act="rs-qty" data-d="1" aria-label="More">${ICON.plus}</button></div></div>`;
   const picker = (label) => `<div class="field"><span>${label}</span>
       <div id="people-chips" class="chips">${peopleChipsHtml()}</div>
-      <input id="people-input" data-input="people" aria-label="${label}" placeholder="${PK() && PK().source === 'retailers' ? 'Type a shop, winery or website' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
+      <input id="people-input" data-input="people" aria-label="${label}" placeholder="${PK() && PK().source === 'retailers' ? 'Type the name of a shop or winery' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
       <div id="people-sugg">${peopleSuggHtml()}</div></div>`;
   const priceField = label => `<label class="field">${label}${curLabel()}<input name="price" data-input="rs" inputmode="decimal" placeholder="45.00" value="${esc(RS.price)}"></label>`;
   const date = `<label class="field">Date<input type="date" name="date" data-input="rs" value="${esc(RS.date)}"></label>`;
@@ -1338,7 +1338,7 @@ function renderSheet() {
       ${RS.type === 'Gift' || RS.type === 'Sale' ? '' : `<label class="field">Food<input name="food" data-input="rs" placeholder="Duck breast with cherry sauce" value="${esc(RS.food)}"></label>`}
       ${note}`;
   } else {
-    const showSite = RS.mode !== 'add' && RS.type === 'Purchase' && RS.rp.people.length;
+    const showSite = RS.type === 'Purchase' && RS.rp.people.length;
     const place = RS.mode === 'add' ? `<div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" style="min-width:48px">${RS.shelf === null ? 'None' : RS.shelf}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input name="pos" data-input="rs" placeholder="Back row, left" value="${esc(RS.pos)}"></label>
@@ -1430,7 +1430,14 @@ function addPerson(raw) {
     if (RS && P === RS.rp) {
       RS.website = str((S.retailers.find(x => lc(x.name) === lc(item.name)) || {}).website);
       RS.websiteInit = RS.website;
-      if (RS.mode !== 'add') { renderSheet(); return; }
+      renderSheet();
+      return;
+    }
+    if (!RS && D && D.acq && P === D.acq.rp) {
+      D.acq.website = D.acq.websiteInit = str((S.retailers.find(x => lc(x.name) === lc(item.name)) || {}).website);
+      updatePeople();
+      renderSiteBox();
+      return;
     }
   }
   updatePeople();
@@ -1697,7 +1704,7 @@ function newDraft(mode, w) {
     stock: mode === 'add' ? [{ loc: defaultLocation(), shelf: null, pos: '', n: 1 }] : src.stock.map(e => Object.assign({}, e)),
     addLoc: false, move: null,
     myRating: src.myRating,
-    acq: mode === 'add' ? { type: 'Purchase', pp: newPicker('people', ''), rp: newPicker('retailers', '', { single: true }) } : null,
+    acq: mode === 'add' ? { type: 'Purchase', pp: newPicker('people', ''), rp: newPicker('retailers', '', { single: true }), website: '', websiteInit: '' } : null,
     ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score) })),
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
     src: null, corners: null, cornersTouched: false,
@@ -1773,16 +1780,26 @@ function stockEditorHtml() {
 function acquisitionBox() {
   const a = D.acq, f = D.fields;
   const picker = label => `<div class="field"><span>${label}</span><div id="people-chips" class="chips">${peopleChipsHtml()}</div>
-    <input id="people-input" data-input="people" aria-label="${label}" placeholder="${a.type === 'Purchase' ? 'Type a shop, winery or website' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
+    <input id="people-input" data-input="people" aria-label="${label}" placeholder="${a.type === 'Purchase' ? 'Type the name of a shop or winery' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
     <div id="people-sugg">${peopleSuggHtml()}</div></div>`;
   return `<div class="box"><span class="box-title">Acquired</span>
     <div class="grid3">${ADD_TYPES.map(([v, l]) => `<button class="btn${v === a.type ? ' primary' : ''}" style="height:42px;font-size:14px;padding:0 6px" data-act="acq" data-v="${v}">${l}</button>`).join('')}</div>
-    ${a.type === 'Purchase' ? picker('Retailer') : a.type === 'Received' ? picker('Gift from') : ''}
+    ${a.type === 'Purchase' ? picker('Retailer') + `<div id="site-box">${siteBoxHtml()}</div>` : a.type === 'Received' ? picker('Gift from') : ''}
     <div class="form-grid">
       <label class="field${a.type === 'Purchase' ? '' : ' full'}">Date<input type="date" name="date" data-input="field" value="${esc(f.date)}"></label>
       ${a.type === 'Purchase' ? `<label class="field">Price per bottle${curLabel()}<input name="price" data-input="field" inputmode="decimal" placeholder="45.00" value="${esc(f.price)}"></label>` : ''}
     </div>
   </div>`;
+}
+
+function siteBoxHtml() {
+  const a = D && D.acq;
+  if (!a || a.type !== 'Purchase' || !a.rp.people.length) return '';
+  return `<label class="field">Website of ${esc(a.rp.people[0].name)}<input data-input="acq-site" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(a.website)}"></label>`;
+}
+function renderSiteBox() {
+  const b = $('#site-box');
+  if (b) b.innerHTML = siteBoxHtml();
 }
 
 function streetBox() {
@@ -2219,6 +2236,8 @@ async function saveWineForm() {
     D = null;
     busy(false);
     go('#/wine/' + encodeURIComponent(saved.id), true);
+    const ret = acq && acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '';
+    if (ret && str(acq.website).trim() !== str(acq.websiteInit).trim()) saveRetailerSite(ret, str(acq.website).trim());
     if (refetch && S.version >= 5) updateStreetPrices([saved.id], true);
   } catch (e) {
     busy(false);
@@ -2258,6 +2277,20 @@ function fxNote() {
   return `Prices are converted automatically. ${r}${fx.date ? ` (${esc(fx.source || 'rates')}, ${esc(fmtDate(fx.date))})` : ''}`;
 }
 
+function retailersHtml() {
+  const used = {};
+  S.removals.forEach(r => { if (r.retailer) used[lc(r.retailer)] = (used[lc(r.retailer)] || 0) + 1; });
+  const rows = byName(S.retailers).map(r => {
+    const n = used[lc(r.name)] || 0;
+    return `<div class="loc-row"><div class="between"><span>${esc(r.name)} <span class="muted small">${n ? `${n} ${n === 1 ? 'purchase' : 'purchases'}` : 'no purchases'}</span></span>${n ? '' : `<button class="icon-btn" data-act="ret-del" data-v="${esc(r.name)}" aria-label="Delete ${esc(r.name)}">${ICON.trash}</button>`}</div>
+      <label class="field"><span class="sr-only">Website of ${esc(r.name)}</span><input data-change="ret-site" data-v="${esc(r.name)}" inputmode="url" autocapitalize="off" placeholder="Website, for example www.shop.ch" value="${esc(r.website)}"></label></div>`;
+  }).join('');
+  return `<section class="box"><span class="box-title">Retailers</span>
+    ${rows || '<p class="muted small" style="margin:0">No retailers yet. They are added when you record a purchase.</p>'}
+    <p class="muted tiny" style="margin:0">A retailer can be deleted once no purchase in the journal uses it.</p>
+  </section>`;
+}
+
 function viewSettings(first) {
   const c = CFG || { url: '', token: '' };
   const inStock = S.wines.filter(w => w.count > 0);
@@ -2273,6 +2306,7 @@ function viewSettings(first) {
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
       <p class="muted tiny" style="margin:0">Claude looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
     ${first ? '' : locationsHtml()}
+    ${first ? '' : retailersHtml()}
     ${first ? '' : '<h2 style="font-size:15px;font-weight:600;margin-top:8px">Connection</h2>'}
     <p class="muted" style="margin:0">Paste the web app URL and the token from your Google Apps Script. Both stay on this device.</p>
     <label class="field">Script URL<input id="cfg-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url)}"></label>
@@ -2331,6 +2365,16 @@ const ACTS = {
     U.f.cellar.open = false;
     U.search = '';
     go('#/cellar');
+  },
+  'ret-del': async el => {
+    const name = el.dataset.v;
+    if (!confirm(`Delete the retailer ${name}?`)) return;
+    const prev = S.retailers.slice();
+    S.retailers = S.retailers.filter(r => r.name !== name);
+    persist();
+    refreshView();
+    try { S.retailers = (await api('deleteRetailer', { name })).map(x => ({ name: str(x.name), website: str(x.website) })).filter(x => x.name); persist(); refreshView(); }
+    catch (e) { S.retailers = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
   },
   'loc-move-open': el => { U.locMove = el.dataset.v; refreshView(); },
   'loc-move-cancel': () => { U.locMove = null; refreshView(); },
@@ -2405,7 +2449,7 @@ const ACTS = {
   'p-rm': el => {
     const P = PK();
     P.people.splice(Number(el.dataset.i), 1);
-    if (RS && P === RS.rp && RS.mode !== 'add') renderSheet(); else updatePeople();
+    if (RS && P === RS.rp) renderSheet(); else { updatePeople(); renderSiteBox(); }
   },
   'p-pick': el => addPerson(el.dataset.v),
   'p-add-typed': () => addPerson(PK().typing),
@@ -2572,6 +2616,7 @@ const INPUTS = {
   },
   rng: el => onRange(el),
   rtmin: el => onRatingMin(el),
+  'acq-site': el => { if (D && D.acq) D.acq.website = el.value; },
   'del-pos': el => { if (!RS || !RS.del) return; RS.del.pos = el.value; const h = $('#del-hint'); if (h) h.textContent = delHint(); },
   'st-pos': el => { if (D) D.stock[Number(el.dataset.i)].pos = el.value; },
   people: el => {
@@ -2596,6 +2641,7 @@ const INPUTS = {
 const CHANGES = {
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
   rsys: el => { if (D) D.ratings[Number(el.dataset.i)].sys = el.value; },
+  'ret-site': el => saveRetailerSite(el.dataset.v, el.value.trim()),
   currency: async el => {
     S.settings = Object.assign({}, S.settings, { currency: el.value });
     persist();
