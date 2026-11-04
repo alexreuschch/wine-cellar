@@ -352,3 +352,11 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .set-name { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 2px; }
 .set-name .ret-link, .set-name > .tiny { flex-basis: 100%; }
 .set-list { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; }
+
+/* 2.5.0: cost colors, readable window chips, best offer */
+.down { color: var(--danger) !important; }
+.wine-row .price-row .pill { font-size: 11px; padding: 1px 8px; line-height: 15px; }
+.offer-btn { flex: none; height: 40px; gap: 6px; padding: 0 14px; font-weight: 600; }
+.offer-btn svg { flex: none; }
+.wine-row .price-row { column-gap: 6px; }
+.wine-row .price-row .pill { padding: 1px 7px; }

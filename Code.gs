@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 8;
+var API_VERSION = 9;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', fx: 'FX' };
 
 var WINE_COLS = [
@@ -19,7 +19,7 @@ var WINE_COLS = [
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom',
-  'stock', 'street'
+  'stock', 'street', 'offer'
 ];
 // The Removals tab is the journal: bottles going out (dir "out") and coming in (dir "in").
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
@@ -30,7 +30,7 @@ var PEOPLE_COLS = ['name'];
 var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '6';
+var SCHEMA_VERSION = '7';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -50,6 +50,7 @@ var ACTIONS = {
   image: actionImage_,
   analyze: actionAnalyze_,
   streetPrice: actionStreetPrice_,
+  bestOffer: actionBestOffer_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
   moveLocation: actionMoveLocation_,
@@ -810,6 +811,53 @@ function actionStreetPrice_(req) {
  * Run this once from the editor after adding ANTHROPIC_API_KEY.
  * The execution log then shows either "Claude API works" or the exact problem.
  */
+var OFFER_REGIONS = {
+  CHF: { area: 'Switzerland', where: 'Switzerland' },
+  EUR: { area: 'Euro area', where: 'a country of the euro area, for example Germany, Austria, France, Italy or the Netherlands' },
+  GBP: { area: 'United Kingdom', where: 'the United Kingdom' },
+  USD: { area: 'United States', where: 'the United States' }
+};
+
+/** Finds the online shop in the country of the chosen currency with the lowest price for this wine. */
+function actionBestOffer_(req) {
+  if (!req.id) throw new Error('Missing wine id');
+  var t = table_(SHEETS.wines);
+  var idx = findIndex_(t, req.id);
+  if (idx < 0) throw new Error('Wine not found');
+  var w = toObj_(t.headers, t.rows[idx]);
+  var cur = settings_().currency;
+  var reg = OFFER_REGIONS[cur] || OFFER_REGIONS.CHF;
+  var wine = [w.producer, w.name, w.vintage].filter(String).join(' ');
+  var prompt = 'Find the online shop based in ' + reg.where + ' that currently sells this wine at the lowest price per 0.75 l bottle: ' + wine +
+    (w.region ? ' (' + w.region + ')' : '') + '. Search the web for shop offers of exactly this wine and vintage. ' +
+    'Only consider shops that sell to customers in ' + reg.where + ' with prices in ' + cur + '. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
+    'The link must be the product page of this wine at that shop, taken from your search results. Never use a home page, a category page or a search page. ' +
+    'Return ONLY a JSON object, no other text: {"shop": "shop name", "price": number per bottle in ' + cur + ', "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
+    'If you find no offer, return {"shop": null}.';
+  var res = callClaude_({
+    model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
+    max_tokens: 3000,
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+    messages: [{ role: 'user', content: prompt }]
+  });
+  var d = parseJson_(textOf_(res), 'No offer found');
+  var url = String(d.url || '');
+  if (!d.shop || !(Number(d.price) > 0) || !/^https?:\/\/[^\/]+\/.+/.test(url)) throw new Error('No offer found for this wine in ' + reg.area);
+  var offer = {
+    shop: String(d.shop), v: Math.round(Number(d.price) * 100) / 100, cur: cur, url: url, vintage: String(d.vintage || ''), area: reg.area,
+    date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
+  };
+  return withLock_(function () {
+    var t2 = table_(SHEETS.wines);
+    var i2 = findIndex_(t2, req.id);
+    var obj = toObj_(t2.headers, t2.rows[i2]);
+    obj.offer = JSON.stringify(offer);
+    obj.updatedAt = new Date().toISOString();
+    writeRow_(t2, i2, obj);
+    return obj;
+  });
+}
+
 function testClaude() {
   var answer = textOf_(callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 10, messages: [{ role: 'user', content: 'Reply with the single word OK.' }] }));
   Logger.log('Claude API works. Answer: ' + answer);

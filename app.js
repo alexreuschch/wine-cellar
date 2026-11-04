@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.5.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -142,6 +142,12 @@ function parseStreet(w) {
   return null;
 }
 
+function parseOffer(w) {
+  const o = parseJSON(w.offer, null);
+  return o && o.shop && Number(o.v) > 0 && /^https?:\/\//i.test(str(o.url))
+    ? { shop: str(o.shop), v: Number(o.v), cur: str(o.cur) || 'CHF', url: str(o.url), vintage: str(o.vintage), area: str(o.area), date: str(o.date) } : null;
+}
+
 function normWine(w) {
   const stock = parseStock(w);
   return {
@@ -163,6 +169,7 @@ function normWine(w) {
     location: stock.length ? stock[0].loc : str(w.location),
     count: stock.reduce((a, e) => a + e.n, 0),
     street: parseStreet(w),
+    offer: parseOffer(w),
     myRating: numOrNull(w.myRating),
     ratings: parseRatings(w.ratings),
     labelFileId: str(w.labelFileId),
@@ -233,6 +240,7 @@ function serialWine(w) {
   o.ratings = JSON.stringify(w.ratings);
   o.stock = JSON.stringify(w.stock);
   o.street = w.street ? JSON.stringify(w.street) : '';
+  o.offer = w.offer ? JSON.stringify(w.offer) : '';
   ['drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'myRating'].forEach(k => { if (o[k] === null) o[k] = ''; });
   return o;
 }
@@ -881,7 +889,7 @@ function statsHtml() {
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 8 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+  const notice = S.version && S.version < 9 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -904,9 +912,9 @@ function matches(w, q) {
 
 function priceLine(w) {
   const a = avgPrice(w), s = streetOf(w);
-  const up = a !== null && s !== null && s > a;
-  const part = (label, v, cls = '') => `<span class="pp">${label} <b class="${cls}">${v}</b></span>`;
-  return `<span class="price-row">${part('Ø Cost', a !== null ? fmtNum(a) : 'N/A')}${part('Street', s !== null ? fmtNum(s) : 'N/A', up ? 'up' : '')}${w.count > 0 ? part('Total', s !== null ? fmtNum(s * w.count) : 'N/A', up ? 'up' : '') : ''}${w.count > 0 ? pill(w) : ''}</span>`;
+  const cls = a === null || s === null || a === s ? '' : a < s ? 'up' : 'down';
+  const part = (label, v, c = '') => `<span class="pp">${label} <b class="${c}">${v}</b></span>`;
+  return `<span class="price-row">${part('Ø Cost', a !== null ? fmtNum(a) : 'N/A', cls)}${part('Street', s !== null ? fmtNum(s) : 'N/A')}${w.count > 0 ? part('Total', s !== null ? fmtNum(s * w.count) : 'N/A') : ''}${w.count > 0 ? pill(w) : ''}</span>`;
 }
 
 function wineRow(w) {
@@ -1123,6 +1131,39 @@ function valueHtml(w) {
     </div></section>`;
 }
 
+const OFFER_AREA = { CHF: 'Switzerland', EUR: 'Euro area', GBP: 'United Kingdom', USD: 'United States' };
+const offerRun = new Set();
+
+function offerHtml(w) {
+  const o = w.offer, area = OFFER_AREA[cur()];
+  const busyNow = offerRun.has(w.id);
+  const btn = `<button class="chip" data-act="offer-one" data-id="${esc(w.id)}"${busyNow ? ' disabled' : ''}>${ICON.refresh}${busyNow ? 'Searching…' : o ? 'Update' : 'Find'}</button>`;
+  let body;
+  if (!o) {
+    body = `<p class="muted small" style="margin:0">${busyNow ? 'Searching online shops…' : `Find the online shop in ${area} with the lowest price for this wine, to buy more bottles.`}</p>`;
+  } else {
+    const meta = [o.area, o.vintage && o.vintage !== str(w.vintage) ? `vintage ${o.vintage}` : '', o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · ');
+    body = `<div class="between" style="gap:12px"><div style="min-width:0"><p style="margin:0;font-weight:600" class="ellipsis">${esc(o.shop)}</p><p class="muted tiny" style="margin:2px 0 0">${esc(meta)}</p></div>
+      <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>
+      ${o.area && o.area !== area ? `<p class="muted tiny" style="margin:8px 0 0">Found for ${esc(o.area)}. Tap Update to search in ${esc(area)}.</p>` : ''}`;
+  }
+  return `<section><div class="sec-head"><h2>Best offer</h2>${btn}</div><div class="card">${body}</div></section>`;
+}
+
+async function updateOffer(id) {
+  if (offerRun.has(id)) return;
+  offerRun.add(id);
+  refreshView();
+  try {
+    upsertWine(normWine(await api('bestOffer', { id })));
+    persist();
+  } catch (e) {
+    toast(e.message, 5000);
+  }
+  offerRun.delete(id);
+  refreshView();
+}
+
 function retailerLink(name) {
   const url = retailerSite(name);
   return url ? `<a class="ret-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}${ICON.link}</a>` : esc(name);
@@ -1178,6 +1219,7 @@ function viewWine(id) {
         <button class="btn accent" data-act="save-rating">Save rating</button>` : ''}
     </section>
     ${valueHtml(w)}
+    ${offerHtml(w)}
     <section style="gap:0"><h2 style="margin-bottom:4px">Purchases</h2>${purchasesHtml(w, false)}</section>
     <section style="gap:14px">
       <h2>Profile</h2>
@@ -2422,6 +2464,7 @@ const ACTS = {
   },
   'range-clear': el => { const st = U.f[el.dataset.ctx]; if (st.range) delete st.range[el.dataset.k]; refreshView(); },
   'street-one': el => updateStreetPrices([el.dataset.id]),
+  'offer-one': el => updateOffer(el.dataset.id),
   'street-all': () => {
     const ids = S.wines.filter(w => w.count > 0).map(w => w.id);
     if (!ids.length) { toast('No wines in stock.'); return; }
