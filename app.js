@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.2.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -627,7 +627,7 @@ const CTX = {
     facets: {
       wine: F_WINE,
       grape: F_GRAPE,
-      window: { label: 'Drinking window', plural: 'drinking windows', of: w => [statusOf(w)], order: STATUS_ORDER, dot: v => (STATUS[v] || {}).c },
+      window: { label: 'Window', plural: 'drinking windows', of: w => [statusOf(w)], order: STATUS_ORDER, dot: v => (STATUS[v] || {}).c },
       price: F_PRICE
     },
     items: () => topPool(),
@@ -746,7 +746,8 @@ function filterArea(ctx) {
   if (!tabs.includes(st.tab)) st.tab = tabs[0];
   const k = st.tab;
   const nSel = t => facetN(ctx, t);
-  const tabBar = `<div class="ftabs" role="tablist">${tabs.map(t => `<button role="tab" aria-selected="${t === k}" class="ftab${t === k ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t}">${c.facets[t].label}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
+  const cols = tabs.length <= 2 ? tabs.length : tabs.length === 4 ? 2 : 3;
+  const tabBar = `<div class="ftabs" role="tablist" style="grid-template-columns:repeat(${cols}, minmax(0, 1fr))">${tabs.map(t => `<button role="tab" aria-selected="${t === k}" class="ftab${t === k ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t}">${c.facets[t].label}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
   const search = allVals[k] && allVals[k].length > 12
     ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" data-ctx="${ctx}" aria-label="Search ${c.facets[k].plural}" placeholder="Search ${c.facets[k].plural}" value="${esc(st.q[k] || '')}"></label>` : '';
   return `<div class="card filter-panel">${tabBar}${search}<div id="facet-chips-${ctx}">${facetChipsHtml(ctx)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}</div>`;
