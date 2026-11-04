@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -62,6 +62,7 @@ const ICON = {
   cash: svg('<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/>', 14, 1.8),
   cart: svg('<path d="M3 4h2l2.2 10.5a1 1 0 0 0 1 .8h8.6a1 1 0 0 0 1-.8L20 8H6.2"/><circle cx="9" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/>', 14, 1.8),
   move: svg('<path d="M4 9h13l-3-3M20 15H7l3 3"/>', 16, 1.9),
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>', 16, 1.8),
   link: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>', 13, 1.9),
   pin: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>', 14, 1.8)
 };
@@ -101,7 +102,7 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [], retailers: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
+const S = { wines: [], removals: [], locations: [], retailers: [], people: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
@@ -260,6 +261,7 @@ function rankAdd(m, name, date, extra) {
 
 function knownPeople() {
   const m = new Map();
+  S.people.forEach(n => { if (n) m.set(lc(n), { name: n, n: 0, score: 0, last: '' }); });
   S.removals.forEach(r => namesOf(r.people).forEach(n => rankAdd(m, n, r.date)));
   return [...m.values()].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 }
@@ -285,12 +287,13 @@ function loadCache() {
   S.removals = (c.removals || []).map(normRemoval);
   if (Array.isArray(c.locations)) S.locations = c.locations;
   if (Array.isArray(c.retailers)) S.retailers = c.retailers;
+  if (Array.isArray(c.people)) S.people = c.people;
   if (c.settings) S.settings = Object.assign({ currency: 'CHF' }, c.settings);
   if (c.fx) S.fx = c.fx;
   if (c.version) S.version = c.version;
 }
 function persist() {
-  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, retailers: S.retailers, settings: S.settings, fx: S.fx, version: S.version });
+  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, retailers: S.retailers, people: S.people, settings: S.settings, fx: S.fx, version: S.version });
 }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
@@ -444,6 +447,7 @@ async function sync(silent) {
     S.removals = (d.removals || []).map(normRemoval).filter(r => r.id);
     S.locations = Array.isArray(d.locations) ? d.locations : [];
     S.retailers = Array.isArray(d.retailers) ? d.retailers.map(r => ({ name: str(r.name), website: str(r.website) })).filter(r => r.name) : [];
+    S.people = Array.isArray(d.people) ? d.people.map(str).filter(Boolean) : [];
     if (d.settings) S.settings = Object.assign({ currency: 'CHF' }, d.settings);
     if (d.fx) S.fx = d.fx;
     persist();
@@ -877,7 +881,7 @@ function statsHtml() {
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 7 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+  const notice = S.version && S.version < 8 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -2254,9 +2258,10 @@ function locationsHtml() {
   const rows = S.locations.map(l => {
     const n = used[lc(l)] || 0;
     const others = S.locations.filter(x => x !== l);
-    const head = `<div class="between"><span>${esc(l)} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span>${n
-      ? `<span style="display:flex;gap:6px"><button class="btn" style="${small}" data-act="loc-show" data-v="${esc(l)}">Show</button><button class="btn" style="${small}" data-act="loc-move-open" data-v="${esc(l)}">Move</button></span>`
-      : `<button class="icon-btn" data-act="loc-del" data-v="${esc(l)}" aria-label="Delete ${esc(l)}">${ICON.trash}</button>`}</div>`;
+    if (isEditing('loc', l)) return `<div class="loc-row">${editRowHtml(l)}</div>`;
+    const head = `<div class="between"><span class="set-name">${esc(l)} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span><span style="display:flex;gap:6px;flex:none">${n
+      ? `<button class="btn" style="${small}" data-act="loc-show" data-v="${esc(l)}">Show</button><button class="btn" style="${small}" data-act="loc-move-open" data-v="${esc(l)}">Move</button>`
+      : `<button class="icon-btn" data-act="loc-del" data-v="${esc(l)}" aria-label="Delete ${esc(l)}">${ICON.trash}</button>`}${editBtn('loc', l)}</span></div>`;
     const move = U.locMove === l ? (others.length
       ? `<div class="move-box"><span class="tiny muted">Move all bottles from ${esc(l)} to</span><div style="display:flex;gap:8px"><label class="field" style="flex:1"><span class="sr-only">Target location</span><select id="move-to">${others.map(o => `<option>${esc(o)}</option>`).join('')}</select></label><button class="btn accent" data-act="loc-move" data-v="${esc(l)}">Move</button><button class="icon-btn" data-act="loc-move-cancel" aria-label="Cancel">${ICON.x}</button></div></div>`
       : `<div class="move-box"><span class="small muted">Add another location first, then move the bottles there.</span></div>`) : '';
@@ -2277,18 +2282,93 @@ function fxNote() {
   return `Prices are converted automatically. ${r}${fx.date ? ` (${esc(fx.source || 'rates')}, ${esc(fmtDate(fx.date))})` : ''}`;
 }
 
+/* settings lists: every entry can be edited, unused ones deleted */
+const isEditing = (kind, name) => U.edit && U.edit.kind === kind && U.edit.name === name;
+const editBtn = (kind, name) => `<button class="icon-btn" data-act="ed-open" data-k="${kind}" data-v="${esc(name)}" aria-label="Edit ${esc(name)}">${ICON.edit}</button>`;
+function editRowHtml(name, website) {
+  return `<div class="move-box">
+    <label class="field">Name<input id="ed-name" value="${esc(name)}" autocapitalize="words" enterkeyhint="done"></label>
+    ${website !== undefined ? `<label class="field">Website<input id="ed-site" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(website)}"></label>` : ''}
+    <div class="grid2"><button class="btn" data-act="ed-cancel">Cancel</button><button class="btn accent" data-act="ed-save">Save</button></div>
+    <p class="muted tiny" style="margin:0">Renaming also changes all entries in the journal${U.edit && U.edit.kind === 'loc' ? ' and all bottles stored there' : ''}.</p></div>`;
+}
+
 function retailersHtml() {
   const used = {};
   S.removals.forEach(r => { if (r.retailer) used[lc(r.retailer)] = (used[lc(r.retailer)] || 0) + 1; });
   const rows = byName(S.retailers).map(r => {
+    if (isEditing('ret', r.name)) return `<div class="loc-row">${editRowHtml(r.name, r.website)}</div>`;
     const n = used[lc(r.name)] || 0;
-    return `<div class="loc-row"><div class="between"><span>${esc(r.name)} <span class="muted small">${n ? `${n} ${n === 1 ? 'purchase' : 'purchases'}` : 'no purchases'}</span></span>${n ? '' : `<button class="icon-btn" data-act="ret-del" data-v="${esc(r.name)}" aria-label="Delete ${esc(r.name)}">${ICON.trash}</button>`}</div>
-      <label class="field"><span class="sr-only">Website of ${esc(r.name)}</span><input data-change="ret-site" data-v="${esc(r.name)}" inputmode="url" autocapitalize="off" placeholder="Website, for example www.shop.ch" value="${esc(r.website)}"></label></div>`;
+    const url = retailerSite(r.name);
+    return `<div class="loc-row"><div class="between"><span class="set-name">${esc(r.name)} <span class="muted small">${n ? `${n} ${n === 1 ? 'purchase' : 'purchases'}` : 'no purchases'}</span>${url ? `<a class="ret-link small" href="${esc(url)}" target="_blank" rel="noopener">${esc(r.website.replace(/^https?:\/\//i, ''))}${ICON.link}</a>` : '<span class="muted tiny">No website</span>'}</span>
+      <span style="display:flex;gap:6px;flex:none">${n ? '' : `<button class="icon-btn" data-act="ret-del" data-v="${esc(r.name)}" aria-label="Delete ${esc(r.name)}">${ICON.trash}</button>`}${editBtn('ret', r.name)}</span></div></div>`;
   }).join('');
   return `<section class="box"><span class="box-title">Retailers</span>
-    ${rows || '<p class="muted small" style="margin:0">No retailers yet. They are added when you record a purchase.</p>'}
+    ${rows || '<p class="muted small" style="margin:0">No retailers yet.</p>'}
+    <div class="move-box"><label class="field"><span class="sr-only">New retailer</span><input id="new-ret" placeholder="New retailer, for example a shop or winery" autocapitalize="words"></label>
+      <div style="display:flex;gap:8px;align-items:flex-end"><label class="field" style="flex:1"><span class="sr-only">Website</span><input id="new-ret-site" inputmode="url" autocapitalize="off" placeholder="Website (optional)" enterkeyhint="done"></label><button class="btn accent" data-act="ret-add">Add</button></div></div>
     <p class="muted tiny" style="margin:0">A retailer can be deleted once no purchase in the journal uses it.</p>
   </section>`;
+}
+
+function peopleHtml() {
+  const used = {};
+  S.removals.forEach(r => namesOf(r.people).forEach(n => { used[lc(n)] = (used[lc(n)] || 0) + 1; }));
+  const rows = byName(knownPeople()).map(p => {
+    if (isEditing('person', p.name)) return `<div class="loc-row">${editRowHtml(p.name)}</div>`;
+    const n = used[lc(p.name)] || 0;
+    return `<div class="loc-row"><div class="between"><span class="set-name">${esc(p.name)} <span class="muted small">${n ? `${n} ${n === 1 ? 'entry' : 'entries'}` : 'no entries'}</span></span>
+      <span style="display:flex;gap:6px;flex:none">${n ? '' : `<button class="icon-btn" data-act="person-del" data-v="${esc(p.name)}" aria-label="Delete ${esc(p.name)}">${ICON.trash}</button>`}${editBtn('person', p.name)}</span></div></div>`;
+  }).join('');
+  return `<section class="box"><span class="box-title">People</span>
+    ${rows ? `<div class="set-list">${rows}</div>` : '<p class="muted small" style="margin:0">No people yet.</p>'}
+    <div style="display:flex;gap:8px;align-items:flex-end"><label class="field" style="flex:1"><span class="sr-only">New person</span><input id="new-person" placeholder="New person" autocapitalize="words" enterkeyhint="done"></label><button class="btn accent" data-act="person-add">Add</button></div>
+    <p class="muted tiny" style="margin:0">A person can be deleted once no journal entry uses the name.</p>
+  </section>`;
+}
+
+/* renaming, applied locally first and then in the sheet */
+function renameLocal(kind, from, to) {
+  const eq = v => lc(str(v).trim()) === lc(from);
+  if (kind === 'loc') {
+    S.locations = S.locations.map(l => (eq(l) ? to : l));
+    S.wines.forEach(w => { w.stock.forEach(e => { if (eq(e.loc)) e.loc = to; }); if (eq(w.location)) w.location = to; });
+    S.removals.forEach(r => { if (eq(r.loc)) r.loc = to; });
+    if (eq(store.get('wc-lastloc', ''))) store.set('wc-lastloc', to);
+  } else if (kind === 'ret') {
+    S.removals.forEach(r => { if (eq(r.retailer)) r.retailer = to; });
+  } else {
+    const swap = v => { const out = []; namesOf(v).forEach(n => { const x = eq(n) ? to : n; if (!out.some(y => lc(y) === lc(x))) out.push(x); }); return out.join(', '); };
+    S.removals.forEach(r => { r.people = swap(r.people); r.hearts = swap(r.hearts); });
+    S.people = S.people.filter(n => !eq(n)).concat(S.people.some(n => lc(n) === lc(to)) ? [] : [to]);
+  }
+}
+
+async function saveEdit() {
+  const ed = U.edit;
+  if (!ed) return;
+  const to = ($('#ed-name').value || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  const site = $('#ed-site') ? $('#ed-site').value.trim() : undefined;
+  if (!to) { toast('Enter a name.'); return; }
+  if (ed.kind === 'loc' && lc(to) !== lc(ed.name) && S.locations.some(l => lc(l) === lc(to))) { toast('This location already exists. Use Move instead.'); return; }
+  const sameName = to === ed.name;
+  if (sameName && (site === undefined || site === str((S.retailers.find(r => r.name === ed.name) || {}).website))) { U.edit = null; refreshView(); return; }
+  U.edit = null;
+  if (ed.kind === 'ret') {
+    const r = S.retailers.find(x => x.name === ed.name);
+    if (r) { r.name = to; if (site !== undefined) r.website = site; }
+  }
+  if (!sameName) renameLocal(ed.kind, ed.name, to);
+  persist();
+  refreshView();
+  try {
+    if (ed.kind === 'loc') S.locations = await api('renameLocation', { from: ed.name, to });
+    else if (ed.kind === 'ret') S.retailers = (await api('renameRetailer', { from: ed.name, to, website: site })).map(x => ({ name: str(x.name), website: str(x.website) })).filter(x => x.name);
+    else S.people = await api('renamePerson', { from: ed.name, to });
+    persist();
+    refreshView();
+    toast('Saved');
+  } catch (e) { toast('Not saved: ' + e.message); sync(true); }
 }
 
 function viewSettings(first) {
@@ -2307,6 +2387,7 @@ function viewSettings(first) {
       <p class="muted tiny" style="margin:0">Claude looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
     ${first ? '' : locationsHtml()}
     ${first ? '' : retailersHtml()}
+    ${first ? '' : peopleHtml()}
     ${first ? '' : '<h2 style="font-size:15px;font-weight:600;margin-top:8px">Connection</h2>'}
     <p class="muted" style="margin:0">Paste the web app URL and the token from your Google Apps Script. Both stay on this device.</p>
     <label class="field">Script URL<input id="cfg-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url)}"></label>
@@ -2365,6 +2446,35 @@ const ACTS = {
     U.f.cellar.open = false;
     U.search = '';
     go('#/cellar');
+  },
+  'ed-open': el => { U.edit = { kind: el.dataset.k, name: el.dataset.v }; U.locMove = null; refreshView(); const i = $('#ed-name'); if (i) i.focus(); },
+  'ed-cancel': () => { U.edit = null; refreshView(); },
+  'ed-save': () => saveEdit(),
+  'ret-add': async () => {
+    const name = ($('#new-ret').value || '').replace(/\s+/g, ' ').trim(), website = ($('#new-ret-site').value || '').trim();
+    if (!name) { toast('Enter the name of the retailer.'); return; }
+    if (S.retailers.some(r => lc(r.name) === lc(name))) { toast('This retailer already exists.'); return; }
+    saveRetailerSite(name, website);
+  },
+  'person-add': async () => {
+    const name = ($('#new-person').value || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!name) { toast('Enter a name.'); return; }
+    if (knownPeople().some(p => lc(p.name) === lc(name))) { toast('This person already exists.'); return; }
+    S.people.push(name);
+    persist();
+    refreshView();
+    try { S.people = await api('savePerson', { name }); persist(); refreshView(); }
+    catch (e) { S.people = S.people.filter(n => n !== name); persist(); refreshView(); toast('Not saved: ' + e.message); }
+  },
+  'person-del': async el => {
+    const name = el.dataset.v;
+    if (!confirm(`Delete ${name}?`)) return;
+    const prev = S.people.slice();
+    S.people = S.people.filter(n => lc(n) !== lc(name));
+    persist();
+    refreshView();
+    try { S.people = await api('deletePerson', { name }); persist(); refreshView(); }
+    catch (e) { S.people = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
   },
   'ret-del': async el => {
     const name = el.dataset.v;
@@ -2704,6 +2814,9 @@ function init() {
   document.addEventListener('keydown', e => {
     if (e.target && e.target.id === 'people-input' && e.key === 'Enter') { e.preventDefault(); addPerson(e.target.value); }
     if (e.target && e.target.id === 'new-loc' && e.key === 'Enter') { e.preventDefault(); ACTS['loc-add'](); }
+    if (e.target && e.target.id === 'new-person' && e.key === 'Enter') { e.preventDefault(); ACTS['person-add'](); }
+    if (e.target && e.target.id === 'new-ret-site' && e.key === 'Enter') { e.preventDefault(); ACTS['ret-add'](); }
+    if (e.target && (e.target.id === 'ed-name' || e.target.id === 'ed-site') && e.key === 'Enter') { e.preventDefault(); saveEdit(); }
   });
   window.addEventListener('hashchange', () => { if (RS) closeSheet(); render(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && CFG && !isFormRoute()) sync(true); });

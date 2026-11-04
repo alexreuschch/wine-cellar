@@ -11,8 +11,8 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 7;
-var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', fx: 'FX' };
+var API_VERSION = 8;
+var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', fx: 'FX' };
 
 var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
@@ -26,10 +26,11 @@ var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food'
   'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer'];
 var LOCATION_COLS = ['name'];
 var RETAILER_COLS = ['name', 'website'];
+var PEOPLE_COLS = ['name'];
 var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '5';
+var SCHEMA_VERSION = '6';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -54,6 +55,11 @@ var ACTIONS = {
   moveLocation: actionMoveLocation_,
   saveRetailer: actionSaveRetailer_,
   deleteRetailer: actionDeleteRetailer_,
+  renameRetailer: actionRenameRetailer_,
+  renameLocation: actionRenameLocation_,
+  savePerson: actionSavePerson_,
+  deletePerson: actionDeletePerson_,
+  renamePerson: actionRenamePerson_,
   setSettings: actionSetSettings_
 };
 
@@ -110,7 +116,9 @@ function ensureSchema_() {
     textColumn_(ensureSheet_(ss, SHEETS.removals, REMOVAL_COLS), 'date');
     ensureSheet_(ss, SHEETS.locations, LOCATION_COLS);
     ensureSheet_(ss, SHEETS.retailers, RETAILER_COLS);
-    migrate5_();
+    ensureSheet_(ss, SHEETS.people, PEOPLE_COLS);
+    var prev = Number(p.getProperty('SCHEMA_VERSION') || 0);
+    if (prev < 5) migrate5_();
     p.setProperty('SCHEMA_VERSION', SCHEMA_VERSION);
   });
 }
@@ -347,6 +355,7 @@ function actionLoad_() {
     removals: readAll_(SHEETS.removals),
     locations: readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String),
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
+    people: peopleList_(),
     settings: settings_(),
     fx: fxRates_()
   };
@@ -515,6 +524,122 @@ function actionImage_(req) {
   if (!req.fileId) throw new Error('Missing file id');
   var blob = DriveApp.getFileById(req.fileId).getBlob();
   return { mime: blob.getContentType() || 'image/jpeg', data: Utilities.base64Encode(blob.getBytes()) };
+}
+
+// ---------------------------------------------------------------- renaming and people
+
+var lower_ = function (v) { return String(v || '').toLowerCase().trim(); };
+var names_ = function (v) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(String); };
+
+/** Applies fn to every row object of a tab and writes back the rows fn reports as changed. */
+function updateRows_(name, fn) {
+  var t = table_(name);
+  var n = 0;
+  t.rows.forEach(function (row, i) {
+    var o = toObj_(t.headers, row);
+    if (fn(o)) { writeRow_(t, i, o); n++; }
+  });
+  return n;
+}
+
+function deleteRowsWhere_(name, col, value) {
+  var sh = sheet_(name);
+  var vals = sh.getDataRange().getValues();
+  var c = vals[0].map(String).indexOf(col);
+  for (var i = vals.length - 1; i >= 1; i--) {
+    if (lower_(vals[i][c]) === lower_(value)) sh.deleteRow(i + 1);
+  }
+}
+
+function actionRenameLocation_(req) {
+  var from = String(req.from || '').trim(), to = String(req.to || '').trim();
+  if (!from || !to) throw new Error('Missing location name');
+  return withLock_(function () {
+    var list = readAll_(SHEETS.locations).map(function (r) { return String(r.name); });
+    if (lower_(from) !== lower_(to) && list.some(function (l) { return lower_(l) === lower_(to); })) throw new Error('This location already exists');
+    updateRows_(SHEETS.locations, function (o) { if (lower_(o.name) !== lower_(from)) return false; o.name = to; return true; });
+    updateRows_(SHEETS.wines, function (o) {
+      var st = parseStock_(o.stock), changed = false;
+      st.forEach(function (e) { if (lower_(e.loc) === lower_(from)) { e.loc = to; changed = true; } });
+      if (lower_(o.location) === lower_(from)) { o.location = to; changed = true; }
+      if (changed) setStock_(o, st);
+      return changed;
+    });
+    updateRows_(SHEETS.removals, function (o) { if (lower_(o.loc) !== lower_(from)) return false; o.loc = to; return true; });
+    return readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String);
+  });
+}
+
+function actionRenameRetailer_(req) {
+  var from = String(req.from || '').trim(), to = String(req.to || '').trim();
+  if (!from || !to) throw new Error('Missing retailer name');
+  return withLock_(function () {
+    var list = readAll_(SHEETS.retailers);
+    var old = list.filter(function (r) { return lower_(r.name) === lower_(from); })[0] || { website: '' };
+    var target = list.filter(function (r) { return lower_(r.name) === lower_(to) && lower_(r.name) !== lower_(from); })[0];
+    var website = req.website !== undefined ? String(req.website || '').trim() : String(old.website || '');
+    if (target) {
+      deleteRowsWhere_(SHEETS.retailers, 'name', from);
+      updateRows_(SHEETS.retailers, function (o) { if (lower_(o.name) !== lower_(to)) return false; if (website) o.website = website; return true; });
+    } else {
+      updateRows_(SHEETS.retailers, function (o) { if (lower_(o.name) !== lower_(from)) return false; o.name = to; o.website = website; return true; });
+    }
+    updateRows_(SHEETS.removals, function (o) { if (lower_(o.retailer) !== lower_(from)) return false; o.retailer = to; return true; });
+    return readAll_(SHEETS.retailers).filter(function (r) { return r.name; });
+  });
+}
+
+/** People are kept in their own tab and also collected from the journal. */
+function peopleList_() {
+  var seen = {}, out = [];
+  var add = function (n) { var k = lower_(n); if (k && !seen[k]) { seen[k] = true; out.push(String(n).trim()); } };
+  readAll_(SHEETS.people).forEach(function (r) { add(r.name); });
+  return out;
+}
+
+function actionSavePerson_(req) {
+  var name = String(req.name || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!name) throw new Error('Missing name');
+  return withLock_(function () {
+    if (!peopleList_().some(function (n) { return lower_(n) === lower_(name); })) sheet_(SHEETS.people).appendRow([name]);
+    return peopleList_();
+  });
+}
+
+function actionDeletePerson_(req) {
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('Missing name');
+  return withLock_(function () {
+    var used = readAll_(SHEETS.removals).some(function (r) { return names_(r.people).some(function (n) { return lower_(n) === lower_(name); }); });
+    if (used) throw new Error('This person is used in the journal');
+    deleteRowsWhere_(SHEETS.people, 'name', name);
+    return peopleList_();
+  });
+}
+
+function actionRenamePerson_(req) {
+  var from = String(req.from || '').trim(), to = String(req.to || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!from || !to) throw new Error('Missing name');
+  return withLock_(function () {
+    var swap = function (v) {
+      var out = [], changed = false;
+      names_(v).forEach(function (n) {
+        var x = lower_(n) === lower_(from) ? to : n;
+        if (x !== n) changed = true;
+        if (!out.some(function (y) { return lower_(y) === lower_(x); })) out.push(x); else changed = true;
+      });
+      return { v: out.join(', '), changed: changed };
+    };
+    updateRows_(SHEETS.removals, function (o) {
+      var a = swap(o.people), b = swap(o.hearts);
+      if (!a.changed && !b.changed) return false;
+      o.people = a.v; o.hearts = b.v;
+      return true;
+    });
+    deleteRowsWhere_(SHEETS.people, 'name', from);
+    if (!peopleList_().some(function (n) { return lower_(n) === lower_(to); })) sheet_(SHEETS.people).appendRow([to]);
+    return peopleList_();
+  });
 }
 
 // ---------------------------------------------------------------- locations and retailers

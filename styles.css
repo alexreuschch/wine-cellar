@@ -347,3 +347,8 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .dual input[data-end=hi]::-webkit-slider-thumb { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2222%22%20height%3D%2228%22%20viewBox%3D%220%200%2022%2028%22%3E%3Cpolygon%20points%3D%2219%2C2%202%2C14%2019%2C26%22%20fill%3D%22%23C9A15B%22%20stroke%3D%22%23161214%22%20stroke-width%3D%221.5%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E"); }
 .dual input[type=range]::-moz-range-thumb, .single input[type=range]::-moz-range-thumb { width: 22px; height: 28px; border: 0; border-radius: 0; box-shadow: none; background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2222%22%20height%3D%2228%22%20viewBox%3D%220%200%2022%2028%22%3E%3Cpolygon%20points%3D%223%2C2%2020%2C14%203%2C26%22%20fill%3D%22%23C9A15B%22%20stroke%3D%22%23161214%22%20stroke-width%3D%221.5%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E") no-repeat center / contain; }
 .dual input[data-end=hi]::-moz-range-thumb { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2222%22%20height%3D%2228%22%20viewBox%3D%220%200%2022%2028%22%3E%3Cpolygon%20points%3D%2219%2C2%202%2C14%2019%2C26%22%20fill%3D%22%23C9A15B%22%20stroke%3D%22%23161214%22%20stroke-width%3D%221.5%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E"); }
+
+/* 2.4.0: settings lists with edit */
+.set-name { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 2px; }
+.set-name .ret-link, .set-name > .tiny { flex-basis: 100%; }
+.set-list { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; }
