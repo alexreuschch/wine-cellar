@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.5.1';
+const APP_VERSION = '2.5.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -1114,19 +1114,19 @@ function stockHtml(w) {
 
 function valueHtml(w) {
   const a = avgPrice(w), s = streetOf(w);
-  const up = a !== null && s !== null && s > a;
+  const cls = a === null || s === null || a === s ? '' : a < s ? 'up' : 'down';
   let diff = '';
   if (a !== null && a > 0 && s !== null) {
     const pct = Math.round((s - a) / a * 100);
-    diff = `<span class="tiny ${pct > 0 ? 'up' : 'muted'}">${pct > 0 ? '+' : ''}${pct}% vs. purchase</span>`;
+    diff = `<span class="tiny muted">${pct > 0 ? '+' : ''}${pct}% vs. purchase</span>`;
   }
   const src = w.street ? [w.street.src, w.street.date ? fmtDate(w.street.date) : '', w.street.conf === 'low' ? 'rough estimate' : ''].filter(Boolean).join(' · ') : '';
   const busyNow = streetRun && streetRun.ids.includes(w.id);
   return `<section><div class="sec-head"><h2>Value</h2><button class="chip" data-act="street-one" data-id="${esc(w.id)}"${busyNow ? ' disabled' : ''}>${ICON.refresh}${busyNow ? 'Updating…' : 'Update street price'}</button></div>
     <div class="card form-grid" style="gap:14px">
-      <div class="kv"><span>Ø Cost</span><p style="font-weight:600">${a !== null ? money(a) : 'N/A'}</p></div>
-      <div class="kv"><span>Street</span><p style="font-weight:600" class="${up ? 'up' : ''}">${s !== null ? money(s) : 'N/A'}</p>${diff}</div>
-      ${s !== null && w.count > 0 ? `<div class="kv full"><span>Total of ${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span><p style="font-weight:600" class="${up ? 'up' : ''}">${money(s * w.count)}</p></div>` : ''}
+      <div class="kv"><span>Ø Cost</span><p style="font-weight:600" class="${cls}">${a !== null ? money(a) : 'N/A'}</p></div>
+      <div class="kv"><span>Street</span><p style="font-weight:600">${s !== null ? money(s) : 'N/A'}</p>${diff}</div>
+      ${s !== null && w.count > 0 ? `<div class="kv full"><span>Total of ${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span><p style="font-weight:600">${money(s * w.count)}</p></div>` : ''}
       ${src ? `<p class="muted tiny full" style="margin:0">${esc(src)}</p>` : ''}
     </div></section>`;
 }
@@ -1366,7 +1366,7 @@ function renderSheet() {
     if (RS.loc && !opts.some(l => lc(l) === lc(RS.loc))) opts.unshift(RS.loc);
     locs = `<div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">Stored in</span><div class="chips">${opts.map(l => `<button class="chip${lc(l) === lc(RS.loc) ? ' on' : ''}" data-act="rs-loc" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}</div>${!opts.length ? '<p class="muted small" style="margin:0">Add a location in Settings first.</p>' : ''}</div>`;
   }
-  const qty = `<div class="between"><span>${RS.mode === 'edit' || (RS.mode === 'record' && RS.id) ? 'Bottles' : out ? 'Bottles taken' : 'Bottles'}</span><div class="stepper"><button data-act="rs-qty" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span id="rs-qty">${RS.qty}</span><button data-act="rs-qty" data-d="1" aria-label="More">${ICON.plus}</button></div></div>`;
+  const qty = `<div class="between"><span>${RS.mode === 'edit' || (RS.mode === 'record' && RS.id) ? 'Bottles' : out ? 'Bottles taken' : 'Bottles'}</span><div class="stepper"><button data-act="rs-qty" data-d="-1" aria-label="Fewer">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="rs-qty" data-input="qty-in" data-change="qty-in" data-k="rs" aria-label="Number of bottles" value="${RS.qty}"><button data-act="rs-qty" data-d="1" aria-label="More">${ICON.plus}</button></div></div>`;
   const picker = (label) => `<div class="field"><span>${label}</span>
       <div id="people-chips" class="chips">${peopleChipsHtml()}</div>
       <input id="people-input" data-input="people" aria-label="${label}" placeholder="${PK() && PK().source === 'retailers' ? 'Type the name of a shop or winery' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
@@ -1795,7 +1795,7 @@ function stockEditorHtml() {
       ? `<label class="field" style="flex:1;min-width:0">Location<select data-change="stock-loc" data-i="${i}">${e.loc ? '' : '<option value="" selected disabled>Choose a location</option>'}${S.locations.concat(e.loc && !S.locations.includes(e.loc) ? [e.loc] : []).map(l => `<option${l === e.loc ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>`
       : `<span class="stock-loc" style="flex:1;min-width:0">${ICON.pin}${esc(e.loc || 'No location')}</span>`;
     return `<div class="stock-edit${e.n === 0 ? ' zero' : ''}">
-      <div style="display:flex;gap:10px;align-items:${add ? 'flex-end' : 'center'}">${locSel}<div class="stepper"><button data-act="st-n" data-i="${i}" data-d="-1" aria-label="Fewer bottles">${ICON.minus}</button><span id="st-n-${i}">${e.n}</span><button data-act="st-n" data-i="${i}" data-d="1" aria-label="More bottles">${ICON.plus}</button></div></div>
+      <div style="display:flex;gap:10px;align-items:${add ? 'flex-end' : 'center'}">${locSel}<div class="stepper"><button data-act="st-n" data-i="${i}" data-d="-1" aria-label="Fewer bottles">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="st-n-${i}" data-input="qty-in" data-change="qty-in" data-k="st" data-i="${i}" aria-label="Number of bottles" value="${e.n}"><button data-act="st-n" data-i="${i}" data-d="1" aria-label="More bottles">${ICON.plus}</button></div></div>
       <div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="st-shelf" data-i="${i}" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="st-shelf-${i}" style="min-width:48px">${e.shelf === null || e.shelf === '' ? 'None' : esc(e.shelf)}</span><button data-act="st-shelf" data-i="${i}" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input data-input="st-pos" data-i="${i}" placeholder="Back row, left" value="${esc(e.pos)}"></label>
@@ -1816,7 +1816,7 @@ function stockEditorHtml() {
     move = `<div class="move-box"><span class="tiny muted">Move bottles between storage places</span>
       <label class="field">From<select data-change="mv-from">${fromIdx.map(i => opt(i, i === D.move.from)).join('')}</select></label>
       <label class="field">To<select data-change="mv-to">${toIdx.map(i => opt(i, i === D.move.to)).join('')}</select></label>
-      <div class="between"><span class="small">Bottles</span><div class="stepper"><button data-act="mv-n" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span id="mv-n">${D.move.n}</span><button data-act="mv-n" data-d="1" aria-label="More">${ICON.plus}</button></div></div>
+      <div class="between"><span class="small">Bottles</span><div class="stepper"><button data-act="mv-n" data-d="-1" aria-label="Fewer">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="mv-n" data-input="qty-in" data-change="qty-in" data-k="mv" aria-label="Number of bottles" value="${D.move.n}"><button data-act="mv-n" data-d="1" aria-label="More">${ICON.plus}</button></div></div>
       <div class="grid2"><button class="btn" data-act="st-move-close">Cancel</button><button class="btn accent" data-act="st-move"${src && src.n ? '' : ' disabled'}>Move</button></div></div>`;
   }
   return `<div class="box"><div class="between"><span class="box-title">Storage</span><span class="small muted" id="st-total">${D.stock.reduce((a, e) => a + e.n, 0)} bottles</span></div>${rows || '<p class="muted small" style="margin:0">No bottles in stock.</p>'}${addBox}${move}
@@ -2620,7 +2620,7 @@ const ACTS = {
     const h = $('#rs-hint');
     if (h) h.textContent = placeHint();
   },
-  'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').textContent = RS.qty; },
+  'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').value = RS.qty; },
   'rs-skip': () => saveSheet(false),
   'rs-save': () => saveSheet(true),
   'rs-delete': () => startDelete(),
@@ -2656,7 +2656,7 @@ const ACTS = {
   'st-n': el => {
     const e = D.stock[Number(el.dataset.i)];
     e.n = clamp(e.n + Number(el.dataset.d), 0, 999);
-    $('#st-n-' + el.dataset.i).textContent = e.n;
+    $('#st-n-' + el.dataset.i).value = e.n;
     const t = $('#st-total');
     if (t) t.textContent = D.stock.reduce((a, x) => a + x.n, 0) + ' bottles';
   },
@@ -2688,7 +2688,7 @@ const ACTS = {
   'mv-n': el => {
     const src = D.stock[D.move.from];
     D.move.n = clamp(D.move.n + Number(el.dataset.d), 1, Math.max(1, src ? src.n : 1));
-    $('#mv-n').textContent = D.move.n;
+    $('#mv-n').value = D.move.n;
   },
   'st-move': () => {
     const m = D.move;
@@ -2769,6 +2769,7 @@ const INPUTS = {
   },
   rng: el => onRange(el),
   rtmin: el => onRatingMin(el),
+  'qty-in': el => setQty(el, false),
   'acq-site': el => { if (D && D.acq) D.acq.website = el.value; },
   'del-pos': el => { if (!RS || !RS.del) return; RS.del.pos = el.value; const h = $('#del-hint'); if (h) h.textContent = delHint(); },
   'st-pos': el => { if (D) D.stock[Number(el.dataset.i)].pos = el.value; },
@@ -2805,6 +2806,7 @@ const CHANGES = {
   'show-finished': el => { U.showFinished = el.checked; refreshView(); },
   'top-finished': el => { U.topFinished = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },
+  'qty-in': el => setQty(el, true),
   'stock-loc': async el => {
     if (!D) return;
     const e = D.stock[Number(el.dataset.i)];
@@ -2855,6 +2857,27 @@ function openExternal(url) {
   const w = window.open(url, '_blank');
   if (w) { try { w.opener = null; } catch (e) { /* ignore */ } }
   else toast('The link could not be opened. Allow pop-ups for this app.');
+}
+
+/** Typed bottle counts. While typing only the state changes, on leaving the field the value is corrected. */
+function setQty(el, final) {
+  const raw = el.value.replace(/[^0-9]/g, '');
+  const k = el.dataset.k;
+  let v = raw === '' ? null : Number(raw);
+  if (k === 'rs' && RS) {
+    v = clamp(v === null ? 1 : v, 1, qtyMax());
+    RS.qty = v;
+  } else if (k === 'st' && D) {
+    v = clamp(v === null ? 0 : v, 0, 9999);
+    D.stock[Number(el.dataset.i)].n = v;
+    const t = $('#st-total');
+    if (t) t.textContent = D.stock.reduce((a, x) => a + x.n, 0) + ' bottles';
+  } else if (k === 'mv' && D && D.move) {
+    const src = D.stock[D.move.from];
+    v = clamp(v === null ? 1 : v, 1, Math.max(1, src ? src.n : 1));
+    D.move.n = v;
+  } else return;
+  if (final || String(v) !== raw && raw !== '') el.value = v;
 }
 
 function init() {

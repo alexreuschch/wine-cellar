@@ -360,3 +360,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .offer-btn svg { flex: none; }
 .wine-row .price-row { column-gap: 6px; }
 .wine-row .price-row .pill { padding: 1px 7px; }
+
+/* 2.5.2: bottle counts can be typed */
+.stepper .step-num { width: 52px; height: 44px; padding: 0 2px; margin: 0; text-align: center; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--text); font: inherit; font-weight: 600; font-size: 16px; -moz-appearance: textfield; }
+.stepper .step-num:focus { outline: none; background: var(--surface); }
