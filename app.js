@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.1.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -191,6 +191,13 @@ function priceText(v, from, d = 2) {
 }
 const curLabel = () => ` (${cur()})`;
 const parseMoney = v => { const s = str(v).trim().replace(/[^\d.,-]/g, '').replace(',', '.'); return s === '' || isNaN(Number(s)) ? null : Number(s); };
+
+/* a storage place is location + shelf + position */
+const shelfVal = v => (v === '' || v === null || v === undefined || isNaN(Number(v)) ? null : Number(v));
+const placeKey = e => [lc(str(e.loc).trim()), shelfVal(e.shelf) === null ? '' : String(shelfVal(e.shelf)), lc(str(e.pos).trim())].join('|');
+const samePlace = (a, b) => placeKey(a) === placeKey(b);
+const placeLabel = e => [e.loc || 'No location', shelfVal(e.shelf) !== null ? `Shelf ${shelfVal(e.shelf)}` : '', str(e.pos).trim()].filter(Boolean).join(' · ');
+const placeOf = e => ({ loc: str(e.loc), shelf: shelfVal(e.shelf), pos: str(e.pos).trim() });
 
 const inEntries = w => S.removals.filter(r => r.wineId === w.id && r.dir === 'in');
 const isGift = w => inEntries(w).some(r => r.type === 'Received');
@@ -582,7 +589,7 @@ const offChip = (act, label) => `<button class="chip on" data-act="${act}" aria-
 
 const F_WINE = { label: 'Wine', plural: 'wine types', of: w => [w.type], order: TYPES };
 const F_GRAPE = { label: 'Grape', plural: 'grapes', of: grapeNames };
-const F_PRICE = { label: 'Price', chip: 'Street price', plural: 'prices', kind: 'range', of: () => [], val: w => streetOf(w) };
+const F_PRICE = { label: 'Street', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
 const CTX = {
   cellar: {
     noun: 'wines',
@@ -802,15 +809,14 @@ function statsHtml() {
   const inStock = S.wines.filter(w => w.count > 0);
   const bottles = inStock.reduce((a, w) => a + w.count, 0);
   const t = totals();
-  const up = t.costN && t.streetN && t.street > t.cost;
   const cell = (label, value, unit = '', cls = '') => `<div><span class="st-label">${label}</span><b class="${cls}">${value}</b><span class="st-unit">${unit || '&nbsp;'}</span></div>`;
-  return `<div class="stats">${cell('Wines', inStock.length)}${cell('Bottles', bottles)}${cell('Total Costs', t.costN ? fmtNum(t.cost, 0) : 'N/A', cur())}${cell('Total Street Value', t.streetN ? fmtNum(t.street, 0) : 'N/A', cur(), up ? 'up' : '')}</div>`;
+  return `<div class="stats">${cell('Wines', inStock.length)}${cell('Bottles', bottles)}${cell('Total Costs', t.costN ? fmtNum(t.cost, 0) : 'N/A', cur())}${cell('Total Street', t.streetN ? fmtNum(t.street, 0) : 'N/A', cur())}</div>`;
 }
 
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 5 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+  const notice = S.version && S.version < 6 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -834,9 +840,8 @@ function matches(w, q) {
 function priceLine(w) {
   const a = avgPrice(w), s = streetOf(w);
   const up = a !== null && s !== null && s > a;
-  const part = (label, v, cls = '') => `<span>${label}&nbsp;<b class="${cls}">${v}</b></span>`;
-  const total = s !== null && w.count > 0 ? part('Total value', fmtNum(s * w.count), up ? 'up' : '') : '';
-  return `<span class="price-row"><span class="price-left">${part('Ø Purchase price', a !== null ? fmtNum(a) : 'N/A')}${part('Streetprice', s !== null ? fmtNum(s) : 'N/A', up ? 'up' : '')}</span>${total}</span>`;
+  const total = w.count > 0 ? `<span class="p-total">Total <b class="${up ? 'up' : ''}">${s !== null ? fmtNum(s * w.count) : 'N/A'}</b></span>` : '';
+  return `<span class="price-row"><span class="p-left">Ø Cost <b>${a !== null ? fmtNum(a) : 'N/A'}</b> · Street <b class="${up ? 'up' : ''}">${s !== null ? fmtNum(s) : 'N/A'}</b></span>${total}</span>`;
 }
 
 function wineRow(w) {
@@ -1027,11 +1032,11 @@ function viewJournal() {
 const whereText = e => [e.shelf !== null && e.shelf !== '' ? `Shelf ${e.shelf}` : '', e.pos].filter(Boolean).join(' · ');
 
 function stockHtml(w) {
-  const rows = w.stock.map(e => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="muted tiny">${esc(whereText(e))}</span>` : ''}</div>
-    <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" data-loc="${esc(e.loc)}" aria-label="Take a bottle from ${esc(e.loc)}">${ICON.minus}</button><span>${e.n}</span><button data-act="plus" data-id="${esc(w.id)}" data-loc="${esc(e.loc)}" aria-label="Add bottles to ${esc(e.loc)}">${ICON.plus}</button></div></div>`).join('');
+  const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}</div>
+    <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Take a bottle from ${esc(placeLabel(e))}">${ICON.minus}</button><span>${e.n}</span><button data-act="plus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Add bottles to ${esc(placeLabel(e))}">${ICON.plus}</button></div></div>`).join('');
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
-    ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Locations and moving bottles are managed in Edit.</p>' : ''}</section>`;
+    ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}</section>`;
 }
 
 function valueHtml(w) {
@@ -1167,36 +1172,42 @@ const newPicker = (source, names, opts = {}) => ({
 const priceInput = (v, c) => { const x = conv(v, c); return x === null ? '' : x.toFixed(2); };
 
 /** Bottles out of the cellar. With several locations the location has to be chosen first. */
-function openRemoveSheet(id, loc) {
+function openRemoveSheet(id, i) {
   const w = wineById(id);
   if (!w || w.count < 1) return;
-  const at = loc || (w.stock.length === 1 ? w.stock[0].loc : '');
-  RS = {
-    kind: 'out', mode: 'add', wineId: id, loc: at, qty: 1, type: 'Dinner', occasion: '', food: '', note: '', date: todayISO(),
+  const at = i !== undefined && w.stock[i] ? w.stock[i] : (w.stock.length === 1 ? w.stock[0] : null);
+  RS = Object.assign({
+    kind: 'out', mode: 'add', wineId: id, qty: 1, type: 'Dinner', occasion: '', food: '', note: '', date: todayISO(),
     price: '', pp: newPicker('people', '', { withHearts: true }), rp: null
-  };
+  }, at ? placeOf(at) : { loc: '', shelf: null, pos: '' });
   renderSheet();
 }
 
 /** Bottles into the cellar. mode 'record' only writes the journal (used in Edit, where the stock is edited directly). */
-function openAddSheet(id, loc, mode = 'add') {
+function openAddSheet(id, i, mode = 'add') {
   const w = wineById(id);
   if (!w) return;
-  const at = loc || (w.stock.length ? w.stock.slice().sort((a, b) => b.n - a.n)[0].loc : defaultLocation());
   RS = {
-    kind: 'in', mode, wineId: id, loc: at, qty: 1, type: 'Purchase', occasion: '', food: '', note: '', date: todayISO(),
+    kind: 'in', mode, wineId: id, loc: '', shelf: null, pos: '', qty: 1, type: 'Purchase', occasion: '', food: '', note: '', date: todayISO(),
     price: '', pp: newPicker('people', ''), rp: newPicker('retailers', '', { single: true }), website: '', websiteInit: ''
   };
-  placeFromStock();
+  if (i !== undefined && i !== null && w.stock[i]) Object.assign(RS, placeOf(w.stock[i]));
+  else { RS.loc = w.stock.length ? w.stock.slice().sort((a, b) => b.n - a.n)[0].loc : defaultLocation(); placeFromStock(); }
   renderSheet();
 }
 
 /** Shelf and position of the chosen location, taken from the bottles already stored there. */
 function placeFromStock() {
   const w = wineById(RS.wineId);
-  const e = w && w.stock.find(x => lc(x.loc) === lc(RS.loc));
-  RS.shelf = e && e.shelf !== null && e.shelf !== '' ? Number(e.shelf) : null;
+  const e = w && w.stock.filter(x => lc(x.loc) === lc(RS.loc)).sort((a, b) => b.n - a.n)[0];
+  RS.shelf = e ? shelfVal(e.shelf) : null;
   RS.pos = e ? str(e.pos) : '';
+}
+
+function placeHint() {
+  const w = wineById(RS.wineId);
+  const e = w && w.stock.find(x => samePlace(x, RS));
+  return e ? `Adds to the ${e.n} ${e.n === 1 ? 'bottle' : 'bottles'} already stored there.` : (w && w.stock.length ? 'New storage place for this wine.' : '');
 }
 
 function openEditEntry(id, record) {
@@ -1219,7 +1230,7 @@ function openEditEntry(id, record) {
 const qtyMax = () => {
   if (!RS || RS.kind !== 'out' || RS.mode !== 'add') return 999;
   const w = wineById(RS.wineId);
-  const e = w && w.stock.find(x => lc(x.loc) === lc(RS.loc));
+  const e = w && w.stock.find(x => samePlace(x, RS));
   return e ? e.n : (w ? w.count : 1);
 };
 
@@ -1237,14 +1248,16 @@ function renderSheet() {
   const types = out ? REMOVAL_TYPES.map(t => [t, t]) : ADD_TYPES;
   const typeGrid = `<div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">${out ? 'Type' : 'Reason'}</span><div class="grid3">${types.map(([v, l]) => `<button class="btn${v === RS.type ? ' primary' : ''}" style="height:44px;font-size:14px;padding:0 6px" data-act="rs-type" data-v="${v}">${l}</button>`).join('')}</div></div>`;
   let locs = '';
-  if (RS.mode === 'add') {
-    const opts = out ? w.stock.map(e => [e.loc, `${e.loc} ${e.n}`]) : S.locations.map(l => [l, l]);
-    if (!out && RS.loc && !S.locations.some(l => lc(l) === lc(RS.loc))) opts.unshift([RS.loc, RS.loc]);
-    if (opts.length > 1 || !RS.loc) {
-      locs = `<div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">${out ? 'Taken from' : 'Stored in'}</span><div class="chips">${opts.map(([v, l]) => `<button class="chip${lc(v) === lc(RS.loc) ? ' on' : ''}" data-act="rs-loc" data-v="${esc(v)}">${ICON.pin}${esc(l)}</button>`).join('')}</div>${!opts.length ? '<p class="muted small" style="margin:0">Add a location in Settings first.</p>' : ''}</div>`;
+  if (RS.mode === 'add' && out) {
+    if (w.stock.length > 1 || !RS.loc) {
+      locs = `<div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">Taken from</span><div class="chips">${w.stock.map((e, i) => `<button class="chip${samePlace(e, RS) ? ' on' : ''}" data-act="rs-place" data-i="${i}">${ICON.pin}${esc(placeLabel(e))} <span class="n">${e.n}</span></button>`).join('')}</div></div>`;
     } else {
-      locs = `<p class="small muted" style="margin:0">${out ? 'From' : 'Stored in'} <b style="color:var(--text)">${esc(RS.loc)}</b></p>`;
+      locs = `<p class="small muted" style="margin:0">From <b style="color:var(--text)">${esc(placeLabel(RS))}</b></p>`;
     }
+  } else if (RS.mode === 'add') {
+    const opts = S.locations.slice();
+    if (RS.loc && !opts.some(l => lc(l) === lc(RS.loc))) opts.unshift(RS.loc);
+    locs = `<div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">Stored in</span><div class="chips">${opts.map(l => `<button class="chip${lc(l) === lc(RS.loc) ? ' on' : ''}" data-act="rs-loc" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}</div>${!opts.length ? '<p class="muted small" style="margin:0">Add a location in Settings first.</p>' : ''}</div>`;
   }
   const qty = `<div class="between"><span>${RS.mode === 'edit' || (RS.mode === 'record' && RS.id) ? 'Bottles' : out ? 'Bottles taken' : 'Bottles'}</span><div class="stepper"><button data-act="rs-qty" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span id="rs-qty">${RS.qty}</span><button data-act="rs-qty" data-d="1" aria-label="More">${ICON.plus}</button></div></div>`;
   const picker = (label) => `<div class="field"><span>${label}</span>
@@ -1268,7 +1281,7 @@ function renderSheet() {
     const place = RS.mode === 'add' ? `<div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" style="min-width:48px">${RS.shelf === null ? 'None' : RS.shelf}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input name="pos" data-input="rs" placeholder="Back row, left" value="${esc(RS.pos)}"></label>
-      </div>` : '';
+      </div><p class="muted tiny" style="margin:-6px 0 0" id="rs-hint">${placeHint()}</p>` : '';
     body = `${typeGrid}${locs}${place}${qty}${date}
       ${RS.type === 'Purchase' ? picker('Retailer') : RS.type === 'Received' ? picker('From') : ''}
       ${showSite ? `<label class="field">Website of ${esc(RS.rp.people[0].name)}<input name="website" data-input="rs" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(RS.website)}"></label>` : ''}
@@ -1384,9 +1397,10 @@ function entryFields(st) {
   };
 }
 
-function localStock(w, loc, delta) {
-  const e = w.stock.find(x => lc(x.loc) === lc(loc));
-  if (e) e.n += delta; else if (delta > 0) w.stock.push({ loc, shelf: null, pos: '', n: delta });
+function localStock(w, place, delta) {
+  const p = typeof place === 'string' ? w.stock.find(x => lc(x.loc) === lc(place)) || { loc: place, shelf: null, pos: '' } : place;
+  const e = w.stock.find(x => samePlace(x, p));
+  if (e) e.n += delta; else if (delta > 0) w.stock.push(Object.assign(placeOf(p), { n: delta }));
   w.stock = w.stock.filter(x => x.n > 0);
   w.count = w.stock.reduce((a, x) => a + x.n, 0);
   if (w.stock.length) w.location = w.stock[0].loc;
@@ -1403,25 +1417,18 @@ async function saveSheet(withDetails) {
   if (siteChanged) saveRetailerSite(fields.retailer, str(st.website).trim());
   if (st.mode === 'add') {
     if (!w) return;
-    if (st.kind === 'out' && !withDetails) { adjustCount(w.id, -st.qty, st.loc); return; }
-    const entry = Object.assign({ id: newId(st.kind === 'out' ? 'r' : 'i'), wineId: w.id, wineName: fullName(w), loc: st.loc }, fields);
+    if (st.kind === 'out' && !withDetails) { adjustCount(w.id, -st.qty, placeOf(st)); return; }
+    const place = placeOf(st);
+    const entry = Object.assign({ id: newId(st.kind === 'out' ? 'r' : 'i'), wineId: w.id, wineName: fullName(w) }, fields, place);
     const prevStock = JSON.parse(JSON.stringify(w.stock));
-    localStock(w, st.loc, st.kind === 'out' ? -st.qty : st.qty);
-    const place = st.kind === 'in' ? { shelf: st.shelf === undefined ? null : st.shelf, pos: str(st.pos).trim() } : null;
-    if (place) Object.assign(w.stock.find(x => lc(x.loc) === lc(st.loc)) || {}, place);
+    localStock(w, place, st.kind === 'out' ? -st.qty : st.qty);
     S.removals.push(normRemoval(entry));
     if (st.kind === 'in') store.set('wc-lastloc', st.loc);
     persist();
     refreshView();
     try {
       const d = st.kind === 'out' ? await api('removeBottle', { removal: entry }) : await api('addBottles', { entry });
-      let fresh = normWine(d.wine);
-      const at = place && fresh.stock.find(x => lc(x.loc) === lc(st.loc));
-      if (at && (at.shelf !== place.shelf || at.pos !== place.pos)) {
-        Object.assign(at, place);
-        fresh = normWine(await api('update', { id: w.id, fields: { stock: fresh.stock } }));
-      }
-      upsertWine(fresh);
+      upsertWine(normWine(d.wine));
       const saved = normRemoval(d.removal || d.entry);
       S.removals = S.removals.filter(r => r.id !== entry.id && r.id !== saved.id).concat([saved]);
       persist();
@@ -1487,14 +1494,15 @@ async function deleteEntry() {
   catch (e) { S.removals = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
 }
 
-async function adjustCount(id, delta, loc) {
+async function adjustCount(id, delta, place) {
   const w = wineById(id);
   if (!w) return;
+  const p = place || (w.stock[0] ? placeOf(w.stock[0]) : { loc: defaultLocation(), shelf: null, pos: '' });
   const prevStock = JSON.parse(JSON.stringify(w.stock));
-  localStock(w, loc || (w.stock[0] ? w.stock[0].loc : defaultLocation()), delta);
+  localStock(w, p, delta);
   persist();
   refreshView();
-  try { upsertWine(normWine(await api('adjust', { id, delta, loc }))); persist(); refreshView(); }
+  try { upsertWine(normWine(await api('adjust', Object.assign({ id, delta }, p)))); persist(); refreshView(); }
   catch (e) { w.stock = prevStock; w.count = prevStock.reduce((a, x) => a + x.n, 0); persist(); refreshView(); toast('Not saved: ' + e.message); }
 }
 
@@ -1599,18 +1607,18 @@ function stockEditorHtml() {
     </div>`;
   }).join('');
   if (add) return `<div class="box"><span class="box-title">Storage</span>${rows}</div>`;
-  const used = D.stock.map(e => lc(e.loc));
-  const free = S.locations.filter(l => !used.includes(lc(l)));
   const addBox = D.addLoc
-    ? `<div class="chips">${free.map(l => `<button class="chip" data-act="st-add" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}<button class="chip" data-act="st-add-new">${ICON.plus}New location</button><button class="chip" data-act="st-add-close">Cancel</button></div>`
-    : `<div class="chips"><button class="chip" data-act="st-add-open">${ICON.plus}Add location</button>${D.stock.filter(e => e.n > 0).length && D.stock.length > 1 ? `<button class="chip${D.move ? ' on' : ''}" data-act="st-move-open">${ICON.move}Move bottles</button>` : ''}</div>`;
+    ? `<div class="chips">${S.locations.map(l => `<button class="chip" data-act="st-add" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}<button class="chip" data-act="st-add-new">${ICON.plus}New location</button><button class="chip" data-act="st-add-close">Cancel</button></div>`
+    : `<div class="chips"><button class="chip" data-act="st-add-open">${ICON.plus}Add storage place</button>${D.stock.filter(e => e.n > 0).length && D.stock.length > 1 ? `<button class="chip${D.move ? ' on' : ''}" data-act="st-move-open">${ICON.move}Move bottles</button>` : ''}</div>`;
   let move = '';
   if (D.move) {
-    const from = D.stock.filter(e => e.n > 0), to = D.stock.filter(e => lc(e.loc) !== lc(D.move.from));
-    const src = D.stock.find(e => lc(e.loc) === lc(D.move.from));
-    move = `<div class="move-box"><span class="tiny muted">Move bottles between locations</span>
-      <div class="grid2"><label class="field">From<select data-change="mv-from">${from.map(e => `<option${lc(e.loc) === lc(D.move.from) ? ' selected' : ''}>${esc(e.loc)}</option>`).join('')}</select></label>
-      <label class="field">To<select data-change="mv-to">${to.map(e => `<option${lc(e.loc) === lc(D.move.to) ? ' selected' : ''}>${esc(e.loc)}</option>`).join('')}</select></label></div>
+    const src = D.stock[D.move.from];
+    const opt = (i, on) => `<option value="${i}"${on ? ' selected' : ''}>${esc(placeLabel(D.stock[i]))}</option>`;
+    const fromIdx = D.stock.map((e, i) => i).filter(i => D.stock[i].n > 0);
+    const toIdx = D.stock.map((e, i) => i).filter(i => i !== D.move.from);
+    move = `<div class="move-box"><span class="tiny muted">Move bottles between storage places</span>
+      <label class="field">From<select data-change="mv-from">${fromIdx.map(i => opt(i, i === D.move.from)).join('')}</select></label>
+      <label class="field">To<select data-change="mv-to">${toIdx.map(i => opt(i, i === D.move.to)).join('')}</select></label>
       <div class="between"><span class="small">Bottles</span><div class="stepper"><button data-act="mv-n" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span id="mv-n">${D.move.n}</span><button data-act="mv-n" data-d="1" aria-label="More">${ICON.plus}</button></div></div>
       <div class="grid2"><button class="btn" data-act="st-move-close">Cancel</button><button class="btn accent" data-act="st-move"${src && src.n ? '' : ' disabled'}>Move</button></div></div>`;
   }
@@ -2014,8 +2022,8 @@ async function saveWineForm() {
   }
   const merged = [];
   D.stock.forEach(e => {
-    const m = merged.find(x => lc(x.loc) === lc(e.loc));
-    if (m) m.n += e.n; else merged.push({ loc: e.loc, shelf: e.shelf === '' ? null : e.shelf, pos: str(e.pos).trim(), n: e.n });
+    const m = merged.find(x => samePlace(x, e));
+    if (m) m.n += e.n; else merged.push(Object.assign(placeOf(e), { n: e.n }));
   });
   const stock = merged.filter(e => e.n > 0);
   if (stock.some(e => !str(e.loc).trim())) { toast('Choose a location. New ones can be added in the list.'); return; }
@@ -2182,10 +2190,9 @@ const ACTS = {
     const moved = S.wines.filter(w => w.stock.some(e => lc(e.loc) === lc(from)));
     const prev = moved.map(w => JSON.parse(JSON.stringify(w.stock)));
     moved.forEach(w => {
-      const src = w.stock.find(e => lc(e.loc) === lc(from));
-      const n = src.n;
-      w.stock = w.stock.filter(e => e !== src);
-      localStock(w, to, n);
+      const src = w.stock.filter(e => lc(e.loc) === lc(from));
+      w.stock = w.stock.filter(e => !src.includes(e));
+      src.forEach(e => localStock(w, { loc: to, shelf: null, pos: '' }, e.n));
     });
     U.locMove = null;
     persist();
@@ -2205,8 +2212,8 @@ const ACTS = {
   },
   'edit-entry': el => openEditEntry(el.dataset.id, !!el.dataset.record),
   'toggle-finished': () => { U.showFinished = !U.showFinished; refreshView(); },
-  plus: el => openAddSheet(el.dataset.id, el.dataset.loc),
-  minus: el => openRemoveSheet(el.dataset.id, el.dataset.loc),
+  plus: el => openAddSheet(el.dataset.id, el.dataset.i === undefined ? undefined : Number(el.dataset.i)),
+  minus: el => openRemoveSheet(el.dataset.id, el.dataset.i === undefined ? undefined : Number(el.dataset.i)),
   winf: el => { U.winFilter = el.dataset.v; render(); },
   'top-mode': el => { U.topMode = el.dataset.v; render(); },
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
@@ -2257,11 +2264,14 @@ const ACTS = {
 
   'sheet-close': () => closeSheet(),
   'rs-type': el => { RS.type = el.dataset.v; renderSheet(); },
-  'rs-loc': el => { RS.loc = el.dataset.v; RS.qty = clamp(RS.qty, 1, qtyMax()); if (RS.kind === 'in') placeFromStock(); renderSheet(); },
+  'rs-loc': el => { RS.loc = el.dataset.v; placeFromStock(); renderSheet(); },
+  'rs-place': el => { const w = wineById(RS.wineId); Object.assign(RS, placeOf(w.stock[Number(el.dataset.i)])); RS.qty = clamp(RS.qty, 1, qtyMax()); renderSheet(); },
   'rs-shelf': el => {
     const v = clamp((RS.shelf || 0) + Number(el.dataset.d), 0, 99);
     RS.shelf = v === 0 ? null : v;
     $('#rs-shelf').textContent = v === 0 ? 'None' : v;
+    const h = $('#rs-hint');
+    if (h) h.textContent = placeHint();
   },
   'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').textContent = RS.qty; },
   'rs-skip': () => saveSheet(false),
@@ -2297,35 +2307,35 @@ const ACTS = {
   'st-add': el => { D.stock.push({ loc: el.dataset.v, shelf: null, pos: '', n: 0 }); D.addLoc = false; renderStockBox(); },
   'st-add-new': async () => {
     const name = await newLocationPrompt();
-    if (name && !D.stock.some(e => lc(e.loc) === lc(name))) D.stock.push({ loc: name, shelf: null, pos: '', n: 0 });
+    if (name) D.stock.push({ loc: name, shelf: null, pos: '', n: 0 });
     D.addLoc = false;
     renderStockBox();
   },
   'st-move-open': () => {
     if (D.move) { D.move = null; renderStockBox(); return; }
-    const from = D.stock.find(e => e.n > 0);
-    const to = D.stock.find(e => e !== from);
-    if (!from || !to) return;
-    D.move = { from: from.loc, to: to.loc, n: 1 };
+    const from = D.stock.findIndex(e => e.n > 0);
+    const to = D.stock.findIndex((e, i) => i !== from);
+    if (from < 0 || to < 0) return;
+    D.move = { from, to, n: 1 };
     D.addLoc = false;
     renderStockBox();
   },
   'st-move-close': () => { D.move = null; renderStockBox(); },
   'mv-n': el => {
-    const src = D.stock.find(e => lc(e.loc) === lc(D.move.from));
+    const src = D.stock[D.move.from];
     D.move.n = clamp(D.move.n + Number(el.dataset.d), 1, Math.max(1, src ? src.n : 1));
     $('#mv-n').textContent = D.move.n;
   },
   'st-move': () => {
     const m = D.move;
-    const src = D.stock.find(e => lc(e.loc) === lc(m.from)), dst = D.stock.find(e => lc(e.loc) === lc(m.to));
-    if (!src || !dst || lc(m.from) === lc(m.to)) return;
+    const src = D.stock[m.from], dst = D.stock[m.to];
+    if (!src || !dst || m.from === m.to) return;
     const n = Math.min(m.n, src.n);
     src.n -= n;
     dst.n += n;
     D.move = null;
     renderStockBox();
-    toast(`${n} ${n === 1 ? 'bottle' : 'bottles'} moved to ${dst.loc}. Save to keep it.`);
+    toast(`${n} ${n === 1 ? 'bottle' : 'bottles'} moved to ${placeLabel(dst)}. Save to keep it.`);
   },
   radd: () => {
     const used = D.ratings.map(r => r.sys);
@@ -2387,7 +2397,12 @@ const INPUTS = {
     if (f) f.innerHTML = facetChipsHtml('cellar');
   },
   facetq: el => { const ctx = el.dataset.ctx, st = U.f[ctx]; st.q[st.tab] = el.value; const f = $('#facet-chips-' + ctx); if (f) f.innerHTML = facetChipsHtml(ctx); },
-  rs: el => { if (RS) RS[el.name] = el.value; },
+  rs: el => {
+    if (!RS) return;
+    RS[el.name] = el.value;
+    const h = el.name === 'pos' && $('#rs-hint');
+    if (h) h.textContent = placeHint();
+  },
   rng: el => onRange(el),
   'st-pos': el => { if (D) D.stock[Number(el.dataset.i)].pos = el.value; },
   people: el => {
@@ -2431,13 +2446,13 @@ const CHANGES = {
     renderStockBox();
   },
   'mv-from': el => {
-    D.move.from = el.value;
-    if (lc(D.move.to) === lc(el.value)) { const o = D.stock.find(x => lc(x.loc) !== lc(el.value)); D.move.to = o ? o.loc : ''; }
-    const src = D.stock.find(x => lc(x.loc) === lc(el.value));
+    D.move.from = Number(el.value);
+    if (D.move.to === D.move.from) D.move.to = D.stock.findIndex((x, i) => i !== D.move.from);
+    const src = D.stock[D.move.from];
     D.move.n = clamp(D.move.n, 1, Math.max(1, src ? src.n : 1));
     renderStockBox();
   },
-  'mv-to': el => { D.move.to = el.value; },
+  'mv-to': el => { D.move.to = Number(el.value); },
   photo: async el => {
     const file = el.files && el.files[0];
     if (!file) return;
