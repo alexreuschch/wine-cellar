@@ -312,3 +312,15 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .dual input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 26px; height: 26px; margin-top: 5px; border-radius: 50%; background: var(--gold); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--gold); cursor: pointer; }
 .dual input[type=range]::-moz-range-thumb { pointer-events: auto; width: 22px; height: 22px; border-radius: 50%; background: var(--gold); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--gold); cursor: pointer; }
 @media (max-width: 380px) { .stats b { font-size: 15px; } .stats .st-label { font-size: 10px; } }
+
+/* 2.1.1: compact cellar rows, thumbnail beside title, prices and window */
+.wine-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: center; padding: 8px 0; }
+.wine-row .row-link { display: contents; }
+.wine-row .thumb { grid-column: 1; grid-row: 1 / span 2; align-self: start; margin-top: 2px; }
+.wine-row .row-text { grid-column: 2; grid-row: 1; }
+.wine-row > .stepper { grid-column: 3; grid-row: 1; }
+.wine-row > .stepper button { width: 38px; height: 36px; }
+.wine-row > .stepper span { min-width: 30px; height: 36px; font-size: 15px; }
+.wine-row .row-foot { grid-column: 2 / 4; grid-row: 2; margin-left: 0; flex-basis: auto; gap: 3px; }
+.wine-row .row-foot .pill { padding: 0 7px; font-size: 10.5px; line-height: 16px; }
+.wine-row .price-row { line-height: 1.35; }
