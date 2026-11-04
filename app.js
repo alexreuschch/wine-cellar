@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.1.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -903,7 +903,7 @@ function topBody() {
   const filtered = activeCount('top') > 0;
   if (U.topMode === 'mine') {
     const rated = pool.filter(w => w.myRating !== null).sort((a, b) => b.myRating - a.myRating);
-    return rated.length ? rated.map((w, i) => topRow(w, i, segsHtml(w.myRating), `<b>${w.myRating}%</b>`, w.ratings.map(r => `${r.sys} ${fmtScore(r.sys, r.score)}`).join(' · '))).join('')
+    return rated.length ? rated.map((w, i) => topRow(w, i, segsHtml(w.myRating), `<b>${w.myRating}%</b>`, '')).join('')
       : `<div class="empty"><h2>${filtered ? 'No rated wine matches your filter' : 'No ratings yet'}</h2><p>${filtered ? 'Change or clear the filter.' : 'Open a wine, tap Edit and drag the rating bar to rate it.'}</p></div>`;
   }
   const counts = {};
@@ -920,9 +920,9 @@ function topBody() {
 
 function topRow(w, i, visual, score, sub) {
   const s = streetOf(w);
-  const subLine = [sub, s !== null ? `Streetprice ${money(s)}` : ''].filter(Boolean).join(' · ');
+  const subLine = [sub, s !== null ? `Street ${money(s)}` : ''].filter(Boolean).join(' · ');
   return `<a class="journal-row${w.count === 0 ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
-    <div class="row-text" style="gap:5px"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
+    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
     <div class="score">${score}</div></a>`;
 }
 
@@ -1051,9 +1051,9 @@ function valueHtml(w) {
   const busyNow = streetRun && streetRun.ids.includes(w.id);
   return `<section><div class="sec-head"><h2>Value</h2><button class="chip" data-act="street-one" data-id="${esc(w.id)}"${busyNow ? ' disabled' : ''}>${ICON.refresh}${busyNow ? 'Updating…' : 'Update street price'}</button></div>
     <div class="card form-grid" style="gap:14px">
-      <div class="kv"><span>Ø purchase price</span><p style="font-weight:600">${a !== null ? money(a) : 'N/A'}</p></div>
-      <div class="kv"><span>Streetprice</span><p style="font-weight:600" class="${up ? 'up' : ''}">${s !== null ? money(s) : 'N/A'}</p>${diff}</div>
-      ${s !== null && w.count > 0 ? `<div class="kv full"><span>Street value of ${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span><p style="font-weight:600" class="${up ? 'up' : ''}">${money(s * w.count)}</p></div>` : ''}
+      <div class="kv"><span>Ø Cost</span><p style="font-weight:600">${a !== null ? money(a) : 'N/A'}</p></div>
+      <div class="kv"><span>Street</span><p style="font-weight:600" class="${up ? 'up' : ''}">${s !== null ? money(s) : 'N/A'}</p>${diff}</div>
+      ${s !== null && w.count > 0 ? `<div class="kv full"><span>Total of ${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span><p style="font-weight:600" class="${up ? 'up' : ''}">${money(s * w.count)}</p></div>` : ''}
       ${src ? `<p class="muted tiny full" style="margin:0">${esc(src)}</p>` : ''}
     </div></section>`;
 }
