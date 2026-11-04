@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.1.2';
+const APP_VERSION = '2.2.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -589,6 +589,7 @@ const offChip = (act, label) => `<button class="chip on" data-act="${act}" aria-
 
 const F_WINE = { label: 'Wine', plural: 'wine types', of: w => [w.type], order: TYPES };
 const F_GRAPE = { label: 'Grape', plural: 'grapes', of: grapeNames };
+const F_RATING = { label: 'Rating', kind: 'rating', of: () => [] };
 const F_PRICE = { label: 'Street', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
 const CTX = {
   cellar: {
@@ -598,7 +599,8 @@ const CTX = {
       grape: F_GRAPE,
       food: { label: 'Food', plural: 'dishes', of: foodNames },
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
-      price: F_PRICE
+      price: F_PRICE,
+      rating: F_RATING
     },
     items: () => cellarPool(),
     text: w => matches(w, U.search),
@@ -639,12 +641,33 @@ const fst = ctx => U.f[ctx];
 const sel = (ctx, k) => { const s = U.f[ctx].sel; return s[k] || (s[k] = []); };
 const isRange = def => def.kind === 'range';
 const rng = (ctx, k) => { const st = U.f[ctx]; return (st.range || (st.range = {}))[k] || null; };
-const activeCount = ctx => Object.keys(CTX[ctx].facets).reduce((a, k) => a + (isRange(CTX[ctx].facets[k]) ? (rng(ctx, k) ? 1 : 0) : sel(ctx, k).length), 0);
+const isRating = def => def.kind === 'rating';
+const rflt = ctx => U.f[ctx].rating || null;
+const facetN = (ctx, k) => { const def = CTX[ctx].facets[k]; return isRange(def) ? (rng(ctx, k) ? 1 : 0) : isRating(def) ? (rflt(ctx) ? 1 : 0) : sel(ctx, k).length; };
+const activeCount = ctx => Object.keys(CTX[ctx].facets).reduce((a, k) => a + facetN(ctx, k), 0);
+
+/* rating filter: one system, at least a value on its own scale */
+const rSysName = sys => (sys === 'mine' ? 'My rating' : sys);
+const rScale = sys => { const max = sys === 'mine' ? 100 : sysInfo(sys).max; return { max, step: max === 5 ? 0.1 : max === 20 ? 0.5 : 1 }; };
+const ratingOf = (w, sys) => { if (sys === 'mine') return w.myRating; const r = w.ratings.find(x => x.sys === sys); return r ? r.score : null; };
+const rFmt = (sys, v) => (sys === 'mine' ? `${Math.round(v)}%` : `${fmtScore(sys, v)} /${rScale(sys).max}`);
+function ratingSystems(ctx) {
+  const items = CTX[ctx].items();
+  const out = items.some(w => w.myRating !== null) ? ['mine'] : [];
+  SYSTEMS.forEach(x => { if (items.some(w => w.ratings.some(r => r.sys === x.key))) out.push(x.key); });
+  return out;
+}
 function passes(ctx, item, except) {
   const fs = CTX[ctx].facets;
   return Object.keys(fs).every(k => {
     if (k === except) return true;
     const def = fs[k];
+    if (isRating(def)) {
+      const r = rflt(ctx);
+      if (!r) return true;
+      const v = ratingOf(item, r.sys);
+      return v !== null && v >= r.min - 1e-9;
+    }
     if (isRange(def)) {
       const r = rng(ctx, k);
       if (!r) return true;
@@ -693,6 +716,11 @@ function filterArea(ctx) {
   const active = [];
   Object.keys(c.facets).forEach(k => {
     const def = c.facets[k];
+    if (isRating(def)) {
+      const r = rflt(ctx);
+      if (r) active.push({ k, rating: true, name: `${rSysName(r.sys)} at least ${rFmt(r.sys, r.min)}` });
+      return;
+    }
     if (isRange(def)) {
       const r = rng(ctx, k);
       if (r) active.push({ k, range: true, name: `${def.chip || def.label} ${money(r[0], 0)} to ${fmtNum(r[1], 0)}` });
@@ -703,21 +731,23 @@ function filterArea(ctx) {
     st.sel[k].forEach(v => active.push({ k, v, name: allVals[k].find(x => x.key === v).name }));
   });
   const clear = active.length ? `<button class="chip" data-act="f-clear" data-ctx="${ctx}">Clear all filters</button>` : '';
-  const activeChip = a => (a.range
+  const activeChip = a => (a.rating
+    ? `<button class="chip on" data-act="rating-clear" data-ctx="${ctx}" aria-label="Remove rating filter">${esc(a.name)}${ICON.x}</button>`
+    : a.range
     ? `<button class="chip on" data-act="range-clear" data-ctx="${ctx}" data-k="${a.k}" aria-label="Remove price filter">${esc(a.name)}${ICON.x}</button>`
     : `<button class="chip on" data-act="f-chip" data-ctx="${ctx}" data-k="${a.k}" data-v="${esc(a.v)}" aria-label="Remove filter ${esc(a.name)}">${esc(a.name)}${ICON.x}</button>`);
   if (!st.open) {
     const badges = c.badges();
     return active.length || badges ? `<div class="chips">${active.map(activeChip).join('')}${badges}${clear}</div>` : '';
   }
-  const tabs = Object.keys(c.facets).filter(k => (isRange(c.facets[k]) ? rangeMax(ctx, k) > 0 : allVals[k].length));
+  const tabs = Object.keys(c.facets).filter(k => (isRange(c.facets[k]) ? rangeMax(ctx, k) > 0 : isRating(c.facets[k]) ? ratingSystems(ctx).length > 0 : allVals[k].length));
   const extra = c.extra();
   if (!tabs.length) return `<div class="card filter-panel"><p class="muted small" style="margin:0">Nothing to filter by yet.</p>${extra}</div>`;
   if (!tabs.includes(st.tab)) st.tab = tabs[0];
   const k = st.tab;
-  const nSel = t => (isRange(c.facets[t]) ? (rng(ctx, t) ? 1 : 0) : st.sel[t].length);
+  const nSel = t => facetN(ctx, t);
   const tabBar = `<div class="ftabs" role="tablist">${tabs.map(t => `<button role="tab" aria-selected="${t === k}" class="ftab${t === k ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t}">${c.facets[t].label}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
-  const search = !isRange(c.facets[k]) && allVals[k].length > 12
+  const search = allVals[k] && allVals[k].length > 12
     ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" data-ctx="${ctx}" aria-label="Search ${c.facets[k].plural}" placeholder="Search ${c.facets[k].plural}" value="${esc(st.q[k] || '')}"></label>` : '';
   return `<div class="card filter-panel">${tabBar}${search}<div id="facet-chips-${ctx}">${facetChipsHtml(ctx)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}</div>`;
 }
@@ -726,6 +756,7 @@ function facetChipsHtml(ctx) {
   const c = CTX[ctx], st = fst(ctx), k = st.tab, def = c.facets[k];
   if (!def) return '';
   if (isRange(def)) return rangeHtml(ctx, k);
+  if (isRating(def)) return ratingHtml(ctx);
   const vals = facetValues(c.items().filter(it => c.text(it) && passes(ctx, it, k)), def);
   const all = facetValues(c.items(), def);
   const chosen = sel(ctx, k);
@@ -768,6 +799,47 @@ function rangeHtml(ctx, k) {
     <p class="muted tiny" style="margin:0" id="rng-n-${ctx}">${rangeCountText(ctx, k)}</p>
   </div>`;
 }
+function refreshFilterResults(ctx) {
+  const fb = $(`[data-act="f-toggle"][data-ctx="${ctx}"]`);
+  if (fb) fb.outerHTML = filterButton(ctx);
+  if (ctx === 'cellar') {
+    const l = $('#wine-list'), d = $('#drink-soon');
+    if (l) l.innerHTML = cellarList();
+    if (d) d.innerHTML = drinkSoonHtml();
+  } else if (ctx === 'top') {
+    const l = $('#top-list');
+    if (l) l.innerHTML = topBody();
+  }
+}
+
+function ratingCountText(ctx) {
+  const c = CTX[ctx], r = rflt(ctx);
+  const n = c.items().filter(it => c.text(it) && passes(ctx, it)).length;
+  const none = r ? c.items().filter(it => ratingOf(it, r.sys) === null).length : 0;
+  return `${n} ${n === 1 ? 'wine matches' : 'wines match'}.${none ? ` ${none} ${none === 1 ? 'wine' : 'wines'} without a ${rSysName(r.sys)} rating ${none === 1 ? 'is' : 'are'} hidden.` : ''}`;
+}
+
+function ratingHtml(ctx) {
+  const r = rflt(ctx);
+  const chips = ratingSystems(ctx).map(sys => `<button class="chip${r && r.sys === sys ? ' on' : ''}" data-act="rt-sys" data-ctx="${ctx}" data-v="${esc(sys)}">${esc(rSysName(sys))}${r && r.sys === sys ? ICON.x : ''}</button>`).join('');
+  if (!r) return `<div style="display:flex;flex-direction:column;gap:8px"><div class="chips">${chips}</div><p class="muted tiny" style="margin:0">Choose one rating system, then set the lowest rating to show.</p></div>`;
+  const sc = rScale(r.sys);
+  return `<div style="display:flex;flex-direction:column;gap:8px"><div class="chips">${chips}</div>
+    <div class="between"><span class="small muted">At least</span><span class="dual-val" id="rt-val-${ctx}">${rFmt(r.sys, r.min)}</span></div>
+    <div class="single"><input type="range" min="0" max="${sc.max}" step="${sc.step}" value="${r.min}" data-input="rtmin" data-ctx="${ctx}" aria-label="Lowest ${esc(rSysName(r.sys))}" style="--p:${(r.min / sc.max * 100).toFixed(1)}%"></div>
+    <p class="muted tiny" style="margin:0" id="rt-n-${ctx}">${ratingCountText(ctx)}</p></div>`;
+}
+
+function onRatingMin(el) {
+  const ctx = el.dataset.ctx, r = rflt(ctx);
+  if (!r) return;
+  r.min = Number(el.value);
+  el.style.setProperty('--p', (r.min / rScale(r.sys).max * 100) + '%');
+  $('#rt-val-' + ctx).textContent = rFmt(r.sys, r.min);
+  $('#rt-n-' + ctx).textContent = ratingCountText(ctx);
+  refreshFilterResults(ctx);
+}
+
 function onRange(el) {
   const ctx = el.dataset.ctx, k = el.dataset.k;
   const box = $('#rng-' + ctx);
@@ -784,16 +856,7 @@ function onRange(el) {
   $('#rng-lo-' + ctx).textContent = money(lo, 0);
   $('#rng-hi-' + ctx).textContent = money(hi, 0);
   $('#rng-n-' + ctx).textContent = rangeCountText(ctx, k);
-  const fb = $(`[data-act="f-toggle"][data-ctx="${ctx}"]`);
-  if (fb) fb.outerHTML = filterButton(ctx);
-  if (ctx === 'cellar') {
-    const l = $('#wine-list'), d = $('#drink-soon');
-    if (l) l.innerHTML = cellarList();
-    if (d) d.innerHTML = drinkSoonHtml();
-  } else if (ctx === 'top') {
-    const l = $('#top-list');
-    if (l) l.innerHTML = topBody();
-  }
+  refreshFilterResults(ctx);
 }
 
 /* ------------------------------------------------------------ view: cellar */
@@ -840,15 +903,15 @@ function matches(w, q) {
 function priceLine(w) {
   const a = avgPrice(w), s = streetOf(w);
   const up = a !== null && s !== null && s > a;
-  const total = w.count > 0 ? `<span class="p-total">Total <b class="${up ? 'up' : ''}">${s !== null ? fmtNum(s * w.count) : 'N/A'}</b></span>` : '';
-  return `<span class="price-row"><span class="p-left">Ø Cost <b>${a !== null ? fmtNum(a) : 'N/A'}</b> · Street <b class="${up ? 'up' : ''}">${s !== null ? fmtNum(s) : 'N/A'}</b></span>${total}</span>`;
+  const part = (label, v, cls = '') => `<span class="pp">${label} <b class="${cls}">${v}</b></span>`;
+  return `<span class="price-row">${part('Ø Cost', a !== null ? fmtNum(a) : 'N/A')}${part('Street', s !== null ? fmtNum(s) : 'N/A', up ? 'up' : '')}${w.count > 0 ? part('Total', s !== null ? fmtNum(s * w.count) : 'N/A', up ? 'up' : '') : ''}${w.count > 0 ? pill(w) : ''}</span>`;
 }
 
 function wineRow(w) {
   return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
     <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span></div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove a bottle"${w.count ? '' : ' disabled'}>${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add bottles">${ICON.plus}</button></div>
-    <a class="row-foot" href="#/wine/${encodeURIComponent(w.id)}">${priceLine(w)}${w.count > 0 ? pill(w) : ''}</a>
+    <a class="row-foot" href="#/wine/${encodeURIComponent(w.id)}">${priceLine(w)}</a>
   </div>`;
 }
 
@@ -1289,7 +1352,11 @@ function renderSheet() {
       ${note}
       ${RS.mode === 'record' && !RS.id ? '<p class="muted tiny" style="margin:0">Only adds the purchase to the journal. Change the number of bottles in Storage.</p>' : ''}`;
   }
-  const buttons = RS.id
+  if (RS.del) { body = deletePanelHtml(w, r); }
+  const buttons = RS.del
+    ? `<div class="grid2"><button class="btn" data-act="del-cancel">Cancel</button><button class="btn danger" data-act="del-confirm"${RS.del.blocked ? ' disabled' : ''}>${RS.del.kind === 'back' ? 'Delete and put back' : 'Delete and take out'}</button></div>
+      <button class="btn ghost" style="height:36px;font-size:13px" data-act="del-only">Only delete the entry, keep the stock</button>`
+    : RS.id
     ? `<div class="grid2"><button class="btn danger" data-act="rs-delete">Delete entry</button><button class="btn primary" data-act="rs-save">Save</button></div>`
     : RS.mode === 'add' && out
       ? `<div class="grid2"><button class="btn" data-act="rs-skip">Skip details</button><button class="btn primary" data-act="rs-save">Save</button></div>`
@@ -1297,7 +1364,7 @@ function renderSheet() {
   root.innerHTML = `<div class="sheet-backdrop" data-act="sheet-close"></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
     <div class="grab"></div>
-    <div style="display:flex;gap:12px;align-items:center">${w ? thumbHtml(w) : ''}<div style="flex:1;min-width:0"><h2 id="sheet-title" style="font-size:18px;font-weight:600">${title}</h2><p class="muted small ellipsis" style="margin:2px 0 0">${sub}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
+    <div style="display:flex;gap:12px;align-items:center">${w ? thumbHtml(w) : ''}<div style="flex:1;min-width:0"><h2 id="sheet-title" style="font-size:18px;font-weight:600">${RS.del ? 'Delete entry' : title}</h2><p class="muted small ellipsis" style="margin:2px 0 0">${sub}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
     ${body}
     ${buttons}
   </div>`;
@@ -1482,9 +1549,88 @@ async function saveRetailerSite(name, website) {
   }
 }
 
-async function deleteEntry() {
+/* Deleting a journal entry undoes its stock change. The place is asked again, it may have changed or been deleted. */
+function startDelete() {
+  const r = S.removals.find(x => x.id === RS.id);
+  const w = r && wineById(r.wineId);
+  if (!r || !w || RS.mode === 'record') { deleteEntryOnly(); return; }
+  if (r.dir === 'out') {
+    const loc = S.locations.find(l => lc(l) === lc(r.loc)) || '';
+    const e = loc ? w.stock.filter(x => lc(x.loc) === lc(loc)).sort((x, y) => y.n - x.n)[0] : null;
+    RS.del = { kind: 'back', qty: r.qty, loc, shelf: e ? shelfVal(e.shelf) : null, pos: e ? str(e.pos) : '' };
+  } else {
+    const i = w.stock.findIndex(x => lc(x.loc) === lc(r.loc) && x.n >= r.qty);
+    RS.del = { kind: 'take', qty: r.qty, i: i >= 0 ? i : (w.stock.length === 1 && w.stock[0].n >= r.qty ? 0 : -1), blocked: !w.stock.some(x => x.n >= r.qty) };
+  }
+  renderSheet();
+}
+
+function delHint() {
+  const d = RS.del, w = wineById(RS.wineId);
+  if (!d.loc) return '';
+  const e = w && w.stock.find(x => samePlace(x, d));
+  return e ? `Goes back to the ${e.n} ${e.n === 1 ? 'bottle' : 'bottles'} stored there.` : 'New storage place for this wine.';
+}
+
+function deletePanelHtml(w, r) {
+  const d = RS.del, n = d.qty, btl = n === 1 ? 'bottle' : 'bottles';
+  if (d.kind === 'back') {
+    return `<p style="margin:0">Deleting this entry puts <b>${n} ${btl}</b> back into stock. Where should ${n === 1 ? 'it' : 'they'} go?</p>
+      ${r.loc && !d.loc ? `<p class="muted small" style="margin:0">${esc(r.loc)} no longer exists.</p>` : ''}
+      <div class="chips">${S.locations.map(l => `<button class="chip${lc(l) === lc(d.loc) ? ' on' : ''}" data-act="del-loc" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}</div>
+      ${d.loc ? `<div class="store-row">
+        <div class="field">Shelf (optional)<div class="stepper"><button data-act="del-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="del-shelf" style="min-width:48px">${d.shelf === null ? 'None' : d.shelf}</span><button data-act="del-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
+        <label class="field">Position<input data-input="del-pos" placeholder="Back row, left" value="${esc(d.pos)}"></label>
+      </div><p class="muted tiny" style="margin:-6px 0 0" id="del-hint">${delHint()}</p>` : ''}`;
+  }
+  return `<p style="margin:0">Deleting this entry takes <b>${n} ${btl}</b> out of stock again. From where?</p>
+    ${d.blocked ? `<p class="small" style="margin:0;color:var(--danger)">No storage place has ${n} ${btl} left, so the stock cannot be corrected. You can only delete the entry.</p>` : ''}
+    <div class="chips">${w.stock.map((e, i) => `<button class="chip${i === d.i ? ' on' : ''}" data-act="del-place" data-i="${i}"${e.n < n ? ' disabled' : ''}>${ICON.pin}${esc(placeLabel(e))} <span class="n">${e.n}</span></button>`).join('')}</div>`;
+}
+
+async function confirmDelete() {
+  const st = RS, d = st.del;
+  const r = S.removals.find(x => x.id === st.id), w = wineById(st.wineId);
+  if (!r || !w) { deleteEntryOnly(); return; }
+  let place, delta;
+  if (d.kind === 'back') {
+    if (!d.loc) { toast('Choose where the bottles go.'); return; }
+    place = { loc: d.loc, shelf: d.shelf, pos: str(d.pos).trim() };
+    delta = d.qty;
+  } else {
+    const e = w.stock[d.i];
+    if (!e) { toast('Choose where the bottles come from.'); return; }
+    place = placeOf(e);
+    delta = -d.qty;
+  }
+  closeSheet();
+  const prevStock = JSON.parse(JSON.stringify(w.stock)), prevRemovals = S.removals.slice();
+  localStock(w, place, delta);
+  S.removals = S.removals.filter(x => x.id !== r.id);
+  persist();
+  refreshView();
+  let adjusted = false;
+  try {
+    upsertWine(normWine(await api('adjust', Object.assign({ id: w.id, delta }, place))));
+    adjusted = true;
+    await api('deleteRemoval', { id: r.id });
+    persist();
+    refreshView();
+    toast(delta > 0 ? `Entry deleted, ${d.qty} ${d.qty === 1 ? 'bottle' : 'bottles'} back in ${placeLabel(place)}` : `Entry deleted, ${d.qty} ${d.qty === 1 ? 'bottle' : 'bottles'} taken out`);
+  } catch (e) {
+    if (adjusted) { toast('Stock corrected, but the entry could not be deleted: ' + e.message, 6000); sync(true); return; }
+    w.stock = prevStock;
+    w.count = prevStock.reduce((a, x) => a + x.n, 0);
+    S.removals = prevRemovals;
+    persist();
+    refreshView();
+    toast('Not deleted: ' + e.message);
+  }
+}
+
+async function deleteEntryOnly() {
   const id = RS.id;
-  if (!confirm('Delete this entry? The bottle count stays the same.')) return;
+  if (!confirm('Delete only this entry? The bottle count stays the same.')) return;
   closeSheet();
   const prev = S.removals.slice();
   S.removals = S.removals.filter(r => r.id !== id);
@@ -2154,7 +2300,13 @@ const ACTS = {
   'f-tab': el => { U.f[el.dataset.ctx].tab = el.dataset.v; refreshView(); },
   'f-more': el => { U.f[el.dataset.ctx].all[el.dataset.k] = true; refreshView(); },
   'f-less': el => { U.f[el.dataset.ctx].all[el.dataset.k] = false; refreshView(); },
-  'f-clear': el => { U.f[el.dataset.ctx].sel = {}; U.f[el.dataset.ctx].range = {}; refreshView(); },
+  'f-clear': el => { const st = U.f[el.dataset.ctx]; st.sel = {}; st.range = {}; st.rating = null; refreshView(); },
+  'rating-clear': el => { U.f[el.dataset.ctx].rating = null; refreshView(); },
+  'rt-sys': el => {
+    const st = U.f[el.dataset.ctx], v = el.dataset.v;
+    st.rating = st.rating && st.rating.sys === v ? null : { sys: v, min: 0 };
+    refreshView();
+  },
   'range-clear': el => { const st = U.f[el.dataset.ctx]; if (st.range) delete st.range[el.dataset.k]; refreshView(); },
   'street-one': el => updateStreetPrices([el.dataset.id]),
   'street-all': () => {
@@ -2276,7 +2428,24 @@ const ACTS = {
   'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').textContent = RS.qty; },
   'rs-skip': () => saveSheet(false),
   'rs-save': () => saveSheet(true),
-  'rs-delete': () => deleteEntry(),
+  'rs-delete': () => startDelete(),
+  'del-cancel': () => { RS.del = null; renderSheet(); },
+  'del-only': () => deleteEntryOnly(),
+  'del-confirm': () => confirmDelete(),
+  'del-loc': el => {
+    const w = wineById(RS.wineId);
+    const e = w.stock.filter(x => lc(x.loc) === lc(el.dataset.v)).sort((x, y) => y.n - x.n)[0];
+    Object.assign(RS.del, { loc: el.dataset.v, shelf: e ? shelfVal(e.shelf) : null, pos: e ? str(e.pos) : '' });
+    renderSheet();
+  },
+  'del-shelf': el => {
+    const v = clamp((RS.del.shelf || 0) + Number(el.dataset.d), 0, 99);
+    RS.del.shelf = v === 0 ? null : v;
+    $('#del-shelf').textContent = v === 0 ? 'None' : v;
+    const h = $('#del-hint');
+    if (h) h.textContent = delHint();
+  },
+  'del-place': el => { RS.del.i = Number(el.dataset.i); renderSheet(); },
   'record-add': () => { if (D && D.id) openAddSheet(D.id, null, 'record'); },
 
   'cancel-form': () => {
@@ -2404,6 +2573,8 @@ const INPUTS = {
     if (h) h.textContent = placeHint();
   },
   rng: el => onRange(el),
+  rtmin: el => onRatingMin(el),
+  'del-pos': el => { if (!RS || !RS.del) return; RS.del.pos = el.value; const h = $('#del-hint'); if (h) h.textContent = delHint(); },
   'st-pos': el => { if (D) D.stock[Number(el.dataset.i)].pos = el.value; },
   people: el => {
     const P = PK();
