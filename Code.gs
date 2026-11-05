@@ -224,7 +224,13 @@ function doGet() {
   return json_({ ok: true, service: 'wine-cellar', version: API_VERSION, hint: 'Use POST from the Wine Cellar app.' });
 }
 
+var T0_ = Date.now();
+// Google stops a web app call after 6 minutes; AI work stops starting new requests well before that
+var TIME_SOFT = 150000, TIME_HARD = 230000;
+function elapsed_() { return Date.now() - T0_; }
+
 function doPost(e) {
+  T0_ = Date.now();
   var req;
   try {
     req = JSON.parse(e.postData.contents);
@@ -1251,6 +1257,7 @@ function actionConsultant_(req) {
   var verified = [], over = [];
   var label = function (p) { return [p.producer, p.name, p.vintage].filter(String).join(' '); };
   while (verified.length < 6 && queue.length) {
+    if (elapsed_() > TIME_HARD || (verified.length >= 3 && elapsed_() > TIME_SOFT)) break;
     var wave = queue.splice(0, 6 - verified.length);
     var mem = offerMemory_(wave.map(function (p) { return offerKey_(label(p)); }), true);
     var search = wave.filter(function (p) { return !mem[offerKey_(label(p))]; });
@@ -1341,7 +1348,7 @@ function callClaudeMany_(bodies) {
   var state = bodies.map(function (b) { return { body: b, messages: b.messages.slice(), out: null, done: false }; });
   for (var turn = 0; turn < 3; turn++) {
     var open = state.filter(function (x) { return !x.done; });
-    if (!open.length) break;
+    if (!open.length || (turn > 0 && elapsed_() > TIME_HARD)) break;
     var replies = UrlFetchApp.fetchAll(open.map(function (x) {
       return { url: 'https://api.anthropic.com/v1/messages', method: 'post', contentType: 'application/json', headers: headers,
         payload: JSON.stringify(Object.assign({}, x.body, { messages: x.messages })), muteHttpExceptions: true };

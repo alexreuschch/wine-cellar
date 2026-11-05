@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.16.1';
+const APP_VERSION = '2.16.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -502,9 +502,11 @@ function busy(on, label = 'Saving…') {
 async function api(action, payload = {}, cfg = CFG) {
   if (!cfg) throw new Error('Not connected');
   let res;
+  const t0 = Date.now();
   try {
     res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify(Object.assign({ token: cfg.token, action }, payload)) });
   } catch (e) {
+    if (Date.now() - t0 > 40000) throw new Error('The answer took too long or the app was closed in the meantime. Keep the app open while the AI works and try again.');
     throw new Error('Could not reach your script. Check your connection and the script URL.');
   }
   let out;
