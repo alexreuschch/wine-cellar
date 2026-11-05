@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.7.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -580,7 +580,7 @@ function afterRender(r) {
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
-  if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); if (D.ai) updateBanner(); }
+  if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); document.querySelectorAll('textarea.autosize').forEach(autosize); if (D.ai) updateBanner(); }
 }
 
 /* ------------------------------------------------------------ view: cellar */
@@ -1118,7 +1118,7 @@ function valueHtml(w) {
   const cls = a === null || s === null || a === s ? '' : a < s ? 'up' : 'down';
   const pct = a !== null && a > 0 && s !== null ? Math.round((s - a) / a * 100) : null;
   const rows = infoRow('Ø Cost', `<b class="${cls}">${a !== null ? money(a) : 'N/A'}</b>`)
-    + infoRow('Street', `<b>${s !== null ? money(s) : 'N/A'}</b>`, pct !== null ? `${pct > 0 ? '+' : ''}${pct}% vs. purchase` : '')
+    + infoRow('Street Price', `<b>${s !== null ? money(s) : 'N/A'}</b>`, pct !== null ? `${pct > 0 ? '+' : ''}${pct}% vs. purchase` : '')
     + (s !== null && w.count > 0 ? infoRow(`Total Street Value of ${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}`, `<b>${money(s * w.count)}</b>`) : '');
   return `<section>${secHead(ICON.cash, 'Value')}<div class="info-list">${rows}</div>${w.street ? `<p class="muted tiny" style="margin:0">${esc(streetSource(w.street))}</p>` : ''}</section>`;
 }
@@ -1165,7 +1165,7 @@ function streetSource(st) {
   if (!st) return '';
   const when = st.date ? fmtDate(st.date) : '';
   if (st.src === 'Manual') return `Street price entered by you${when ? ` on ${when}` : ''}.`;
-  return `Street is the median of current offers${st.src ? ` at ${st.src}` : ''}${when ? `, checked ${when}` : ''}.`;
+  return `The street price is the median of current offers${st.src ? ` at ${st.src}` : ''}${when ? `, checked ${when}` : ''}.`;
 }
 
 function retailerLink(name) {
@@ -1198,19 +1198,19 @@ function viewWine(id) {
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type].filter(Boolean).join(' · ');
-  return `<main class="screen">
+  return `<main class="screen detail">
     <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
     <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${esc(meta)}</p></div>
     ${stockHtml(w)}
     <section>
-      <div class="rating-head"><h2>My rating</h2>${w.myRating === null ? `<a class="small" href="${editHref}">Rate in Edit</a>` : `<span class="rating-val">${w.myRating}%</span>`}</div>
-      ${w.myRating === null ? '' : segsHtml(w.myRating, 22, 'lg')}
-    </section>
-    <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
       ${p ? `${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div><p class="muted tiny" style="margin:0">${windowText(w)}</p>`
         : `<p class="muted small" style="margin:0">No drinking window set yet. <a href="${editHref}">Add one</a></p>`}
+    </section>
+    <section>
+      <div class="rating-head"><h2>My rating</h2>${w.myRating === null ? `<a class="small" href="${editHref}">Rate in Edit</a>` : `<span class="rating-val">${w.myRating}%</span>`}</div>
+      ${w.myRating === null ? '' : segsHtml(w.myRating, 22, 'lg')}
     </section>
     <section>
       <h2>External ratings</h2>
@@ -1240,6 +1240,12 @@ function viewWine(id) {
 const fmtDate = s => { const d = parseISO(s); return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : s; };
 
 /* ------------------------------------------------------------ my rating (edit form only) */
+
+function autosize(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight + 2) + 'px';
+}
 
 function setupRating() {
   const bar = $('#rating-bar');
@@ -1892,17 +1898,11 @@ function formBody() {
       ${field('Drink until', 'drinkUntil', { num: true })}
       ${field('Peak from', 'peakFrom', { num: true })}
       ${field('Peak until', 'peakUntil', { num: true })}
-      <label class="field full">Taste<textarea name="taste" data-input="field" rows="3">${esc(f.taste)}</textarea></label>
+      <label class="field full">Taste<textarea name="taste" class="autosize" data-input="field" rows="5">${esc(f.taste)}</textarea></label>
       <div class="field full">Taste tags<div id="tg-tasteTags">${tagEditorHtml('tasteTags')}</div></div>
     </div>
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
-    <div id="stock-box">${stockEditorHtml()}</div>
-    ${D.mode === 'add' ? acquisitionBox() : `<div class="box"><span class="box-title">Purchases</span><div id="purchases-box">${purchasesHtml(wineById(D.id) || { id: D.id }, true)}</div>
-      <button class="btn dashed" data-act="record-add">Add purchase record</button>
-      <p class="muted tiny" style="margin:0">Tap a purchase to edit it or to set the retailer's website.</p></div>`}
-    ${streetBox()}
-    ${D.mode === 'edit' ? `<div class="box" id="offer-box">${offerBoxHtml()}</div>` : ''}
     <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
       <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
@@ -1913,6 +1913,12 @@ function formBody() {
       ${D.ratings.length ? `<div class="rec-list">${D.ratings.map((r, i) => `<div class="rec-row"><button class="rec-btn" data-act="ers-open" data-i="${i}" aria-label="Edit ${esc(r.sys)} rating"><span class="rec-text"><span class="rec-main">${esc(r.sys)}</span></span><span class="rate-val">${str(r.score).trim() === '' ? '<span class="muted">No score</span>' : ratingVisual({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })}</span>${ICON.chevron}</button><button class="icon-btn" data-act="rrm" data-i="${i}" aria-label="Remove ${esc(r.sys)} rating">${ICON.x}</button></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">No external ratings yet.</p>'}
       ${D.ratings.length < SYSTEMS.length ? '<button class="btn dashed" data-act="ers-open" data-i="-1">Add rating</button>' : ''}
     </div>
+    <div id="stock-box">${stockEditorHtml()}</div>
+    ${D.mode === 'add' ? acquisitionBox() : `<div class="box"><span class="box-title">Purchases</span><div id="purchases-box">${purchasesHtml(wineById(D.id) || { id: D.id }, true)}</div>
+      <button class="btn dashed" data-act="record-add">Add purchase record</button>
+      <p class="muted tiny" style="margin:0">Tap a purchase to edit it or to set the retailer's website.</p></div>`}
+    ${streetBox()}
+    ${D.mode === 'edit' ? `<div class="box" id="offer-box">${offerBoxHtml()}</div>` : ''}
     <button class="btn primary big block" data-act="save-wine">Save wine</button>
     ${D.mode === 'edit' ? `<button class="btn danger block" data-act="delete-wine">Delete wine</button>` : ''}`;
 }
@@ -2277,7 +2283,7 @@ function applyAnalysis(draft, r) {
     draft.fields[key] = v;
     if (D === draft) {
       if (key === 'pairings' || key === 'tasteTags') renderTagBox(key);
-      else { const el = document.querySelector(`[name="${key}"]`); if (el) el.value = v; }
+      else { const el = document.querySelector(`[name="${key}"]`); if (el) { el.value = v; if (el.classList.contains('autosize')) autosize(el); } }
     }
   };
   ['producer', 'name', 'vintage', 'region', 'grapes', 'taste', 'tasteTags', 'pairings', 'drinkFrom', 'drinkUntil', 'peakFrom', 'peakUntil'].forEach(k => set(k, r[k]));
@@ -2879,7 +2885,7 @@ const INPUTS = {
     if (l) l.innerHTML = journalList();
     if (f) f.innerHTML = facetChipsHtml('journal');
   },
-  field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
+  field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } if (el.classList.contains('autosize')) autosize(el); },
   rscore: el => { if (D) D.ratings[Number(el.dataset.i)].score = el.value; }
 };
 
