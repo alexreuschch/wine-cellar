@@ -6,11 +6,14 @@
 
 /* ------------------------------------------------------------ AI sommelier */
 
-const SOMM = { thread: [], draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null };
+const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null };
+const sommThread = () => SOMM.threads[SOMM.mode];
 const SOMM_EXAMPLES = ['I feel like a fresh white wine tonight', 'Steak with salad, which wine fits?', 'Cheese fondue for four people', 'Something special for a birthday dinner under CHF 80', 'Which bottles should I open this month?'];
+const CHECK_EXAMPLES = ['Is a Barolo 2019 for CHF 60 a good deal for me?', 'Gantenbein Pinot Noir 2020, CHF 45 in the shop', 'Château Musar 2016 on the wine list for CHF 95'];
 
-/* how to use the sommelier, shown before the first question and again with Tips */
+/* how to use the sommelier for the cellar, shown before the first question and again with Tips */
 function sommGuideHtml() {
+  if (SOMM.mode === 'check') return checkGuideHtml();
   return `<div class="somm-guide">
     <h3>How to ask</h3>
     <ul>
@@ -22,58 +25,95 @@ function sommGuideHtml() {
     </ul>
     <h3>Speak or type</h3>
     <p>Tap the microphone and speak. Your words appear in the field, so you can correct them before you tap send. Nothing is sent without you.</p>
-    <h3>Photo of a label</h3>
-    <p>In a shop or restaurant, tap the camera and photograph the label. The sommelier tells you how well the wine fits your taste, whether the price is good value and which wines in your cellar are similar.</p>
     <h3>What it knows</h3>
     <p>Your wines in stock with their drinking window, ratings, storage place and food pairings, and your recent journal with people, food and favorites. It suggests up to three wines from your cellar. Tap a wine to open it. If nothing fits, it tells you what to buy.</p>
     <p class="tiny muted">Answers come from AI and are suggestions. Each question costs a few cents.</p>
   </div>`;
 }
 
+/* how to check a wine that is not in the cellar */
+function checkGuideHtml() {
+  return `<div class="somm-guide">
+    <h3>How it works</h3>
+    <ul>
+      <li><b>Photograph the label</b> or type the name, producer and vintage.</li>
+      <li><b>Add the price</b> you see, for example “CHF 39 in the shop” or “CHF 85 on the wine list”, and the price is judged too.</li>
+      <li><b>Ask a follow-up</b>, for example “what would I eat with it?” or “is the 2019 better?”.</li>
+    </ul>
+    <h3>What you get</h3>
+    <p>How well the wine fits your taste in percent, based on your ratings, favorites and journal. Its style, whether the price is good value, and which wines in your cellar are similar, so you see if you already have something like it.</p>
+    <p class="tiny muted">Answers come from AI and are estimates. Each check costs a few cents.</p>
+  </div>`;
+}
+
 function sommAnswerHtml(t) {
+  const check = t.mode === 'check';
   if (t.error) return `<div class="somm-a error"><p>${esc(t.error)}</p><button class="link-btn" data-act="somm-retry">${ICON.refresh}Try again</button></div>`;
-  if (!t.a) return '<div class="somm-a"><p class="somm-wait">Looking through your cellar<span>.</span><span>.</span><span>.</span></p></div>';
+  if (!t.a) return `<div class="somm-a"><p class="somm-wait">${check ? 'Looking at this wine' : 'Looking through your cellar'}<span>.</span><span>.</span><span>.</span></p></div>`;
   const picks = (t.a.picks || []).map(p => {
     const w = wineById(p.id);
     if (!w) return '';
     const where = w.stock.map(e => placeLabel(e)).join(' · ');
     return `<div class="somm-pick"><a class="somm-pick-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w, true)}<span class="somm-pick-text">
       <span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}</span>
-      <span class="row-sub">${flagOf(w)}${esc(w.producer)}${w.count ? ` · ${w.count} btl` : ''}</span>
-      ${where ? `<span class="tiny muted ellipsis">${esc(where)}</span>` : ''}
-      ${p.why ? `<span class="somm-why">${esc(p.why)}</span>` : ''}</span>${pill(w)}</a>
-      ${w.count ? `<button class="somm-take" data-act="minus" data-id="${esc(w.id)}">${ICON.minus}Take a bottle</button>` : ''}</div>`;
+      <span class="row-sub">${flagOf(w)}${esc(w.producer)}${w.count ? ` · ${w.count} btl` : ''}${check && w.myRating !== null ? ` · rated ${w.myRating}%` : ''}</span>
+      ${where && !check ? `<span class="tiny muted ellipsis">${esc(where)}</span>` : ''}
+      ${p.why ? `<span class="somm-why">${esc(p.why)}</span>` : ''}</span>${check ? '' : pill(w)}</a>
+      ${w.count && !check ? `<button class="somm-take" data-act="minus" data-id="${esc(w.id)}">${ICON.minus}Take a bottle</button>` : ''}</div>`;
   }).join('');
-  const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${t.a.fit !== null && t.a.fit !== undefined ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
-    ${t.a.fit !== null && t.a.fit !== undefined ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
-  return `<div class="somm-a">${fit}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${picks ? `${t.a.wine ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
+  const hasFit = t.a.fit !== null && t.a.fit !== undefined;
+  const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${hasFit ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
+    ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
+  return `<div class="somm-a">${fit}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
 
-function sommThreadHtml() {
-  if (!SOMM.thread.length) {
-    return `<div class="somm-intro"><p class="muted">Tell me what you feel like, what you are eating or what the occasion is. I suggest wines from your cellar. Tap an example to try it.</p>
-      <div class="somm-examples"><button class="somm-ex" data-act="somm-camera">${ICON.camera}<span>Will I like this wine? Take a photo of the label</span></button>${SOMM_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
-      ${sommGuideHtml()}</div>`;
+function sommIntroHtml() {
+  if (SOMM.mode === 'check') {
+    return `<div class="somm-intro">
+      <div class="check-hero">
+        <p style="margin:0">For wines that are <b>not in your cellar</b>: in a shop, at a restaurant or at a friend's. Photograph the label or type the name, and see if it suits you.</p>
+        <label class="btn primary big block">${ICON.camera}Take a photo of the label<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>
+        <label class="btn block">Choose from gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label>
+      </div>
+      <p class="small muted" style="margin:0">Or type it, for example:</p>
+      <div class="somm-examples">${CHECK_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
+      ${checkGuideHtml()}</div>`;
   }
-  return (SOMM.tips ? sommGuideHtml() : '') + SOMM.thread.map(t => `<div class="somm-q">${t.photo ? `<img class="somm-q-photo" src="${esc(t.photo)}" alt="Label photo">` : ''}${t.q ? esc(t.q) : ''}</div>${sommAnswerHtml(t)}`).join('');
+  return `<div class="somm-intro"><p class="muted">Tell me what you feel like, what you are eating or what the occasion is. I suggest wines from your cellar. Tap an example to try it.</p>
+    <div class="somm-examples">${SOMM_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
+    ${sommGuideHtml()}
+    <button class="somm-switch" data-act="somm-mode" data-v="check">${ICON.camera}<span>Looking at a wine in a shop or restaurant? <b>Will I like it?</b></span></button></div>`;
 }
 
-const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${SOMM.thread.length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">New question</button></div>` : ''}`;
+function sommThreadHtml() {
+  const th = sommThread();
+  if (!th.length) return sommIntroHtml();
+  return (SOMM.tips ? sommGuideHtml() : '') + th.map(t => `<div class="somm-q">${t.photo ? `<img class="somm-q-photo" src="${esc(t.photo)}" alt="Label photo">` : ''}${t.q ? esc(t.q) : ''}</div>${sommAnswerHtml(t)}`).join('');
+}
+
+const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
+const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'check' ? (SOMM.photo ? 'Add the price or a question, or just send' : 'Wine name, vintage and price') : 'What do you feel like?');
+const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop or restaurant.' : 'Advice from the wines in your cellar.');
 
 function viewSommelier() {
-  const old = S.version && S.version < 11;
+  const r = route();
+  if (r.id === 'check' || r.id === 'cellar') SOMM.mode = r.id;
+  const old = S.version && S.version < 14;
+  const check = SOMM.mode === 'check';
   return `<main class="screen somm">
     <div class="detail-top" id="somm-top">${sommTopHtml()}</div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
+    <div class="toggle somm-modes"><button class="${check ? '' : 'on'}" data-act="somm-mode" data-v="cellar">${ICON.glass}My cellar</button><button class="${check ? 'on' : ''}" data-act="somm-mode" data-v="check">${ICON.camera}Will I like it?</button></div>
+    <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
   </main>
-  <div class="somm-bar">
+  <div class="somm-bar${check ? ' check' : ''}">
     <div id="somm-photo-box">${sommPhotoHtml()}</div>
     <div class="somm-input${SOMM.listening ? ' listening' : ''}">
-      <label class="somm-cam" aria-label="Photo of a wine label">${ICON.camera}<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>
-      <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${SOMM.listening ? 'Listening…' : SOMM.photo ? 'Ask about this wine, or just send' : 'What do you feel like?'}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
+      ${check ? `<label class="somm-cam" aria-label="Photo of a wine label">${ICON.camera}<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>` : ''}
+      <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${sommPlaceholder()}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
       <button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
       <button class="somm-send" data-act="somm-send" aria-label="Send"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button>
     </div>
@@ -96,20 +136,23 @@ function sommRefresh(scroll) {
   if (box) box.classList.toggle('listening', SOMM.listening);
   const mic = $('.somm-mic');
   if (mic) { mic.classList.toggle('on', SOMM.listening); mic.setAttribute('aria-label', SOMM.listening ? 'Stop listening' : 'Speak'); }
-  if (ta) ta.placeholder = SOMM.listening ? 'Listening…' : 'What do you feel like?';
+  if (ta) ta.placeholder = sommPlaceholder();
   if (scroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
-const sommPhotoHtml = () => (SOMM.photo ? `<div class="somm-photo"><img src="${esc(SOMM.photo.thumb)}" alt="Label photo"><span class="small">Label photo attached. Ask about it or just send.</span><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>` : '');
+const sommPhotoHtml = () => (SOMM.photo ? `<div class="somm-photo"><img src="${esc(SOMM.photo.thumb)}" alt="Label photo"><span class="small">Label photo ready. Add the price or a question, or just send.</span><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>` : '');
 
 async function sommAsk(text, photo) {
   const q = str(text).trim();
   const img = photo || SOMM.photo;
   if ((!q && !img) || SOMM.busy) return;
   if (SOMM.listening) sommStopVoice();
-  const history = SOMM.thread.filter(t => t.a).slice(-3).map(t => ({ q: t.q || (t.a.wine ? `Will I like this wine? (label photo of ${t.a.wine})` : 'Will I like this wine?'), a: JSON.stringify(t.a) }));
-  const turn = { q, a: null, error: '', photo: img ? img.thumb : '', img };
-  SOMM.thread.push(turn);
+  const mode = img ? 'check' : SOMM.mode;
+  if (mode !== SOMM.mode) { SOMM.mode = mode; history.replaceState(null, '', '#/sommelier/' + mode); render(); }
+  const th = SOMM.threads[mode];
+  const history = th.filter(t => t.a).slice(-3).map(t => ({ q: t.q || (t.a.wine ? `Will I like this wine? (label photo of ${t.a.wine})` : 'Will I like this wine?'), a: JSON.stringify(t.a) }));
+  const turn = { q, a: null, error: '', photo: img ? img.thumb : '', img, mode };
+  th.push(turn);
   SOMM.photo = null;
   const pb = $('#somm-photo-box');
   if (pb) pb.innerHTML = '';
@@ -119,7 +162,7 @@ async function sommAsk(text, photo) {
   SOMM.tips = false;
   sommRefresh(true);
   try {
-    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null });
+    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode });
   } catch (e) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
   }

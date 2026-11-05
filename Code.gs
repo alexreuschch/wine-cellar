@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 13;
+var API_VERSION = 14;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
 
 var WINE_COLS = [
@@ -1049,8 +1049,20 @@ var SOMMELIER_RULES = [
   '3. Use the journal to understand the taste of the owner and the people mentioned.',
   '4. If nothing in the cellar fits well, say so honestly and suggest in "buy" what style or wine to buy instead. Otherwise leave "buy" empty.',
   '5. Answer in the language of the question. Keep "answer" to two to four sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty", "wine": "", "fit": null}.',
-  '7. If the owner sends a photo of a wine label, for example in a shop or restaurant: identify the wine and put producer, name and vintage in "wine". Judge how well it fits the taste of the owner, based on their ratings, favorites and journal, as "fit" from 0 to 100. In "answer" explain the fit, the style and whether the typical price is good value. As "picks", give up to 3 similar wines from the cellar for comparison, and say in "why" how each compares. Leave "buy" empty. Without a photo, keep "wine" empty and "fit" null.'
+  '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty"}.'
+].join('\n');
+
+var CHECK_RULES = [
+  'You are a warm, knowledgeable sommelier. The owner of a private cellar looks at a wine that is NOT in their cellar, for example in a shop, at a restaurant or at a friend, and wants to know if they will like it.',
+  'You get a photo of the label or a description, maybe with a price, plus the cellar, the finished wines with ratings and the journal of the owner.',
+  'Rules:',
+  '1. Identify the wine: producer, name and vintage. Put them in "wine". If you are unsure, say what you think it is.',
+  '2. Judge how well it fits the taste of the owner, based on the wines they rated highly or low, their favorites and what they drink often. Give "fit" from 0 to 100.',
+  '3. In "answer" explain the style, why it fits or not, and whether the price is good value: the price the owner mentions, or else the typical shop price in their currency. In a restaurant, wine list prices are usually two to three times the shop price.',
+  '4. Say whether the cellar already holds similar wines in enough bottles.',
+  '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Fewer is fine.',
+  '6. Answer in the language of the question; if there is no question, in English. Keep "answer" to three to five sentences and each "why" to one sentence. Do not use dashes as punctuation.',
+  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}]}.'
 ].join('\n');
 
 /** One compact line per wine in stock, plus recent journal entries, as context for the sommelier. */
@@ -1095,7 +1107,11 @@ function actionSommelier_(req) {
   if (image && image.length > 1500000) throw new Error('The photo is too large');
   if (!q && image) q = 'Will I like this wine?';
   if (!q) throw new Error('Ask a question first');
+  var check = req.mode === 'check' || !!image;
   var ctx = cellarContext_();
+  var system = check
+    ? CHECK_RULES + '\n\nThe owner uses ' + settings_().currency + '.\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
+    : SOMMELIER_RULES + '\n\n' + ctx.text;
   var messages = [];
   (req.history || []).slice(-6).forEach(function (h) {
     if (!h || !h.q || !h.a) return;
@@ -1108,7 +1124,7 @@ function actionSommelier_(req) {
   var res = callClaude_({
     model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
     max_tokens: 1400,
-    system: SOMMELIER_RULES + '\n\n' + ctx.text,
+    system: system,
     messages: messages
   });
   var d = parseJson_(textOf_(res), 'The sommelier gave no answer. Please try again.');
@@ -1117,7 +1133,7 @@ function actionSommelier_(req) {
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)
     .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
   var fit = d.fit === null || d.fit === undefined || d.fit === '' || isNaN(Number(d.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(d.fit))));
-  return { answer: String(d.answer || ''), picks: picks, buy: String(d.buy || ''), wine: image ? String(d.wine || '') : '', fit: image ? fit : null };
+  return { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
 }
 
 // ---------------------------------------------------------------- AI consultant and wishlist

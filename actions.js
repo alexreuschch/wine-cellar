@@ -138,12 +138,12 @@ const ACTS = {
   'somm-example': el => sommAsk(el.dataset.v),
   'somm-mic': () => { if (SOMM.listening) { sommStopVoice(); sommRefresh(false); } else sommStartVoice(); },
   'somm-tips': () => { SOMM.tips = !SOMM.tips; render(); },
-  'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.thread = []; SOMM.draft = ''; SOMM.voiced = false; render(); },
+  'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.threads[SOMM.mode] = []; SOMM.draft = ''; SOMM.voiced = false; SOMM.photo = null; render(); },
+  'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = el.dataset.v === 'check' ? 'check' : 'cellar'; SOMM.tips = false; SOMM.photo = null; history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
   'dup-keep': () => { const w = findDuplicate(D.fields); if (w) D.dupIgnore = w.id; renderDup(); },
   'dup-add': el => { const id = el.dataset.id; D = null; go('#/wine/' + encodeURIComponent(id)); setTimeout(() => openAddSheet(id), 200); },
-  'somm-retry': () => { const last = SOMM.thread.pop(); if (last) sommAsk(last.q, last.img); },
+  'somm-retry': () => { const last = sommThread().pop(); if (last) sommAsk(last.q, last.img); },
   'somm-photo-rm': () => { SOMM.photo = null; const pb = $('#somm-photo-box'); if (pb) pb.innerHTML = ''; },
-  'somm-camera': () => { const i = document.querySelector('[data-change="somm-photo"]'); if (i) i.click(); },
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
 
   rate: el => {
@@ -425,7 +425,7 @@ const CHANGES = {
       const pb = $('#somm-photo-box');
       if (pb) pb.innerHTML = sommPhotoHtml();
       const ta = $('#somm-text');
-      if (ta) ta.placeholder = 'Ask about this wine, or just send';
+      if (ta) { ta.placeholder = sommPlaceholder(); ta.focus(); }
     } catch (e) { toast(e.message); }
     el.value = '';
   },
