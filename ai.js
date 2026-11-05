@@ -7,13 +7,17 @@
 /* ------------------------------------------------------------ AI sommelier */
 
 const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null };
-const sommThread = () => SOMM.threads[SOMM.mode];
+const sommThread = () => SOMM.threads[SOMM.mode] || [];
+/* wine list in a restaurant: photos of the pages, price range and food, then three picks */
+const WL = { pages: [], min: '', max: '', result: null, error: '', busy: false };
+const WL_KIND = { range: ['Best in your range', 'safe'], value: ['Best value', 'value'], gem: ['Hidden gem', 'disc'] };
 const SOMM_EXAMPLES = ['I feel like a fresh white wine tonight', 'Steak with salad, which wine fits?', 'Cheese fondue for four people', 'Something special for a birthday dinner under CHF 80', 'Which bottles should I open this month?'];
 const CHECK_EXAMPLES = ['Is a Barolo 2019 for CHF 60 a good deal for me?', 'Gantenbein Pinot Noir 2020, CHF 45 in the shop', 'Château Musar 2016 on the wine list for CHF 95'];
 
 /* how to use the sommelier for the cellar, shown before the first question and again with Tips */
 function sommGuideHtml() {
   if (SOMM.mode === 'check') return checkGuideHtml();
+  if (SOMM.mode === 'list') return listGuideHtml();
   return `<div class="somm-guide">
     <h3>How to ask</h3>
     <ul>
@@ -87,37 +91,39 @@ function sommIntroHtml() {
 }
 
 function sommThreadHtml() {
+  if (SOMM.mode === 'list') return listHtml();
   const th = sommThread();
   if (!th.length) return sommIntroHtml();
   return (SOMM.tips ? sommGuideHtml() : '') + th.map(t => `<div class="somm-q">${t.photo ? `<img class="somm-q-photo" src="${esc(t.photo)}" alt="Label photo">` : ''}${t.q ? esc(t.q) : ''}</div>${sommAnswerHtml(t)}`).join('');
 }
 
-const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
-const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'check' ? (SOMM.photo ? 'Add the price or a question, or just send' : 'Wine name, vintage and price') : 'What do you feel like?');
-const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop or restaurant.' : 'Advice from the wines in your cellar.');
+const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${SOMM.mode === 'list' ? (WL.pages.length || WL.result ? `<button class="btn ghost" style="height:40px" data-act="wl-clear">New wine list</button>` : '') : sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
+const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? (SOMM.photo ? 'Add the price or a question, or just send' : 'Wine name, vintage and price') : 'What do you feel like?');
+const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop or restaurant.' : SOMM.mode === 'list' ? 'Find the best wines on a restaurant wine list.' : 'Advice from the wines in your cellar.');
 
 function viewSommelier() {
   const r = route();
-  if (r.id === 'check' || r.id === 'cellar') SOMM.mode = r.id;
-  const old = S.version && S.version < 14;
-  const check = SOMM.mode === 'check';
+  if (r.id === 'check' || r.id === 'cellar' || r.id === 'list') SOMM.mode = r.id;
+  const old = S.version && S.version < (SOMM.mode === 'list' ? 16 : 14);
+  const check = SOMM.mode === 'check', list = SOMM.mode === 'list';
+  const modeBtn = (m, ic, label) => `<button class="${SOMM.mode === m ? 'on' : ''}" data-act="somm-mode" data-v="${m}">${ic}${label}</button>`;
   return `<main class="screen somm">
     <div class="detail-top" id="somm-top">${sommTopHtml()}</div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
-    <div class="toggle somm-modes"><button class="${check ? '' : 'on'}" data-act="somm-mode" data-v="cellar">${ICON.glass}My cellar</button><button class="${check ? 'on' : ''}" data-act="somm-mode" data-v="check">${ICON.camera}Will I like it?</button></div>
+    <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.book, 'Wine list')}</div>
     <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
   </main>
-  <div class="somm-bar${check ? ' check' : ''}">
+  <div class="somm-bar${check ? ' check' : ''}${list ? ' list' : ''}">
     <div id="somm-photo-box">${sommPhotoHtml()}</div>
     <div class="somm-input${SOMM.listening ? ' listening' : ''}">
       ${check ? `<label class="somm-cam" aria-label="Photo of a wine label">${ICON.camera}<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>` : ''}
       <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${sommPlaceholder()}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
       <button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
-      <button class="somm-send" data-act="somm-send" aria-label="Send"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button>
+      <button class="somm-send" data-act="somm-send" aria-label="${list ? 'Find the best wines' : 'Send'}"${SOMM.busy || (list && (WL.busy || !WL.pages.length)) ? ' disabled' : ''}>${ICON.send}</button>
     </div>
-    <p id="somm-hint" class="tiny muted somm-hint">${SOMM.listening ? 'Speak now. Tap the microphone again to stop.' : SOMM.voiced ? 'Check the text and correct it if needed, then tap send.' : ''}</p>
+    <p id="somm-hint" class="tiny muted somm-hint">${sommHint()}</p>
   </div>`;
 }
 
@@ -129,15 +135,129 @@ function sommRefresh(scroll) {
   const ta = $('#somm-text');
   if (ta && ta.value !== SOMM.draft) { ta.value = SOMM.draft; autosize(ta); }
   const send = $('.somm-send');
-  if (send) send.disabled = SOMM.busy;
+  if (send) send.disabled = SOMM.busy || (SOMM.mode === 'list' && (WL.busy || !WL.pages.length));
   const hint = $('#somm-hint');
-  if (hint) hint.textContent = SOMM.listening ? 'Speak now. Tap the microphone again to stop.' : SOMM.voiced ? 'Check the text and correct it if needed, then tap send.' : '';
+  if (hint) hint.textContent = sommHint();
   const box = $('.somm-input');
   if (box) box.classList.toggle('listening', SOMM.listening);
   const mic = $('.somm-mic');
   if (mic) { mic.classList.toggle('on', SOMM.listening); mic.setAttribute('aria-label', SOMM.listening ? 'Stop listening' : 'Speak'); }
   if (ta) ta.placeholder = sommPlaceholder();
   if (scroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+const sommHint = () => (SOMM.listening ? 'Speak now. Tap the microphone again to stop.' : SOMM.voiced ? (SOMM.mode === 'list' ? 'Check the text and correct it if needed, then tap Find the best wines.' : 'Check the text and correct it if needed, then tap send.') : '');
+
+function listGuideHtml() {
+  return `<div class="somm-guide">
+    <h3>How it works</h3>
+    <ul>
+      <li><b>Photograph the pages</b> of the wine list you want to compare, one after the other, up to 10. Hold the phone straight and make sure the prices are sharp.</li>
+      <li><b>Set your price range</b> per bottle, in the currency of the list. You can leave it empty.</li>
+      <li><b>Say what you eat</b> in the field at the bottom, by typing or with the microphone. Check the text before you start.</li>
+    </ul>
+    <h3>What you get</h3>
+    <p>Three wines from the list: the best one in your price range, the best value for money, and the hidden gem that is priced too low compared with the rest of the list. Each with the price on the list, the estimated shop price, the markup of the restaurant and how well it fits your taste.</p>
+    <p class="tiny muted">Shop prices and quality are AI estimates without a web search. One analysis costs about 5 to 10 cents. The photos are not stored.</p>
+  </div>`;
+}
+
+function listPickHtml(p, i, cur0) {
+  const [label, cls] = WL_KIND[p.kind] || ['Pick', 'disc'];
+  const saved = S.wishlist.some(x => wishKey(x) === wishKey(p));
+  const avg = WL.result.avgMarkup;
+  // prices stay in the currency of the wine list
+  const price = v => (v ? `${cur0} ${fmtNum(v, v % 1 ? 2 : 0)}` : '');
+  return `<div class="cons-card wl-card">
+    <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${cls}">${esc(label)}</span>${p.page ? `<span class="small muted">page ${p.page}</span>` : ''}</div>
+    <div><p class="cons-title">${esc(wishTitle(p))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(p) ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</p></div>
+    <div class="wl-prices">
+      <div><span>On the list</span><b>${esc(price(p.listPrice) || 'N/A')}</b></div>
+      <div><span>Shop about</span><b>${esc(price(p.shopPrice) || 'N/A')}</b></div>
+      <div><span>Markup</span><b class="${p.markup && avg ? (p.markup < avg ? 'up' : p.markup > avg * 1.1 ? 'down' : '') : ''}">${p.markup ? `${fmtNum(p.markup, 1)}×` : 'N/A'}</b>${avg ? `<small>list ${fmtNum(avg, 1)}×</small>` : ''}</div>
+    </div>
+    ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
+    ${p.food ? `<p class="small cons-value" style="margin:0">${ICON.glass}<span>${esc(p.food)}</span></p>` : ''}
+    ${p.fit !== null && p.fit !== undefined ? `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${p.fit}%</b></div>${segsHtml(p.fit, 12)}</div>` : ''}
+    <div class="cons-actions"><button class="link-btn" data-act="wl-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
+  </div>`;
+}
+
+function listHtml() {
+  const res = WL.result;
+  const cur0 = res && res.currency ? res.currency : cur();
+  const pages = WL.pages.map((pg, i) => `<div class="wl-page"><img src="${esc(pg.thumb)}" alt="Page ${i + 1}"><span>${i + 1}</span><button class="icon-btn" data-act="wl-page-rm" data-i="${i}" aria-label="Remove page ${i + 1}"${WL.busy ? ' disabled' : ''}>${ICON.x}</button></div>`).join('');
+  const full = WL.pages.length >= 10;
+  const result = WL.busy
+    ? `<div class="somm-a"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'} and comparing the wines<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes about half a minute. Keep the app open.</p></div>`
+    : WL.error ? `<div class="somm-a error"><p>${esc(WL.error)}</p></div>`
+    : res ? `<div class="wl-result">
+        <p class="small muted" style="margin:0">${res.count ? `${res.count} wines read from ${res.pages} ${res.pages === 1 ? 'page' : 'pages'}` : `${res.pages} ${res.pages === 1 ? 'page' : 'pages'} read`}${res.avgMarkup ? ` · average markup about ${fmtNum(res.avgMarkup, 1)}×` : ''}${res.food ? ` · food: ${esc(res.food)}` : ''}</p>
+        ${res.picks.map((p, i) => listPickHtml(p, i, cur0)).join('')}
+        ${res.note ? `<p class="small" style="margin:0">${esc(res.note)}</p>` : ''}
+        <p class="tiny muted" style="margin:0">Shop prices and quality are AI estimates. Change the range or the food below and analyze again, or start a new wine list.</p></div>` : '';
+  const setup = `<section class="wl-setup">
+      <div class="sec-head"><h2>Pages</h2><span class="small muted">${WL.pages.length} of 10</span></div>
+      ${WL.pages.length ? `<div class="wl-pages">${pages}</div>` : '<p class="small muted" style="margin:0">Photograph the pages of the wine list you want to compare, one after the other.</p>'}
+      ${full ? '' : `<label class="btn ${WL.pages.length ? '' : 'primary big '}block">${ICON.camera}${WL.pages.length ? 'Add page' : 'Take a photo of the first page'}<input type="file" accept="image/*" capture="environment" data-change="wl-photo" hidden></label>
+      <label class="btn ghost block">Choose from gallery<input type="file" accept="image/*" multiple data-change="wl-photo" hidden></label>`}
+      <div class="sec-head" style="margin-top:6px"><h2>Price per bottle</h2><span class="small muted">in the currency of the list</span></div>
+      <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="Any" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="Any" value="${esc(WL.max)}"></label></div>
+      <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
+      <button class="btn accent big block" data-act="wl-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}${res ? 'Analyze again' : 'Find the best wines'}</button>
+    </section>`;
+  return `${result}${setup}${res || WL.busy ? '' : listGuideHtml()}`;
+}
+
+async function listAnalyze() {
+  if (WL.busy || !WL.pages.length) { if (!WL.pages.length) toast('Take a photo of at least one page first.'); return; }
+  if (SOMM.listening) sommStopVoice();
+  const ta = $('#somm-text');
+  const food = str(ta ? ta.value : SOMM.draft).trim();
+  WL.busy = true;
+  WL.error = '';
+  WL.result = null;
+  SOMM.voiced = false;
+  sommRefresh(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  try {
+    WL.result = await api('winelist', { pages: WL.pages.map(pg => pg.b64), min: Number(String(WL.min).replace(',', '.')) || 0, max: Number(String(WL.max).replace(',', '.')) || 0, food });
+  } catch (e) {
+    WL.error = /Unknown action/i.test(e.message) ? 'The wine list needs the new Code.gs. Update the script, then try again.' : aiErr(e.message);
+  }
+  WL.busy = false;
+  sommRefresh(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function listAddPhotos(files) {
+  for (const file of files) {
+    if (WL.pages.length >= 10) { toast('Up to 10 pages at a time.'); break; }
+    try {
+      const c = await loadPhoto(file);
+      WL.pages.push({ b64: toJpeg(c, 1568, 0.82).split(',')[1], thumb: toJpeg(c, 240, 0.7) });
+    } catch (e) { toast(e.message); }
+  }
+  sommRefresh(false);
+}
+
+async function listSave(p) {
+  const res = WL.result;
+  const why = [p.why, p.listPrice ? `On a wine list for ${res.currency || cur()} ${fmtNum(p.listPrice, p.listPrice % 1 ? 2 : 0)}.` : ''].filter(Boolean).join(' ');
+  const x = normWish({ id: newId('x'), producer: p.producer, name: p.name, vintage: p.vintage, type: p.type, region: p.region, grapes: p.grapes,
+    price: p.shopPrice, priceCur: res.currency || cur(), label: 'Wine list', why, createdAt: new Date().toISOString() });
+  S.wishlist.push(x);
+  persist();
+  sommRefresh(false);
+  try {
+    await api('saveWish', { wish: Object.assign({}, x, { offer: '' }) });
+    toast('Saved to your wishlist');
+  } catch (e) {
+    S.wishlist = S.wishlist.filter(w => w.id !== x.id);
+    persist();
+    sommRefresh(false);
+    toast('Not saved: ' + e.message);
+  }
 }
 
 const sommPhotoHtml = () => (SOMM.photo ? `<div class="somm-photo"><img src="${esc(SOMM.photo.thumb)}" alt="Label photo"><span class="small">Label photo ready. Add the price or a question, or just send.</span><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>` : '');

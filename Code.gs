@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 15;
+var API_VERSION = 16;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
 
 var WINE_COLS = [
@@ -56,6 +56,7 @@ var ACTIONS = {
   bestOffer: actionBestOffer_,
   sommelier: actionSommelier_,
   consultant: actionConsultant_,
+  winelist: actionWineList_,
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
@@ -254,7 +255,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant' };
+var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -1175,6 +1176,59 @@ function actionSommelier_(req) {
     .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
   var fit = d.fit === null || d.fit === undefined || d.fit === '' || isNaN(Number(d.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(d.fit))));
   return { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
+}
+
+// ---------------------------------------------------------------- wine list in a restaurant
+
+var WINELIST_RULES = [
+  'You are an independent, experienced sommelier. The owner of a private cellar sits in a restaurant and sends photos of the pages of its wine list.',
+  'Read every wine on all pages with producer, name, vintage and the price per bottle. Use bottle prices (0.75 l). Ignore prices by the glass, and mention half bottles or magnums only if nothing else fits.',
+  'For each wine estimate its quality from your knowledge (critic consensus, reputation of producer and vintage) and its typical shop price in the currency of the list. The markup is the list price divided by that shop price.',
+  'Choose exactly three different wines if the list allows it:',
+  '1. "range": the best wine within the price range of the owner, judged by quality and by how well it suits the food. If no range is given, the best wine on the list overall that is still sensible to order.',
+  '2. "value": the best ratio of quality to list price on the whole list.',
+  '3. "gem": the wine that is priced too low compared with the rest of the list, so its markup is clearly below the average markup of this list, while its quality is good.',
+  'If the owner says what they eat, all three must go well with it. Use the cellar, the finished wines and the ratings of the owner to judge how well each wine fits their taste, as "fit" from 0 to 100, and prefer wines that fit.',
+  '"page" is the number of the photo where the wine appears, starting at 1. Prices are numbers in the currency of the list. Estimates are fine, but never invent a wine that is not on the list.',
+  'Write in English. "why" is one or two sentences, "food" is one short sentence about the pairing or empty, "note" is two to three sentences about the list as a whole. Do not use dashes as punctuation.',
+  'Return ONLY a JSON object, no other text: {"count": 47, "currency": "CHF", "avgMarkup": 2.8, "note": "text", "picks": [{"kind": "range|value|gem", "producer": "", "name": "", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "listPrice": 78, "page": 2, "shopPrice": 45, "markup": 1.7, "fit": 80, "why": "", "food": ""}]}.'
+].join('\n');
+
+/** Photos of a restaurant wine list: the best wine in a price range, the best value and the hidden gem. */
+function actionWineList_(req) {
+  var pages = (Array.isArray(req.pages) ? req.pages : []).map(String).filter(Boolean);
+  if (!pages.length) throw new Error('Take a photo of at least one page of the wine list');
+  if (pages.length > 10) throw new Error('Up to 10 pages at a time');
+  pages.forEach(function (b) { if (b.length > 1500000) throw new Error('A photo is too large'); });
+  var min = Number(req.min) > 0 ? Number(req.min) : 0, max = Number(req.max) > 0 ? Number(req.max) : 0;
+  var food = String(req.food || '').trim().slice(0, 500);
+  var ctx = cellarContext_();
+  var system = WINELIST_RULES + '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.');
+  var ask = 'These are ' + pages.length + ' ' + (pages.length === 1 ? 'page' : 'pages') + ' of the wine list. ' +
+    (min || max ? 'My price range per bottle, in the currency of the list: ' + (min || 0) + ' to ' + (max || 'any') + '. ' : 'I have not set a price range. ') +
+    (food ? 'We eat: ' + food : 'I have not said what we eat.');
+  var content = pages.map(function (b) { return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b } }; });
+  content.push({ type: 'text', text: ask });
+  var res = callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 3000, system: system, messages: [{ role: 'user', content: content }] });
+  var d = parseJson_(textOf_(res), 'The wine list could not be read. Take sharper photos and try again.');
+  var num = function (v) { var n = Number(v); return n > 0 ? Math.round(n * 100) / 100 : null; };
+  var kinds = ['range', 'value', 'gem'];
+  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer) && kinds.indexOf(String(p.kind)) >= 0; })
+    .map(function (p) {
+      var fit = Number(p.fit);
+      return {
+        kind: String(p.kind), producer: String(p.producer || ''), name: String(p.name || ''), vintage: Number(p.vintage) > 1900 ? Number(p.vintage) : '',
+        type: String(p.type || ''), region: String(p.region || ''), grapes: String(p.grapes || ''),
+        listPrice: num(p.listPrice), page: Number(p.page) >= 1 ? Math.round(Number(p.page)) : null, shopPrice: num(p.shopPrice),
+        markup: num(p.markup) || (num(p.listPrice) && num(p.shopPrice) ? Math.round(num(p.listPrice) / num(p.shopPrice) * 10) / 10 : null),
+        fit: isNaN(fit) || p.fit === null || p.fit === '' ? null : Math.max(0, Math.min(100, Math.round(fit))),
+        why: String(p.why || ''), food: String(p.food || '')
+      };
+    })
+    .sort(function (a, b) { return kinds.indexOf(a.kind) - kinds.indexOf(b.kind); });
+  if (!picks.length) throw new Error('No wines found on these photos. Take sharper photos of the pages and try again.');
+  return { count: Number(d.count) > 0 ? Math.round(Number(d.count)) : null, pages: pages.length, currency: String(d.currency || ''),
+    avgMarkup: num(d.avgMarkup), note: String(d.note || ''), food: food, min: min, max: max, picks: picks.slice(0, 3) };
 }
 
 // ---------------------------------------------------------------- AI consultant and wishlist

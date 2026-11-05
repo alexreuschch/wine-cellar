@@ -134,12 +134,16 @@ const ACTS = {
   'wish-offer': el => { const x = S.wishlist.find(w => w.id === el.dataset.id); if (x) consOffer(x, 'wish:' + x.id, x.id); },
   'wish-del': el => wishDelete(el.dataset.id),
   'wish-add': el => wishToCellar(el.dataset.id),
-  'somm-send': () => { const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
+  'somm-send': () => { if (SOMM.mode === 'list') { listAnalyze(); return; } const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
+  'wl-go': () => listAnalyze(),
+  'wl-page-rm': el => { WL.pages.splice(Number(el.dataset.i), 1); sommRefresh(false); },
+  'wl-clear': () => { if (SOMM.listening) sommStopVoice(); WL.pages = []; WL.result = null; WL.error = ''; SOMM.draft = ''; SOMM.voiced = false; render(); },
+  'wl-save': el => { const p = WL.result && WL.result.picks[Number(el.dataset.i)]; if (p) listSave(p); },
   'somm-example': el => sommAsk(el.dataset.v),
   'somm-mic': () => { if (SOMM.listening) { sommStopVoice(); sommRefresh(false); } else sommStartVoice(); },
   'somm-tips': () => { SOMM.tips = !SOMM.tips; render(); },
   'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.threads[SOMM.mode] = []; SOMM.draft = ''; SOMM.voiced = false; SOMM.photo = null; render(); },
-  'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = el.dataset.v === 'check' ? 'check' : 'cellar'; SOMM.tips = false; SOMM.photo = null; history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
+  'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = ['check', 'list'].includes(el.dataset.v) ? el.dataset.v : 'cellar'; SOMM.tips = false; SOMM.photo = null; history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
   'dup-keep': () => { const w = findDuplicate(D.fields); if (w) D.dupIgnore = w.id; renderDup(); },
   'dup-add': el => { const id = el.dataset.id; D = null; go('#/wine/' + encodeURIComponent(id)); setTimeout(() => openAddSheet(id), 200); },
   'somm-retry': () => { const last = sommThread().pop(); if (last) sommAsk(last.q, last.img); },
@@ -357,6 +361,8 @@ const INPUTS = {
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
+  'wl-min': el => { WL.min = el.value; },
+  'wl-max': el => { WL.max = el.value; },
   'cons-min': el => { CONS.budget.min = el.value.replace(/[^0-9]/g, ''); },
   'cons-max': el => { CONS.budget.max = el.value.replace(/[^0-9]/g, ''); },
   'cons-note': el => { CONS.note = el.value; },
@@ -422,6 +428,7 @@ const CHANGES = {
     renderStockBox();
   },
   'mv-to': el => { D.move.to = Number(el.value); },
+  'wl-photo': async el => { const files = [...(el.files || [])]; el.value = ''; if (files.length) await listAddPhotos(files); },
   'somm-photo': async el => {
     const file = el.files && el.files[0];
     if (!file) return;
@@ -515,7 +522,7 @@ function init() {
     if (e.target && e.target.id === 'new-loc' && e.key === 'Enter') { e.preventDefault(); ACTS['loc-add'](); }
     if (e.target && e.target.dataset && e.target.dataset.input === 'tg-in' && e.key === 'Enter') { e.preventDefault(); addTag(e.target.dataset.k, e.target.value); }
     if (e.target && e.target.id === 'rt-score' && e.key === 'Enter') { e.preventDefault(); saveRatingSheet(); }
-    if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sommAsk(e.target.value); }
+    if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (SOMM.mode === 'list') listAnalyze(); else sommAsk(e.target.value); }
     if (e.target && e.target.id === 'new-person' && e.key === 'Enter') { e.preventDefault(); ACTS['person-add'](); }
     if (e.target && e.target.id === 'new-ret-site' && e.key === 'Enter') { e.preventDefault(); ACTS['ret-add'](); }
     if (e.target && (e.target.id === 'ed-name' || e.target.id === 'ed-site') && e.key === 'Enter') { e.preventDefault(); saveEdit(); }

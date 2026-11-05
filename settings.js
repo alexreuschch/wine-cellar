@@ -176,7 +176,7 @@ async function saveEdit() {
 }
 
 /* AI usage of the last months, logged by the script with estimated list prices */
-const USAGE_ORDER = ['Label details', 'Street prices', 'Best offer', 'Sommelier', 'Consultant', 'Other'];
+const USAGE_ORDER = ['Label details', 'Street prices', 'Best offer', 'Sommelier', 'Wine list', 'Consultant', 'Other'];
 function usageHtml() {
   if (!S.usage.length) return S.version && S.version < 13 ? '' : `<section class="box"><span class="box-title">AI usage</span><p class="small muted" style="margin:0">No AI requests counted yet.</p></section>`;
   const usd = v => `USD ${fmtNum(v, 2)}`;

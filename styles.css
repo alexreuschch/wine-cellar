@@ -562,3 +562,24 @@ div.ins-leg { cursor: default; }
 .cons-offer-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface); }
 .cons-offer-box .cons-offer { padding: 0; background: transparent; }
 .offer-ship b { font-weight: 600; }
+
+/* sommelier: three modes and the wine list */
+.somm-modes.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.somm-modes.three button { gap: 5px; font-size: 12.5px; padding: 0 4px; white-space: nowrap; }
+.somm-modes.three button svg { width: 15px; height: 15px; flex: none; }
+.wl-setup { display: flex; flex-direction: column; gap: 10px; }
+.wl-pages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.wl-page { position: relative; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+.wl-page img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wl-page > span { position: absolute; left: 6px; bottom: 6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: rgba(0, 0, 0, .65); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.wl-page .icon-btn { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 14px; background: rgba(0, 0, 0, .65); color: #fff; }
+.wl-page .icon-btn svg { width: 14px; height: 14px; }
+.wl-range { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wl-result { display: flex; flex-direction: column; gap: 12px; }
+.wl-prices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wl-prices > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.wl-prices span { font-size: 11px; color: var(--muted); }
+.wl-prices b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.wl-prices small { font-size: 11px; color: var(--faint); }
+.wl-fit { display: flex; flex-direction: column; gap: 6px; }
+.wl-fit b { font-size: 15px; }
