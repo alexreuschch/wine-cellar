@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.10.0';
+const APP_VERSION = '2.11.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -52,6 +52,7 @@ const ICON = {
   glass: svg('<path d="M8 3h8l-.5 5a3.5 3.5 0 0 1-7 0L8 3zM12 12v8M8 20h8"/>', 22, 1.8),
   clock: svg('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', 22, 1.8),
   trophy: svg('<path d="M8 4h8v5a4 4 0 0 1-8 0V4zM12 13v4M9 20h6M8 6H5a3 3 0 0 0 3 3M16 6h3a3 3 0 0 1-3 3"/>', 22, 1.8),
+  chart: svg('<path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/>', 22, 1.8),
   book: svg('<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM5 17a3 3 0 0 1 3-3h10"/>', 22, 1.8),
   spark: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', 18, 1.8),
   filter: svg('<path d="M4 5h16l-6 7v6l-4 2v-8z"/>', 20, 1.9),
@@ -317,9 +318,7 @@ function upsertWine(w) {
 }
 
 const wineTitle = w => w.name || w.producer || 'Unnamed wine';
-/* wine type color and country flag */
-const TYPE_COLORS = { Red: '#8E1F2B', White: '#E6D98F', 'Rosé': '#E79AA6', Sparkling: '#F4E7B5', Dessert: '#D9A23A', Fortified: '#8A4B2A' };
-const typeDot = w => `<span class="type-dot" style="--c:${TYPE_COLORS[w.type] || '#8F837C'}" title="${esc(w.type)}" aria-label="${esc(w.type)}"></span>`;
+/* country flag, taken from the region */
 const COUNTRY_CODES = {
   france: 'FR', frankreich: 'FR', italy: 'IT', italien: 'IT', italia: 'IT', spain: 'ES', spanien: 'ES', 'españa': 'ES', portugal: 'PT',
   germany: 'DE', deutschland: 'DE', austria: 'AT', 'österreich': 'AT', switzerland: 'CH', schweiz: 'CH', suisse: 'CH', svizzera: 'CH',
@@ -436,7 +435,7 @@ const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gif
 
 function nav(active) {
   const item = (href, key, icon, label) => `<a href="${href}" class="${active === key ? 'on' : ''}">${icon}${label}</a>`;
-  return `<nav class="nav" aria-label="Main">${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window')}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
+  return `<nav class="nav" aria-label="Main">${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window')}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/insights', 'insights', ICON.chart, 'Insights')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
 }
 
 function toast(msg, ms = 3400) {
@@ -589,6 +588,7 @@ function render() {
   switch (r.p) {
     case 'window': html = viewWindow(); break;
     case 'top': html = viewTop(); break;
+    case 'insights': html = viewInsights(); break;
     case 'journal': html = viewJournal(); break;
     case 'wine': html = viewWine(r.id); break;
     case 'add': html = viewForm('add', null); break;
@@ -950,7 +950,7 @@ function priceLine(w) {
 
 function wineRow(w) {
   return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
-    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${typeDot(w)}${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${flagOf(w)}${esc(wineSub(w))}</span></div></a>
+    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${flagOf(w)}${esc(wineSub(w))}</span></div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove a bottle"${w.count ? '' : ' disabled'}>${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add bottles">${ICON.plus}</button></div>
     <a class="row-foot" href="#/wine/${encodeURIComponent(w.id)}">${priceLine(w)}</a>
   </div>`;
@@ -971,6 +971,160 @@ function cellarList() {
 
 /* ------------------------------------------------------------ view: drinking window */
 
+/* ------------------------------------------------------------ insights */
+
+/* colors for wine types, checked for color blindness on the dark surface; always shown with name and number */
+const TYPE_CHART = { Red: '#C2414F', White: '#B39028', 'Rosé': '#D06A8C', Sparkling: '#2F94B8', Dessert: '#C9711F', Fortified: '#8F62C2' };
+const COUNTRY_NAMES = { FR: 'France', IT: 'Italy', ES: 'Spain', PT: 'Portugal', DE: 'Germany', AT: 'Austria', CH: 'Switzerland', US: 'United States', AR: 'Argentina', CL: 'Chile', AU: 'Australia', NZ: 'New Zealand', ZA: 'South Africa', GR: 'Greece', HU: 'Hungary', LB: 'Lebanon', IL: 'Israel', CA: 'Canada', UY: 'Uruguay', SI: 'Slovenia', HR: 'Croatia', GE: 'Georgia', RO: 'Romania', MD: 'Moldova', BG: 'Bulgaria', GB: 'United Kingdom', MX: 'Mexico', BR: 'Brazil', CN: 'China', JP: 'Japan', LU: 'Luxembourg', CZ: 'Czechia', SK: 'Slovakia', TR: 'Türkiye', CY: 'Cyprus', RS: 'Serbia', MK: 'North Macedonia', AM: 'Armenia', MA: 'Morocco', BE: 'Belgium', NL: 'Netherlands', DK: 'Denmark', SE: 'Sweden', IN: 'India', PE: 'Peru', BO: 'Bolivia', ME: 'Montenegro', BA: 'Bosnia and Herzegovina', MT: 'Malta' };
+const flagEmoji = code => String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65));
+const pct = (n, total) => (total ? Math.round(n / total * 100) : 0);
+const btl = n => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+
+function tally(list, keyOf, weightOf) {
+  const m = new Map();
+  list.forEach(x => (keyOf(x) || []).forEach(k => { if (k === null || k === undefined || k === '') return; const e = m.get(k) || { k, n: 0 }; e.n += weightOf(x); m.set(k, e); }));
+  return [...m.values()].filter(e => e.n > 0);
+}
+
+/* one labelled horizontal bar per row; the row opens the matching list */
+function barRows(rows, opts = {}) {
+  const max = Math.max(1, ...rows.map(r => r.n));
+  const total = opts.total || rows.reduce((a, r) => a + r.n, 0);
+  return `<div class="ins-bars">${rows.map(r => {
+    const tag = r.go ? 'button' : 'div';
+    const attrs = r.go ? ` data-act="ins-go" data-k="${esc(r.go[0])}" data-v="${esc(r.go[1])}"` : '';
+    return `<${tag} class="ins-row"${attrs}><span class="ins-label">${r.icon || ''}<span class="ellipsis">${esc(r.label)}</span></span>
+      <span class="ins-track"><span class="ins-fill" style="width:${Math.max(2, r.n / max * 100).toFixed(1)}%;${r.c ? `background:${r.c}` : ''}"></span></span>
+      <span class="ins-num">${opts.money ? esc(money(r.n, 0)) : r.n}${opts.share ? `<small>${pct(r.n, total)}%</small>` : ''}</span></${tag}>`;
+  }).join('')}</div>`;
+}
+
+/* vertical columns with the value on top and the label below */
+function columns(cols, color) {
+  const max = Math.max(1, ...cols.map(c => c.n));
+  return `<div class="ins-cols" style="grid-template-columns:repeat(${cols.length},minmax(0,1fr))">${cols.map(c => `<div class="ins-col" title="${esc(c.label)}: ${c.n}">
+    <span class="ins-col-n">${c.n || ''}</span>
+    <span class="ins-col-bar"><span style="height:${c.n ? Math.max(3, c.n / max * 100).toFixed(1) : 0}%;${color ? `background:${color}` : ''}"></span></span>
+    <span class="ins-col-l">${esc(c.label)}</span></div>`).join('')}</div>`;
+}
+
+/* donut for the share of wine types, with a legend that names every slice */
+function donut(rows, total) {
+  const r = 42, C = 2 * Math.PI * r, gap = rows.length > 1 ? 1.6 : 0;
+  let off = 0;
+  const arcs = rows.map(x => {
+    const len = x.n / total * C;
+    const a = `<circle cx="60" cy="60" r="${r}" fill="none" stroke="${x.c}" stroke-width="16" stroke-dasharray="${Math.max(0.1, len - gap).toFixed(2)} ${(C - Math.max(0.1, len - gap)).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"/>`;
+    off += len;
+    return a;
+  }).join('');
+  return `<div class="ins-donut"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="Bottles by wine type">${arcs}<text x="60" y="58" text-anchor="middle" class="d-n">${total}</text><text x="60" y="74" text-anchor="middle" class="d-l">bottles</text></svg>
+    <div class="ins-legend">${rows.map(x => `<button class="ins-leg" data-act="ins-go" data-k="type" data-v="${esc(x.k)}"><span class="sw" style="background:${x.c}"></span><span class="ellipsis">${esc(x.k)}</span><b>${x.n}</b><small>${pct(x.n, total)}%</small></button>`).join('')}</div></div>`;
+}
+
+const insSection = (title, sub, body) => `<section class="ins-sec"><div class="sec-head"><h2>${title}</h2>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>${body}</section>`;
+
+function viewInsights() {
+  const head = `<header class="top"><h1 class="title">Insights</h1></header>`;
+  const wines = S.wines.filter(w => w.count > 0);
+  const total = wines.reduce((a, w) => a + w.count, 0);
+  if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;
+  const bottles = w => w.count;
+  const year = now.getFullYear();
+  const out = [];
+
+  // wine types
+  const types = tally(wines, w => [w.type || 'Other'], bottles).sort((a, b) => TYPES.indexOf(a.k) - TYPES.indexOf(b.k));
+  types.forEach(t => { t.c = TYPE_CHART[t.k] || '#8F837C'; });
+  out.push(insSection('Wine types', `${wines.length} wines`, donut(types, total)));
+
+  // countries
+  const cName = {};
+  wines.forEach(w => { const c = countryOf(w); if (c && !cName[c.code]) cName[c.code] = c.name; });
+  const byCountry = tally(wines, w => { const c = countryOf(w); return [c ? c.code : '?']; }, bottles).sort((a, b) => (a.k === '?') - (b.k === '?') || b.n - a.n);
+  out.push(insSection('Countries', '', barRows(byCountry.map(e => e.k === '?'
+    ? { label: 'No country', n: e.n }
+    : { label: COUNTRY_NAMES[e.k] || e.k, icon: `<span class="flag">${flagEmoji(e.k)}</span>`, n: e.n, go: ['search', cName[e.k]] }), { share: true, total })));
+
+  // vintages
+  const vint = tally(wines, w => [w.vintage ? Number(w.vintage) : 'NV'], bottles);
+  const years = vint.filter(e => e.k !== 'NV').sort((a, b) => a.k - b.k);
+  let cols = years.map(e => ({ label: `’${String(e.k).slice(-2)}`, n: e.n, y: e.k }));
+  if (cols.length > 12) {
+    const keep = cols.slice(-11), older = cols.slice(0, -11);
+    cols = [{ label: `≤’${String(older[older.length - 1].y).slice(-2)}`, n: older.reduce((a, c) => a + c.n, 0) }, ...keep];
+  }
+  const nv = vint.find(e => e.k === 'NV');
+  if (nv) cols.push({ label: 'NV', n: nv.n });
+  const oldest = years.length ? years[0].k : null, newest = years.length ? years[years.length - 1].k : null;
+  out.push(insSection('Vintages', oldest ? (oldest === newest ? String(oldest) : `${oldest} to ${newest}`) : '', columns(cols)));
+
+  // drinking window
+  const byStatus = tally(wines, w => [statusOf(w)], bottles).sort((a, b) => STATUS_ORDER.indexOf(a.k) - STATUS_ORDER.indexOf(b.k));
+  const due = [];
+  for (let y = year; y < year + 8; y++) due.push({ label: y === year ? 'Now' : `’${String(y).slice(-2)}`, n: 0 });
+  wines.forEach(w => { const p = windowParts(w); if (!p) return; const i = Math.max(0, p.u - year); if (i < due.length) due[i].n += w.count; });
+  out.push(insSection('Drinking window', '', `${barRows(byStatus.map(e => ({ label: e.k, n: e.n, c: STATUS[e.k].c, go: ['window', e.k] })), { share: true, total })}
+    <p class="small muted" style="margin:10px 0 0">Bottles to drink by the end of each year</p>${columns(due, 'var(--gold)')}`));
+
+  // value
+  let cost = 0, street = 0, withCost = 0, withStreet = 0;
+  const valRows = TYPES.map(t => ({ t, c: 0, s: 0 }));
+  wines.forEach(w => {
+    const a = avgPrice(w), st = streetOf(w), v = valRows.find(x => x.t === w.type);
+    if (a !== null) { cost += a * w.count; withCost += w.count; if (v) v.c += a * w.count; }
+    if (st !== null) { street += st * w.count; withStreet += w.count; if (v) v.s += st * w.count; }
+  });
+  const bands = [[0, 20], [20, 40], [40, 60], [60, 100], [100, Infinity]];
+  const bandRows = bands.map(([lo, hi]) => ({ label: hi === Infinity ? `${lo} and more` : `${lo} to ${hi}`, n: wines.filter(w => { const v = streetOf(w); return v !== null && v >= lo && v < hi; }).reduce((a, w) => a + w.count, 0) }));
+  const noStreet = total - withStreet;
+  const change = cost > 0 && withCost === withStreet ? Math.round((street - cost) / cost * 100) : null;
+  out.push(insSection('Value', '', `<div class="ins-tiles"><div><span>Total Costs</span><b>${esc(money(cost, 0))}</b></div><div><span>Total Street Value</span><b>${esc(money(street, 0))}</b>${change !== null ? `<small>${change > 0 ? '+' : ''}${change}% vs. purchase</small>` : ''}</div></div>
+    <p class="small muted" style="margin:12px 0 0">Total Street Value by wine type</p>
+    ${barRows(valRows.filter(v => v.s > 0).sort((a, b) => b.s - a.s).map(v => ({ label: v.t, n: Math.round(v.s), go: ['type', v.t] })), { money: true })}
+    <p class="small muted" style="margin:12px 0 0">Bottles by street price per bottle (${esc(cur())})</p>
+    ${barRows(bandRows.filter(b => b.n > 0).concat(noStreet ? [{ label: 'No street price', n: noStreet }] : []), { share: true, total })}`));
+
+  // consumption over the last 12 months
+  const opened = S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift');
+  const months = [];
+  const d0 = new Date(now.getFullYear(), now.getMonth(), 1);
+  for (let i = 11; i >= 0; i--) { const d = new Date(d0.getFullYear(), d0.getMonth() - i, 1); months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'narrow' }), n: 0 }); }
+  opened.forEach(r => { const m = months.find(x => x.key === String(r.date).slice(0, 7)); if (m) m.n += Number(r.qty) || 1; });
+  const yearN = months.reduce((a, m) => a + m.n, 0);
+  const occ = tally(opened, r => [entryType(r)], r => Number(r.qty) || 1).sort((a, b) => b.n - a.n).slice(0, 5);
+  const ppl = tally(opened, r => namesOf(r.people), r => Number(r.qty) || 1).sort((a, b) => b.n - a.n || a.k.localeCompare(b.k)).slice(0, 5);
+  out.push(insSection('Bottles opened', `${btl(yearN)} in 12 months`, opened.length ? `${columns(months, 'var(--gold)')}
+    ${occ.length ? `<p class="small muted" style="margin:12px 0 0">Occasions</p>${barRows(occ.map(e => ({ label: e.k, n: e.n, go: ['jtype', e.k] })))}` : ''}
+    ${ppl.length ? `<p class="small muted" style="margin:12px 0 0">Shared most with</p>${barRows(ppl.map(e => ({ label: e.k, n: e.n, go: ['person', e.k] })))}` : ''}`
+    : '<p class="muted small" style="margin:0">No bottles opened yet. Remove a bottle with minus to start your journal.</p>'));
+
+  // grapes and regions
+  const grapes = tally(wines, w => grapeNames(w), bottles).sort((a, b) => b.n - a.n || a.k.localeCompare(b.k)).slice(0, 6);
+  const regions = tally(wines, w => { const r = str(w.region).split(',')[0].trim(); return [r]; }, bottles).sort((a, b) => b.n - a.n || a.k.localeCompare(b.k)).slice(0, 6);
+  if (grapes.length) out.push(insSection('Top grapes', '', barRows(grapes.map(e => ({ label: e.k, n: e.n, go: ['grape', e.k] })))));
+  if (regions.length) out.push(insSection('Top regions', '', barRows(regions.map(e => ({ label: e.k, n: e.n, go: ['search', e.k] })))));
+
+  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row to see the wines.</p>${out.join('')}</main>${nav('insights')}`;
+}
+
+/* opens the cellar or the journal with the filter that matches a row in Insights */
+function insightsGo(k, v) {
+  if (k === 'window') { go('#/window'); return; }
+  if (k === 'person' || k === 'jtype') {
+    U.f.journal = newF();
+    U.f.journal.sel[k === 'person' ? 'person' : 'type'] = [lc(v)];
+    go('#/journal');
+    return;
+  }
+  U.f.cellar = newF();
+  U.search = '';
+  if (k === 'type') U.f.cellar.sel.wine = [lc(v)];
+  else if (k === 'grape') U.f.cellar.sel.grape = [lc(v)];
+  else U.search = v;
+  go('#/cellar');
+}
+
 function viewWindow() {
   const items = S.wines.filter(w => w.count > 0).map(w => ({ w, s: statusOf(w) }));
   const bottles = items.reduce((a, x) => a + x.w.count, 0);
@@ -985,7 +1139,7 @@ function viewWindow() {
     : `<div class="overview">${overview}</div><div class="chips">${filters}</div>` + shown.map(g => `<section>
         <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="--c:${STATUS[g.s].c};width:10px;height:10px"></span><h2>${g.s}</h2><span class="muted small">${g.items.length} ${g.items.length === 1 ? 'wine' : 'wines'}</span></div>
         <p class="muted tiny" style="margin:-6px 0 0 18px">${STATUS[g.s].hint}</p>
-        ${g.items.map(w => `<a class="journal-row" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center">${thumbHtml(w, true)}<div class="row-text" style="gap:6px"><div class="between"><span class="row-title">${typeDot(w)}${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}</span><span class="muted small" style="flex:none">${w.count} btl</span></div>${timelineHtml(w)}<span class="muted tiny">${esc(windowText(w) || 'No drinking window yet')}</span></div></a>`).join('')}
+        ${g.items.map(w => `<a class="journal-row" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center">${thumbHtml(w, true)}<div class="row-text" style="gap:6px"><div class="between"><span class="row-title">${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}</span><span class="muted small" style="flex:none">${w.count} btl</span></div>${timelineHtml(w)}<span class="muted tiny">${esc(windowText(w) || 'No drinking window yet')}</span></div></a>`).join('')}
       </section>`).join('');
   return `<main class="screen has-nav"><header><h1 class="title">Drinking window</h1><p class="muted small" style="margin:2px 0 0">${bottles} bottles · ${items.length} wines · sorted by urgency</p></header>${body}</main>${nav('window')}`;
 }
@@ -1026,7 +1180,7 @@ function topRow(w, i, visual, score, sub) {
   const s = streetOf(w);
   const subLine = [sub, s !== null ? `Street ${money(s)}` : ''].filter(Boolean).join(' · ');
   return `<a class="journal-row${w.count === 0 ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
-    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${typeDot(w)}${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
+    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
     <div class="score">${score}</div></a>`;
 }
 
@@ -1228,11 +1382,11 @@ function viewWine(id) {
   const label = w.thumb || w.labelFileId
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
-  const meta = [w.name ? w.producer : '', w.region, w.vintage].filter(Boolean).join(' · ');
+  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type].filter(Boolean).join(' · ');
   return `<main class="screen detail">
     <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
-    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${typeDot(w)}<span class="meta-type">${esc(w.type)}</span>${flagOf(w)}${esc(meta)}</p></div>
+    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
     ${stockHtml(w)}
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
@@ -2762,6 +2916,7 @@ const ACTS = {
   minus: el => openRemoveSheet(el.dataset.id, el.dataset.i === undefined ? undefined : Number(el.dataset.i)),
   winf: el => { U.winFilter = el.dataset.v; render(); },
   'top-mode': el => { U.topMode = el.dataset.v; render(); },
+  'ins-go': el => insightsGo(el.dataset.k, el.dataset.v),
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
 
   rate: el => {
