@@ -395,6 +395,13 @@ const CHANGES = {
     try { await api('setSettings', { settings: { currency: el.value } }); toast('Currency saved. All prices are shown in ' + el.value + '.'); }
     catch (e) { toast('Saved on this device only: ' + e.message); }
   },
+  country: async el => {
+    S.settings = Object.assign({}, S.settings, { country: el.value });
+    persist();
+    refreshView();
+    try { await api('setSettings', { settings: { country: el.value } }); toast(`Shops are now searched for ${SHOP_COUNTRIES[el.value]}.`); }
+    catch (e) { toast('Saved on this device only: ' + e.message); }
+  },
   'show-finished': el => { U.showFinished = el.checked; refreshView(); },
   'top-finished': el => { U.topFinished = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },

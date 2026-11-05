@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 14;
+var API_VERSION = 15;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
 
 var WINE_COLS = [
@@ -322,9 +322,22 @@ function json_(obj) {
 
 // ---------------------------------------------------------------- settings and exchange rates
 
+// countries where shops are searched; the currency setting only changes how prices are shown
+var COUNTRIES = {
+  CH: { name: 'Switzerland', cur: 'CHF' }, LI: { name: 'Liechtenstein', cur: 'CHF' },
+  DE: { name: 'Germany', cur: 'EUR', eu: true }, AT: { name: 'Austria', cur: 'EUR', eu: true }, FR: { name: 'France', cur: 'EUR', eu: true },
+  IT: { name: 'Italy', cur: 'EUR', eu: true }, NL: { name: 'Netherlands', cur: 'EUR', eu: true }, BE: { name: 'Belgium', cur: 'EUR', eu: true },
+  LU: { name: 'Luxembourg', cur: 'EUR', eu: true }, ES: { name: 'Spain', cur: 'EUR', eu: true }, PT: { name: 'Portugal', cur: 'EUR', eu: true },
+  IE: { name: 'Ireland', cur: 'EUR', eu: true }, GB: { name: 'United Kingdom', cur: 'GBP' }, US: { name: 'United States', cur: 'USD' }
+};
+var CUR_COUNTRY = { CHF: 'CH', EUR: 'DE', GBP: 'GB', USD: 'US' };
+
 function settings_() {
-  var c = props_().getProperty('CURRENCY');
-  return { currency: CURRENCIES.indexOf(c) >= 0 ? c : 'CHF' };
+  var p = props_();
+  var c = p.getProperty('CURRENCY');
+  var currency = CURRENCIES.indexOf(c) >= 0 ? c : 'CHF';
+  var k = p.getProperty('COUNTRY');
+  return { currency: currency, country: COUNTRIES[k] ? k : CUR_COUNTRY[currency] };
 }
 
 function actionSetSettings_(req) {
@@ -332,6 +345,10 @@ function actionSetSettings_(req) {
   if (s.currency !== undefined) {
     if (CURRENCIES.indexOf(String(s.currency)) < 0) throw new Error('Unsupported currency');
     props_().setProperty('CURRENCY', String(s.currency));
+  }
+  if (s.country !== undefined) {
+    if (!COUNTRIES[String(s.country)]) throw new Error('Unsupported country');
+    props_().setProperty('COUNTRY', String(s.country));
   }
   return settings_();
 }
@@ -891,12 +908,13 @@ function actionStreetPrice_(req) {
   var idx = findIndex_(t, req.id);
   if (idx < 0) throw new Error('Wine not found');
   var w = toObj_(t.headers, t.rows[idx]);
-  var cur = settings_().currency;
+  var sc = shopScope_();
+  var cur = sc.cur;
   var wine = [w.producer, w.name, w.vintage].filter(String).join(' ');
-  var prompt = 'Find the current typical retail price for one 0.75 l bottle of this wine: ' + wine +
-    (w.region ? ' (' + w.region + ')' : '') + '. Search the web for current shop offers, preferably from shops in Switzerland or elsewhere in Europe. ' +
+  var prompt = 'Find the current typical retail price for one 0.75 l bottle of this wine for a buyer in ' + sc.name + ': ' + wine +
+    (w.region ? ' (' + w.region + ')' : '') + '. Search the web for current offers from ' + sc.where + '. ' +
     'Use the median of the offers you find for exactly this vintage. If there is no offer for this vintage, use the closest vintage and set confidence to "low". ' +
-    'Prefer prices in ' + cur + '. Return ONLY a JSON object, no other text: {"price": number per bottle, "currency": one of "CHF", "EUR", "USD", "GBP", "source": "shop or website name", "confidence": "high" or "medium" or "low"}. ' +
+    'Give the price in ' + cur + '. Return ONLY a JSON object, no other text: {"price": number per bottle, "currency": one of "CHF", "EUR", "USD", "GBP", "source": "shop or website name", "confidence": "high" or "medium" or "low"}. ' +
     'If you find no price at all, return {"price": null}.';
   var res = callClaude_({
     model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
@@ -923,12 +941,24 @@ function actionStreetPrice_(req) {
  * Run this once from the editor after adding ANTHROPIC_API_KEY.
  * The execution log then shows either "Claude API works" or the exact problem.
  */
-var OFFER_REGIONS = {
-  CHF: { area: 'Switzerland', where: 'Switzerland' },
-  EUR: { area: 'Euro area', where: 'a country of the euro area, for example Germany, Austria, France, Italy or the Netherlands' },
-  GBP: { area: 'United Kingdom', where: 'the United Kingdom' },
-  USD: { area: 'United States', where: 'the United States' }
-};
+/** Where to search for shops, from the country setting. Inside the EU, shops of other EU countries that deliver count too. */
+function shopScope_() {
+  var code = settings_().country;
+  var c = COUNTRIES[code];
+  var where = code === 'CH' ? 'online shops based in Switzerland (shops in Liechtenstein count too)'
+    : code === 'LI' ? 'online shops based in Liechtenstein or Switzerland'
+    : c.eu ? 'online shops based in ' + c.name + ', or in another EU country if they deliver to ' + c.name + ' (there is no customs duty within the EU)'
+    : 'online shops based in ' + (code === 'US' ? 'the United States' : 'the ' + c.name);
+  return { code: code, name: c.name, cur: c.cur, eu: !!c.eu, where: where };
+}
+
+/** Converts between the four currencies with the current exchange rates. */
+function convert_(v, from, to) {
+  if (from === to) return v;
+  var r = fxRates_().rates || {};
+  if (!r[from] || !r[to]) return v;
+  return v / r[from] * r[to];
+}
 
 /** Finds the online shop in the country of the chosen currency with the lowest price for this wine. */
 function actionBestOffer_(req) {
@@ -951,13 +981,13 @@ function actionBestOffer_(req) {
 
 /** Request for the cheapest shop offer of one wine in the country of the chosen currency. Another vintage of the same wine is fine if the asked one is not sold. */
 function offerRequest_(wine, region, uses) {
-  var cur = settings_().currency;
-  var reg = OFFER_REGIONS[cur] || OFFER_REGIONS.CHF;
-  var prompt = 'Find the online shop based in ' + reg.where + ' that currently sells this wine at the lowest price per 0.75 l bottle: ' + wine +
-    (region ? ' (' + region + ')' : '') + '. Search the web for shop offers of this wine. Prefer the vintage given; if no shop sells it, take the closest vintage of the same wine that is available and report it. ' +
-    'Only consider shops that sell to customers in ' + reg.where + ' with prices in ' + cur + '. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
+  var sc = shopScope_();
+  var prompt = 'Find the online shop that currently sells this wine at the lowest price per 0.75 l bottle, for a buyer in ' + sc.name + ': ' + wine +
+    (region ? ' (' + region + ')' : '') + '. Search the web for offers of this wine from ' + sc.where + '. Prefer the vintage given; if no shop sells it, take the closest vintage of the same wine that is available and report it. ' +
+    'Compare the shops by price including the shipping cost to ' + sc.name + ', for an order of about 6 bottles, where the shop states it. ' +
+    'Only consider shops with prices in CHF, EUR, GBP or USD. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
     'The link must be the product page of this wine at that shop, taken from your search results. Never use a home page, a category page or a search page. ' +
-    'Return ONLY a JSON object, no other text: {"shop": "shop name", "price": number per bottle in ' + cur + ', "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
+    'Return ONLY a JSON object, no other text: {"shop": "shop name", "country": "two letter ISO code of the country where the shop is based", "price": number per bottle, "currency": "CHF, EUR, GBP or USD", "shipping": number for shipping one order to ' + sc.name + ' in the same currency or null if unknown, "freeFrom": order value from which shipping is free, in the same currency, or null, "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
     'If you find no offer, return {"shop": null}.';
   return {
     model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
@@ -974,10 +1004,15 @@ function offerFrom_(res) {
   try { d = parseJson_(textOf_(res), 'No offer'); } catch (e) { return null; }
   var url = String(d.url || '');
   if (!d.shop || !(Number(d.price) > 0) || !/^https?:\/\/[^\/]+\/.+/.test(url)) return null;
-  var cur = settings_().currency;
+  var sc = shopScope_();
+  var cur = CURRENCIES.indexOf(String(d.currency)) >= 0 ? String(d.currency) : sc.cur;
+  var cc = /^[A-Za-z]{2}$/.test(String(d.country || '')) ? String(d.country).toUpperCase() : '';
   return {
-    shop: String(d.shop), v: Math.round(Number(d.price) * 100) / 100, cur: cur, url: url, vintage: String(d.vintage || ''),
-    area: (OFFER_REGIONS[cur] || OFFER_REGIONS.CHF).area, date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
+    shop: String(d.shop), country: cc, v: Math.round(Number(d.price) * 100) / 100, cur: cur,
+    shipping: d.shipping === 0 || d.shipping === '0' ? 0 : Number(d.shipping) > 0 ? Math.round(Number(d.shipping) * 100) / 100 : null,
+    freeFrom: Number(d.freeFrom) > 0 ? Math.round(Number(d.freeFrom) * 100) / 100 : null,
+    url: url, vintage: String(d.vintage || ''), for: sc.code, area: sc.name,
+    date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
   };
 }
 
@@ -988,7 +1023,7 @@ function findOffer_(wine, region, fresh) {
   var mem = fresh ? null : offerMemory_([key], false)[key];
   var offer = mem ? mem.offer : offerFrom_(callClaude_(offerRequest_(wine, region)));
   if (!mem) rememberOffers_([[key, offer]]);
-  if (!offer) throw new Error('No shop in ' + (OFFER_REGIONS[settings_().currency] || OFFER_REGIONS.CHF).area + ' currently sells this wine online');
+  if (!offer) throw new Error('No online shop for ' + shopScope_().name + ' currently sells this wine');
   return offer;
 }
 
@@ -998,7 +1033,7 @@ var OFFER_DAYS = 7;      // found offers are reused for a week
 var NO_OFFER_DAYS = 3;   // wines without a shop are not searched again for the consultant for a few days
 
 function offerKey_(wine) {
-  return settings_().currency + '|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim();
+  return settings_().country + '|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 /** Remembered results by key. Without allowMissing, only real offers are returned. */
@@ -1141,14 +1176,14 @@ function actionSommelier_(req) {
 var CONSULTANT_RULES = [
   'You are an independent wine consultant who helps the owner of a private cellar decide which wines to buy next.',
   'You get the profile of the owner, the cellar with stock, ratings and prices, wines already finished and the journal of bottles opened.',
-  'Recommend exactly 10 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops in the country of the owner currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
+  'Recommend exactly 10 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops where the owner buys currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
   'Rules:',
   '1. Fit the taste of the owner: styles, grapes and regions they rate highly and drink often. Avoid styles they rated low.',
   '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
   '3. Plan quantities sensibly. Compare the stock of each style with how fast the owner drinks it. Where the stock is large, only suggest small quantities of a clearly different style. Where stock is low compared to consumption, suggest more bottles.',
   '4. A suggestion may replace a wine in stock with few bottles left (1 to 3) when it has better ratings and a better price to quality ratio. Then give the id of that wine in "replaces" and the reason in "replaceWhy". Otherwise leave both empty.',
   '5. Mix the labels: "Safe bet" (close to their favorites), "Discovery" (new grape or region that fits their taste), "Top value" (outstanding price to quality).',
-  '6. "price" is your estimate of the typical shop price per bottle in the currency of the owner. "vintage" is a recommended recent vintage as a number, or null.',
+  '6. "price" is your estimate of the typical shop price per bottle in the currency of the budget. "vintage" is a recommended recent vintage as a number, or null.',
   '7. Follow the focus and wishes of the owner if given.',
   '8. Write in English. Keep "summary" to two to four sentences about what the cellar needs and how much to buy, "why" and "value" to one sentence each. Do not use dashes as punctuation.',
   '9. Return ONLY a JSON object, no other text: {"summary": "text", "picks": [{"producer": "", "name": "", "vintage": 2021, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "price": 0, "label": "Safe bet|Discovery|Top value", "why": "", "value": "", "qty": 3, "replaces": "", "replaceWhy": ""}]}.'
@@ -1174,6 +1209,7 @@ function finishedContext_() {
 
 function actionConsultant_(req) {
   var cur = settings_().currency;
+  var sc = shopScope_();
   var ctx = cellarContext_();
   var finished = finishedContext_();
   var wishes = [];
@@ -1185,8 +1221,8 @@ function actionConsultant_(req) {
     '\n\nWISHES:\n' + (wishes.join('\n') || 'None, use the profile.') +
     (avoid.length ? '\n\nDo not suggest these again, they are already on the wishlist or were suggested before:\n' + avoid.join('\n') : '') +
     '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finished.join('\n') || 'None yet.');
-  var area = (OFFER_REGIONS[cur] || OFFER_REGIONS.CHF).area;
-  text += '\n\nThe owner buys in ' + area + ' and pays in ' + cur + '.';
+  var area = sc.name;
+  text += '\n\nThe owner buys from ' + sc.where + '. Budget and prices in the profile are in ' + cur + '.';
   var res = callClaude_({
     model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
     max_tokens: 5000,
@@ -1230,7 +1266,11 @@ function actionConsultant_(req) {
       if (!o) return;
       p.offer = o;
       p.price = o.v;
-      (max && p.price > max * 1.25 ? over : verified).push(p);
+      p.priceCur = o.cur;
+      var q = Math.max(1, p.qty);
+      var ship = o.freeFrom && o.v * q >= o.freeFrom ? 0 : (o.shipping || 0);
+      var total = convert_(o.v + ship / q, o.cur, cur);
+      (max && total > max * 1.25 ? over : verified).push(p);
     });
   }
   if (verified.length < 3) verified = verified.concat(over).slice(0, 6);

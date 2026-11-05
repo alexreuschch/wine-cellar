@@ -556,3 +556,7 @@ div.ins-leg { cursor: default; }
 .somm-switch svg { flex: none; color: var(--gold); }
 .somm-switch b { color: var(--gold); font-weight: 600; }
 .somm-bar.check .somm-cam { color: var(--gold); }
+/* 2.16.1: price with shipping */
+.cons-offer-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface); }
+.cons-offer-box .cons-offer { padding: 0; background: transparent; }
+.offer-ship b { font-weight: 600; }

@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.15.0';
+const APP_VERSION = '2.16.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -154,8 +154,44 @@ function parseStreet(w) {
 function parseOffer(w) {
   const o = parseJSON(w.offer, null);
   return o && o.shop && Number(o.v) > 0 && /^https?:\/\//i.test(str(o.url))
-    ? { shop: str(o.shop), v: Number(o.v), cur: str(o.cur) || 'CHF', url: str(o.url), vintage: str(o.vintage), area: str(o.area), date: str(o.date) } : null;
+    ? { shop: str(o.shop), country: str(o.country), v: Number(o.v), cur: str(o.cur) || 'CHF', shipping: o.shipping === 0 ? 0 : Number(o.shipping) > 0 ? Number(o.shipping) : null, freeFrom: Number(o.freeFrom) > 0 ? Number(o.freeFrom) : null, url: str(o.url), vintage: str(o.vintage), for: str(o.for), area: str(o.area), date: str(o.date) } : null;
 }
+
+/* countries where shops are searched; the currency only changes how prices are shown */
+const SHOP_COUNTRIES = { CH: 'Switzerland', LI: 'Liechtenstein', DE: 'Germany', AT: 'Austria', FR: 'France', IT: 'Italy', NL: 'Netherlands', BE: 'Belgium', LU: 'Luxembourg', ES: 'Spain', PT: 'Portugal', IE: 'Ireland', GB: 'United Kingdom', US: 'United States' };
+const CUR_COUNTRY = { CHF: 'CH', EUR: 'DE', GBP: 'GB', USD: 'US' };
+const shopCountry = () => (S.settings && SHOP_COUNTRIES[S.settings.country] ? S.settings.country : CUR_COUNTRY[cur()]);
+const shopCountryName = () => SHOP_COUNTRIES[shopCountry()];
+const flagOfCode = code => (/^[A-Z]{2}$/.test(str(code)) ? `<span class="flag" title="${esc(SHOP_COUNTRIES[code] || code)}">${String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))}</span>` : '');
+/* shop name with the flag of the country where the shop is based, and one line of details */
+function offerShopHtml(o, w) {
+  const home = o.country ? (SHOP_COUNTRIES[o.country] || (typeof COUNTRY_NAMES !== 'undefined' && COUNTRY_NAMES[o.country]) || o.country) : o.area;
+  const meta = [home, o.vintage && (!w || o.vintage !== str(w.vintage)) ? `vintage ${o.vintage}` : '', o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · ');
+  return `<div style="min-width:0"><p style="margin:0;font-weight:600" class="ellipsis">${flagOfCode(o.country)}${esc(o.shop)}</p><p class="muted tiny" style="margin:2px 0 0">${esc(meta)}</p></div>`;
+}
+/* the price per bottle with shipping shared over the bottles you would buy */
+function offerShipHtml(o, qty) {
+  const q = Math.max(1, Math.round(Number(qty) || 6));
+  const free = o.freeFrom && o.v * q >= o.freeFrom;
+  if (o.shipping === null || o.shipping === undefined) {
+    if (!free) return `<p class="muted tiny" style="margin:0">Shipping not stated by the shop${o.freeFrom ? `, free from ${esc(priceText(o.freeFrom, o.cur, 0))}` : ''}.</p>`;
+  }
+  const ship = free ? 0 : (o.shipping || 0);
+  const per = (o.v * q + ship) / q;
+  const note = free ? `Free shipping from ${priceText(o.freeFrom, o.cur, 0)}, reached with ${q} bottles`
+    : ship ? `Shipping ${priceText(ship, o.cur)} per order${o.freeFrom ? `, free from ${priceText(o.freeFrom, o.cur, 0)}` : ''}` : 'Free shipping';
+  return `<p class="small offer-ship" style="margin:0"><b>${esc(priceText(per, o.cur))}</b> per bottle, inclusive shipping for ${q} ${q === 1 ? 'bottle' : 'bottles'}</p><p class="muted tiny" style="margin:-4px 0 0">${esc(note)}</p>`;
+}
+/* how many bottles you would buy: your last purchase of this wine, otherwise a carton of 6 */
+const lastBuyQty = w => { const b = inEntries(w).filter(r => r.type === 'Purchase').sort((a, c) => str(c.date).localeCompare(str(a.date)))[0]; return b ? Number(b.qty) || 6 : 6; };
+/* an offer searched for another country than the one set now */
+const offerOtherCountry = o => {
+  const now = shopCountry();
+  if (o.for) return o.for !== now;
+  if (o.area === 'Euro area') return ['CH', 'LI', 'GB', 'US'].includes(now);
+  return !!o.area && o.area !== SHOP_COUNTRIES[now];
+};
+const offerForName = o => (o.for ? SHOP_COUNTRIES[o.for] || o.for : o.area);
 
 function normWine(w) {
   const stock = parseStock(w);

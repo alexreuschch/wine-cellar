@@ -331,9 +331,9 @@ function tasteProfile() {
   return { lines, cover, text, budget: p50 !== null ? { min: round5(p25 * 0.8), max: round5(p75 * 1.2) } : { min: '', max: '' } };
 }
 
-function offerLineHtml(o) {
-  return `<div class="cons-offer"><div style="min-width:0"><p class="ellipsis" style="margin:0;font-weight:600">${esc(o.shop)}</p><p class="tiny muted" style="margin:2px 0 0">${esc([o.area, o.vintage ? `vintage ${o.vintage}` : '', o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · '))}</p></div>
-    <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>`;
+function offerLineHtml(o, qty) {
+  return `<div class="cons-offer-box"><div class="cons-offer">${offerShopHtml(o, null)}
+    <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>${offerShipHtml(o, qty)}</div>`;
 }
 
 function pickCardHtml(p, i, saved) {
@@ -349,7 +349,7 @@ function pickCardHtml(p, i, saved) {
     ${p.value ? `<p class="small cons-value" style="margin:0">${ICON.cash}<span>${esc(p.value)}</span></p>` : ''}
     <p class="small" style="margin:0"><b>Buy ${p.qty || 1} ${p.qty === 1 ? 'bottle' : 'bottles'}</b>${rw ? ` · replaces <a href="#/wine/${encodeURIComponent(rw.id)}">${esc(wineTitle(rw))} ${esc(rw.vintage)}</a> (${rw.count} left)` : ' · new addition'}</p>
     ${rw && p.replaceWhy ? `<p class="tiny muted" style="margin:-4px 0 0">${esc(p.replaceWhy)}</p>` : ''}
-    ${o ? offerLineHtml(o) : ''}
+    ${o ? offerLineHtml(o, p.qty) : ''}
     <div class="cons-actions"><button class="link-btn" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
       <button class="link-btn" data-act="cons-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
   </div>`;
@@ -361,7 +361,7 @@ function wishCardHtml(x) {
     <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${LABEL_CLS[x.label] || 'disc'}">${esc(x.label || 'Wishlist')}</span>${x.price ? `<span class="small muted">≈ ${esc(priceText(x.price, x.priceCur))}</span>` : ''}</div>
     <div><p class="cons-title">${esc(wishTitle(x))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(x) ? flagOf(x) : ''}${esc([x.region, x.type].filter(Boolean).join(' · '))}${x.qty ? ` · buy ${x.qty}` : ''}</p></div>
     ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
-    ${x.offer ? offerLineHtml(x.offer) : ''}
+    ${x.offer ? offerLineHtml(x.offer, x.qty || 6) : ''}
     <div class="cons-actions"><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
       <button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
       <button class="icon-btn" data-act="wish-del" data-id="${esc(x.id)}" aria-label="Remove from wishlist">${ICON.trash}</button></div>
@@ -390,7 +390,7 @@ function viewDiscover() {
       <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
       <label class="field">Anything else? (optional)<input data-input="cons-note" placeholder="More whites for summer, wines for guests" value="${esc(CONS.note)}"></label>
       <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Choosing wines and checking shops…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
-      <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops in your country, so you only get wines you can buy.' : 'You only get wines that an online shop in your country sells right now, with price and link. One round takes about a minute and costs about 10 to 15 cents. Offers found in the last 7 days are reused.'}</p>
+      <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops for ' + esc(shopCountryName()) + ', so you only get wines you can buy.' : 'You only get wines that an online shop for ' + esc(shopCountryName()) + ' sells right now, with price and link. One round takes about a minute and costs about 10 to 15 cents. Offers found in the last 7 days are reused.'}</p>
     </section>
     ${CONS.error ? `<p class="small" style="color:var(--danger);margin:0">${esc(CONS.error)}</p>` : ''}
     ${res ? `<section class="ins-sec"><div class="sec-head"><h2>Recommendations</h2></div>${res.summary ? `<p style="margin:0;line-height:1.5">${esc(res.summary)}</p>` : ''}

@@ -127,13 +127,13 @@ function renderSiteBox() {
 function offerBoxHtml() {
   const w = D && D.id ? wineById(D.id) : null;
   if (!w) return '';
-  const o = w.offer, busyNow = offerRun.has(w.id), area = OFFER_AREA[cur()];
+  const o = w.offer, busyNow = offerRun.has(w.id), area = shopCountryName();
   const info = o
-    ? `<div class="between" style="gap:12px"><div style="min-width:0"><p style="margin:0;font-weight:600" class="ellipsis">${esc(o.shop)}</p><p class="muted tiny" style="margin:2px 0 0">${esc([o.area, o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · '))}</p></div><b style="flex:none">${esc(priceText(o.v, o.cur))}</b></div>`
+    ? `<div class="between" style="gap:12px">${offerShopHtml(o, w)}<b style="flex:none">${esc(priceText(o.v, o.cur))}</b></div>${offerShipHtml(o, lastBuyQty(w))}`
     : `<p class="muted small" style="margin:0">No best offer yet.</p>`;
   return `<span class="box-title">Best offer</span>${info}
     <button class="btn" data-act="offer-one" data-id="${esc(w.id)}"${busyNow ? ' disabled' : ''}>${ICON.refresh}${busyNow ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
-    <p class="muted tiny" style="margin:0">Searches the online shop in ${esc(area)} with the lowest price for this wine. Only the best offer is updated.</p>`;
+    <p class="muted tiny" style="margin:0">Searches the online shop with the lowest price for this wine, for buying in ${esc(area)}. Only the best offer is updated.</p>`;
 }
 
 function streetBox() {

@@ -248,7 +248,9 @@ function viewSettings(first) {
     <h1 class="title">${first ? 'Connect your cellar' : 'Settings'}</h1>
     ${first ? '' : `<section class="box"><span class="box-title">General</span>
       <label class="field">Currency<select data-change="currency">${CURRENCIES.map(v => `<option value="${v}"${v === cur() ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
-      <p class="muted tiny" style="margin:0">${fxNote()}</p></section>
+      <p class="muted tiny" style="margin:0">${fxNote()} Switch it, for example, to show your cellar to a friend from abroad.</p>
+      <label class="field">Country for shopping<select data-change="country">${Object.keys(SHOP_COUNTRIES).map(k => `<option value="${k}"${k === shopCountry() ? ' selected' : ''}>${SHOP_COUNTRIES[k]}</option>`).join('')}</select></label>
+      <p class="muted tiny" style="margin:0">Street prices, best offers and the AI consultant search shops for this country${['CH', 'LI', 'GB', 'US'].includes(shopCountry()) ? '' : ', including shops in other EU countries that deliver there, with shipping costs'}. Offers you already have stay until you tap Update best offer.</p></section>
       <section class="box"><span class="box-title">Street prices</span>
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>

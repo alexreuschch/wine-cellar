@@ -1,5 +1,5 @@
 /* Wine Cellar service worker: keeps the app working offline and updates it in the background. */
-const SHELL_CACHE = 'wc-shell-v44';
+const SHELL_CACHE = 'wc-shell-v46';
 const RUNTIME_CACHE = 'wc-runtime-v1';
 const SHELL = ['./', './index.html', './app.js', './cellar.js', './ai.js', './views.js', './sheets.js', './form.js', './settings.js', './actions.js', './styles.css', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './icon-maskable-512.png'];
 

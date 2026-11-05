@@ -393,22 +393,21 @@ function valueHtml(w) {
   return `<section>${secHead(ICON.cash, 'Value')}<div class="info-list">${rows}</div>${w.street ? `<p class="muted tiny" style="margin:0">${esc(streetSource(w.street))}</p>` : ''}</section>`;
 }
 
-const OFFER_AREA = { CHF: 'Switzerland', EUR: 'Euro area', GBP: 'United Kingdom', USD: 'United States' };
 const offerRun = new Set();
 
 function offerHtml(w) {
-  const o = w.offer, area = OFFER_AREA[cur()];
+  const o = w.offer, area = shopCountryName();
   const busyNow = offerRun.has(w.id);
   const btn = `<button class="link-btn" data-act="offer-one" data-id="${esc(w.id)}"${busyNow ? ' disabled' : ''}>${ICON.refresh}${busyNow ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>`;
   let body;
   if (!o) {
-    body = `<p class="muted small" style="margin:0">${busyNow ? 'Searching online shops…' : `The online shop in ${area} with the lowest price for this wine, to buy more bottles.`}</p>`;
+    body = `<p class="muted small" style="margin:0">${busyNow ? 'Searching online shops…' : `The online shop with the lowest price for this wine, for buying in ${area}, to buy more bottles.`}</p>`;
   } else {
-    const meta = [o.area, o.vintage && o.vintage !== str(w.vintage) ? `vintage ${o.vintage}` : '', o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · ');
-    body = `<div class="between" style="gap:12px"><div style="min-width:0"><p style="margin:0;font-weight:600" class="ellipsis">${esc(o.shop)}</p><p class="muted tiny" style="margin:2px 0 0">${esc(meta)}</p></div>
+    body = `<div class="between" style="gap:12px">${offerShopHtml(o, w)}
       <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>
+      ${offerShipHtml(o, lastBuyQty(w))}
       <p class="muted tiny" style="margin:0">Found by AI on the web. Check price and vintage in the shop before you buy.</p>
-      ${o.area && o.area !== area ? `<p class="muted tiny" style="margin:0">Found for ${esc(o.area)}. Tap Update best offer to search in ${esc(area)}.</p>` : ''}`;
+      ${offerOtherCountry(o) ? `<p class="muted tiny" style="margin:0">Found for ${esc(offerForName(o))}. Tap Update best offer to search for ${esc(area)}.</p>` : ''}`;
   }
   return `<section>${secHead(ICON.tag, 'Best offer', btn)}${body}</section>`;
 }
