@@ -867,29 +867,43 @@ function actionBestOffer_(req) {
   });
 }
 
-/** Searches the web for the cheapest shop offer of one wine in the country of the chosen currency. */
-function findOffer_(wine, region) {
+/** Request for the cheapest shop offer of one wine in the country of the chosen currency. Another vintage of the same wine is fine if the asked one is not sold. */
+function offerRequest_(wine, region, uses) {
   var cur = settings_().currency;
   var reg = OFFER_REGIONS[cur] || OFFER_REGIONS.CHF;
   var prompt = 'Find the online shop based in ' + reg.where + ' that currently sells this wine at the lowest price per 0.75 l bottle: ' + wine +
-    (region ? ' (' + region + ')' : '') + '. Search the web for shop offers of exactly this wine and vintage. ' +
+    (region ? ' (' + region + ')' : '') + '. Search the web for shop offers of this wine. Prefer the vintage given; if no shop sells it, take the closest vintage of the same wine that is available and report it. ' +
     'Only consider shops that sell to customers in ' + reg.where + ' with prices in ' + cur + '. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
     'The link must be the product page of this wine at that shop, taken from your search results. Never use a home page, a category page or a search page. ' +
     'Return ONLY a JSON object, no other text: {"shop": "shop name", "price": number per bottle in ' + cur + ', "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
     'If you find no offer, return {"shop": null}.';
-  var res = callClaude_({
+  return {
     model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
     max_tokens: 3000,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: uses || 5 }],
     messages: [{ role: 'user', content: prompt }]
-  });
-  var d = parseJson_(textOf_(res), 'No offer found');
-  var url = String(d.url || '');
-  if (!d.shop || !(Number(d.price) > 0) || !/^https?:\/\/[^\/]+\/.+/.test(url)) throw new Error('No offer found for this wine in ' + reg.area);
-  return {
-    shop: String(d.shop), v: Math.round(Number(d.price) * 100) / 100, cur: cur, url: url, vintage: String(d.vintage || ''), area: reg.area,
-    date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
   };
+}
+
+/** The offer from a reply, or null when there is no usable offer with a product link. */
+function offerFrom_(res) {
+  if (!res) return null;
+  var d;
+  try { d = parseJson_(textOf_(res), 'No offer'); } catch (e) { return null; }
+  var url = String(d.url || '');
+  if (!d.shop || !(Number(d.price) > 0) || !/^https?:\/\/[^\/]+\/.+/.test(url)) return null;
+  var cur = settings_().currency;
+  return {
+    shop: String(d.shop), v: Math.round(Number(d.price) * 100) / 100, cur: cur, url: url, vintage: String(d.vintage || ''),
+    area: (OFFER_REGIONS[cur] || OFFER_REGIONS.CHF).area, date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
+  };
+}
+
+/** Searches the web for the cheapest shop offer of one wine in the country of the chosen currency. */
+function findOffer_(wine, region) {
+  var offer = offerFrom_(callClaude_(offerRequest_(wine, region)));
+  if (!offer) throw new Error('No shop in ' + (OFFER_REGIONS[settings_().currency] || OFFER_REGIONS.CHF).area + ' currently sells this wine online');
+  return offer;
 }
 
 // ---------------------------------------------------------------- AI sommelier
@@ -972,7 +986,7 @@ function actionSommelier_(req) {
 var CONSULTANT_RULES = [
   'You are an independent wine consultant who helps the owner of a private cellar decide which wines to buy next.',
   'You get the profile of the owner, the cellar with stock, ratings and prices, wines already finished and the journal of bottles opened.',
-  'Recommend exactly 6 wines that are NOT in the cellar list, real wines that are generally available in shops.',
+  'Recommend exactly 8 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops in the country of the owner currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
   'Rules:',
   '1. Fit the taste of the owner: styles, grapes and regions they rate highly and drink often. Avoid styles they rated low.',
   '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
@@ -1016,9 +1030,11 @@ function actionConsultant_(req) {
     '\n\nWISHES:\n' + (wishes.join('\n') || 'None, use the profile.') +
     (avoid.length ? '\n\nDo not suggest these again, they are already on the wishlist or were suggested before:\n' + avoid.join('\n') : '') +
     '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finished.join('\n') || 'None yet.');
+  var area = (OFFER_REGIONS[cur] || OFFER_REGIONS.CHF).area;
+  text += '\n\nThe owner buys in ' + area + ' and pays in ' + cur + '.';
   var res = callClaude_({
     model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
-    max_tokens: 3500,
+    max_tokens: 5000,
     system: CONSULTANT_RULES,
     messages: [{ role: 'user', content: text }]
   });
@@ -1038,7 +1054,17 @@ function actionConsultant_(req) {
       replaces: rep, replaceWhy: rep ? String(p.replaceWhy || '') : ''
     };
   });
-  return { summary: String(d.summary || ''), picks: picks };
+  // only wines that a shop really sells: check all candidates at the same time
+  var offers = callClaudeMany_(picks.map(function (p) { return offerRequest_([p.producer, p.name, p.vintage].filter(String).join(' '), p.region, 3); })).map(offerFrom_);
+  var verified = [];
+  picks.forEach(function (p, i) { if (offers[i]) { p.offer = offers[i]; p.price = offers[i].v; verified.push(p); } });
+  var max = req.budget ? Number(req.budget.max) || 0 : 0;
+  if (max) {
+    var inBudget = verified.filter(function (p) { return p.price <= max * 1.25; });
+    if (inBudget.length >= 3) verified = inBudget;
+  }
+  if (!verified.length) throw new Error('None of the suggested wines is sold online in ' + area + ' right now. Please try again, maybe with another focus or budget.');
+  return { summary: String(d.summary || ''), picks: verified.slice(0, 6), checked: picks.length };
 }
 
 /** Best offer for a wine that is not in the cellar yet, for example a suggestion of the consultant. */
@@ -1088,13 +1114,40 @@ function testClaude() {
   Logger.log('Claude API works. Answer: ' + answer);
 }
 
-function callClaude_(body) {
+function claudeHeaders_() {
   var p = props_();
   var key = (p.getProperty('ANTHROPIC_API_KEY') || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in the script properties');
   var headers = { 'Authorization': 'Bearer ' + key, 'anthropic-version': '2023-06-01' };
   var ws = (p.getProperty('ANTHROPIC_WORKSPACE_ID') || '').trim();
   if (ws) headers['anthropic-workspace-id'] = ws;
+  return headers;
+}
+
+/** Several requests at the same time. Returns one result per body, or null where a request failed. */
+function callClaudeMany_(bodies) {
+  var headers = claudeHeaders_();
+  var state = bodies.map(function (b) { return { body: b, messages: b.messages.slice(), out: null, done: false }; });
+  for (var turn = 0; turn < 3; turn++) {
+    var open = state.filter(function (x) { return !x.done; });
+    if (!open.length) break;
+    var replies = UrlFetchApp.fetchAll(open.map(function (x) {
+      return { url: 'https://api.anthropic.com/v1/messages', method: 'post', contentType: 'application/json', headers: headers,
+        payload: JSON.stringify(Object.assign({}, x.body, { messages: x.messages })), muteHttpExceptions: true };
+    }));
+    open.forEach(function (x, i) {
+      var r = replies[i];
+      if (r.getResponseCode() !== 200) { x.done = true; x.out = null; return; }
+      x.out = JSON.parse(r.getContentText());
+      if (x.out.stop_reason === 'pause_turn') x.messages.push({ role: 'assistant', content: x.out.content });
+      else x.done = true;
+    });
+  }
+  return state.map(function (x) { return x.done ? x.out : null; });
+}
+
+function callClaude_(body) {
+  var headers = claudeHeaders_();
   var messages = body.messages.slice();
   var out = null;
   for (var turn = 0; turn < 3; turn++) {
