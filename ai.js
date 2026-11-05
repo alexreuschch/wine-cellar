@@ -110,7 +110,7 @@ function viewSommelier() {
   return `<main class="screen somm">
     <div class="detail-top" id="somm-top">${sommTopHtml()}</div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
-    <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.book, 'Wine list')}</div>
+    <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>
     <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
