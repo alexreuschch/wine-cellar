@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.8.1';
+const APP_VERSION = '2.8.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -479,7 +479,8 @@ async function sync(silent) {
   }
 }
 
-/* street prices: one request per wine, looked up by Claude with web search */
+/* street prices: one request per wine, looked up by AI with web search */
+const aiErr = m => str(m).replace(/Claude API/g, 'AI service').replace(/Claude Console/g, 'API console');
 let streetRun = null;
 function showProgress() {
   const el = $('#progress');
@@ -504,7 +505,7 @@ async function updateStreetPrices(ids, quiet) {
         const i = $('[name="street"]');
         if (i) i.value = D.fields.street;
       }
-    } catch (e) { streetRun.failed++; streetRun.err = e.message; }
+    } catch (e) { streetRun.failed++; streetRun.err = aiErr(e.message); }
     streetRun.done++;
     showProgress();
     refreshView();
@@ -1158,7 +1159,7 @@ async function updateOffer(id) {
     upsertWine(normWine(await api('bestOffer', { id })));
     persist();
   } catch (e) {
-    toast(e.message, 5000);
+    toast(aiErr(e.message), 5000);
   }
   offerRun.delete(id);
   refreshView();
@@ -2415,11 +2416,7 @@ function locationsHtml() {
 }
 
 function fxNote() {
-  const fx = S.fx;
-  if (!fx || !fx.rates) return 'Exchange rates load with your data.';
-  const others = CURRENCIES.filter(c => c !== cur() && fx.rates[c] && fx.rates[cur()]);
-  const r = others.map(c => `1 ${c} = ${fmtNum(fx.rates[cur()] / fx.rates[c], 4)} ${cur()}`).join(' · ');
-  return `Prices are converted automatically. ${r}${fx.date ? ` (${esc(fx.source || 'rates')}, ${esc(fmtDate(fx.date))})` : ''}`;
+  return 'All prices are shown in this currency. Prices in other currencies are converted with the current exchange rate, updated daily, so converted amounts change with the rate.';
 }
 
 /* settings lists: every entry can be edited, unused ones deleted */
@@ -2579,7 +2576,7 @@ function viewSettings(first) {
       <section class="box"><span class="box-title">Street prices</span>
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
-      <p class="muted tiny" style="margin:0">Claude looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
+      <p class="muted tiny" style="margin:0">AI looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
     ${first ? '' : locationsHtml()}
     ${first ? '' : retailersHtml()}
     ${first ? '' : peopleHtml()}
