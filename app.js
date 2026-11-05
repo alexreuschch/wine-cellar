@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.8.2';
+const APP_VERSION = '2.9.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -1146,6 +1146,7 @@ function offerHtml(w) {
     const meta = [o.area, o.vintage && o.vintage !== str(w.vintage) ? `vintage ${o.vintage}` : '', o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · ');
     body = `<div class="between" style="gap:12px"><div style="min-width:0"><p style="margin:0;font-weight:600" class="ellipsis">${esc(o.shop)}</p><p class="muted tiny" style="margin:2px 0 0">${esc(meta)}</p></div>
       <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>
+      <p class="muted tiny" style="margin:0">Found by AI on the web. Check price and vintage in the shop before you buy.</p>
       ${o.area && o.area !== area ? `<p class="muted tiny" style="margin:0">Found for ${esc(o.area)}. Tap Update best offer to search in ${esc(area)}.</p>` : ''}`;
   }
   return `<section>${secHead(ICON.tag, 'Best offer', btn)}${body}</section>`;
@@ -1174,7 +1175,7 @@ function streetSource(st) {
   if (!st) return '';
   const when = st.date ? fmtDate(st.date) : '';
   if (st.src === 'Manual') return `Street price entered by you${when ? ` on ${when}` : ''}.`;
-  return `The street price is the median of current offers${st.src ? ` at ${st.src}` : ''}${when ? `, checked ${when}` : ''}.`;
+  return `The street price is an estimate: the median of current shop offers found by AI${st.src ? ` at ${st.src}` : ''}${when ? `, checked ${when}` : ''}. Actual prices may differ.`;
 }
 
 function retailerLink(name) {
@@ -1836,7 +1837,7 @@ function stockEditorHtml() {
       <div class="grid2"><button class="btn" data-act="st-move-close">Cancel</button><button class="btn accent" data-act="st-move"${src && src.n ? '' : ' disabled'}>Move</button></div></div>`;
   }
   return `<div class="box"><div class="between"><span class="box-title">Storage</span><span class="small muted" id="st-total">${D.stock.reduce((a, e) => a + e.n, 0)} bottles</span></div>${rows || '<p class="muted small" style="margin:0">No bottles in stock.</p>'}${addBox}${move}
-    <p class="muted tiny" style="margin:0">Counts changed here are corrections and are not written to the journal. Use plus and minus on the wine to log purchases and bottles taken.</p></div>`;
+    <p class="muted tiny" style="margin:0">Counts changed here are corrections. They adjust the purchases in the journal without a new entry. Use plus and minus on the wine to log new purchases and bottles taken.</p></div>`;
 }
 
 function acquisitionBox() {
@@ -2312,6 +2313,31 @@ function updateBanner() {
     : `Details could not be completed: ${esc(D.aiMsg)} You can fill them in yourself.`;
 }
 
+/**
+ * Stock corrections in Edit are carried into the journal without a new entry:
+ * more bottles go to the newest purchase or gift, fewer are taken from the newest ones,
+ * each keeping at least one bottle. Without any purchase an entry "Added" is created.
+ */
+function journalForCorrection(w, delta, stock, wineName) {
+  if (!delta) return [];
+  const ins = inEntries(w).slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const out = e => Object.assign({}, e, { price: e.price === null ? '' : e.price });
+  if (delta > 0) {
+    if (ins.length) return [out(Object.assign({}, ins[0], { qty: ins[0].qty + delta }))];
+    return [{ id: newId('i'), wineId: w.id, dir: 'in', type: 'Added', qty: delta, loc: stock[0] ? stock[0].loc : '', date: todayISO(), price: '', priceCur: '', wineName }];
+  }
+  let rest = -delta;
+  const changed = [];
+  ins.forEach(e => {
+    if (!rest) return;
+    const take = Math.min(rest, Math.max(0, e.qty - 1));
+    if (!take) return;
+    rest -= take;
+    changed.push(out(Object.assign({}, e, { qty: e.qty - take })));
+  });
+  return changed;
+}
+
 async function saveWineForm() {
   ['pairings', 'tasteTags'].forEach(k => { const i = $('#tg-in-' + k); if (i && i.value.trim()) addTag(k, i.value); });
   const f = D.fields;
@@ -2364,6 +2390,7 @@ async function saveWineForm() {
       wineName: fullName(w)
     });
   }
+  if (base) entries.push(...journalForCorrection(base, w.count - base.count, stock, fullName(w)));
   if (stock.length) store.set('wc-lastloc', stock[0].loc);
   const identity = x => lc([x.producer, x.name, x.vintage].join('|'));
   const refetch = !street || (base && streetTxt === D.streetInit && identity(base) !== identity(w));
