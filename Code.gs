@@ -11,8 +11,8 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 12;
-var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', fx: 'FX' };
+var API_VERSION = 13;
+var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
 
 var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
@@ -28,11 +28,12 @@ var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name'];
 var OFFER_COLS = ['key', 'offer', 'date'];
+var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
 var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt'];
 var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '10';
+var SCHEMA_VERSION = '11';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -58,6 +59,7 @@ var ACTIONS = {
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
+  snapshot: actionSnapshot_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
   moveLocation: actionMoveLocation_,
@@ -129,6 +131,8 @@ function ensureSchema_() {
     ensureSheet_(ss, SHEETS.wishlist, WISH_COLS);
     var oc = ensureSheet_(ss, SHEETS.offers, OFFER_COLS);
     if (!oc.isSheetHidden()) oc.hideSheet();
+    var hc = ensureSheet_(ss, SHEETS.history, HISTORY_COLS);
+    if (!hc.isSheetHidden()) hc.hideSheet();
     var prev = Number(p.getProperty('SCHEMA_VERSION') || 0);
     if (prev < 5) migrate5_();
     p.setProperty('SCHEMA_VERSION', SCHEMA_VERSION);
@@ -236,7 +240,80 @@ function doPost(e) {
     return json_({ ok: true, data: fn(req) });
   } catch (err) {
     return json_({ ok: false, error: String((err && err.message) || err) });
+  } finally {
+    try { recordUsage_(req.action); } catch (e) { /* usage is only informative */ }
   }
+}
+
+// ---------------------------------------------------------------- AI usage and estimated costs
+
+var USAGE_ = [];
+var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant' };
+// estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
+var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
+var SEARCH_USD = 0.01;
+
+function noteUsage_(model, usage) {
+  if (usage) USAGE_.push({ model: String(model || ''), u: usage });
+}
+
+/** Adds the AI usage of this request to the monthly totals in the script properties. */
+function recordUsage_(action) {
+  if (!USAGE_.length) return;
+  var kind = USAGE_KIND[action] || 'Other';
+  var month = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  var add = { calls: 1, inp: 0, out: 0, searches: 0, usd: 0 };
+  USAGE_.forEach(function (x) {
+    var r = /haiku/i.test(x.model) ? USAGE_RATES.haiku : /opus/i.test(x.model) ? USAGE_RATES.opus : USAGE_RATES.sonnet;
+    var inp = (Number(x.u.input_tokens) || 0) + (Number(x.u.cache_creation_input_tokens) || 0) * 1.25 + (Number(x.u.cache_read_input_tokens) || 0) * 0.1;
+    var out = Number(x.u.output_tokens) || 0;
+    var se = x.u.server_tool_use ? Number(x.u.server_tool_use.web_search_requests) || 0 : 0;
+    add.inp += inp; add.out += out; add.searches += se;
+    add.usd += inp / 1e6 * r.inp + out / 1e6 * r.out + se * SEARCH_USD;
+  });
+  USAGE_ = [];
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var p = props_();
+    var key = 'USAGE_' + month;
+    var m = JSON.parse(p.getProperty(key) || '{}');
+    var e = m[kind] || { calls: 0, inp: 0, out: 0, searches: 0, usd: 0 };
+    Object.keys(add).forEach(function (k) { e[k] = (Number(e[k]) || 0) + add[k]; });
+    e.usd = Math.round(e.usd * 10000) / 10000;
+    e.inp = Math.round(e.inp);
+    m[kind] = e;
+    p.setProperty(key, JSON.stringify(m));
+  } finally { lock.releaseLock(); }
+}
+
+/** Usage of the last three months, newest first. */
+function usageSummary_() {
+  var p = props_();
+  var out = [];
+  var d = new Date();
+  for (var i = 0; i < 3; i++) {
+    var dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    var month = Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM');
+    var m = JSON.parse(p.getProperty('USAGE_' + month) || '{}');
+    out.push({ month: month, kinds: m });
+  }
+  return out;
+}
+
+/** Stores the value of the cellar for the current month, as calculated by the app. */
+function actionSnapshot_(req) {
+  var s = req.snapshot || {};
+  var month = String(s.month || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Bad month');
+  return withLock_(function () {
+    var t = table_(SHEETS.history);
+    var mc = t.headers.indexOf('month');
+    var idx = -1;
+    t.rows.forEach(function (r, i) { if (String(r[mc]) === month) idx = i; });
+    writeRow_(t, idx, { month: "'" + month, bottles: Number(s.bottles) || 0, cost: Number(s.cost) || 0, street: Number(s.street) || 0, cur: String(s.cur || ''), date: new Date().toISOString() });
+    return readAll_(SHEETS.history).filter(function (r) { return r.month; });
+  });
 }
 
 function json_(obj) {
@@ -370,6 +447,8 @@ function actionLoad_() {
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
     people: peopleList_(),
     wishlist: readAll_(SHEETS.wishlist).filter(function (r) { return r.id; }),
+    history: readAll_(SHEETS.history).filter(function (r) { return r.month; }),
+    usage: usageSummary_(),
     settings: settings_(),
     fx: fxRates_()
   };
@@ -970,7 +1049,8 @@ var SOMMELIER_RULES = [
   '3. Use the journal to understand the taste of the owner and the people mentioned.',
   '4. If nothing in the cellar fits well, say so honestly and suggest in "buy" what style or wine to buy instead. Otherwise leave "buy" empty.',
   '5. Answer in the language of the question. Keep "answer" to two to four sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty"}.'
+  '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty", "wine": "", "fit": null}.',
+  '7. If the owner sends a photo of a wine label, for example in a shop or restaurant: identify the wine and put producer, name and vintage in "wine". Judge how well it fits the taste of the owner, based on their ratings, favorites and journal, as "fit" from 0 to 100. In "answer" explain the fit, the style and whether the typical price is good value. As "picks", give up to 3 similar wines from the cellar for comparison, and say in "why" how each compares. Leave "buy" empty. Without a photo, keep "wine" empty and "fit" null.'
 ].join('\n');
 
 /** One compact line per wine in stock, plus recent journal entries, as context for the sommelier. */
@@ -1011,6 +1091,9 @@ function cellarContext_() {
 
 function actionSommelier_(req) {
   var q = String(req.question || '').trim();
+  var image = req.image ? String(req.image) : '';
+  if (image && image.length > 1500000) throw new Error('The photo is too large');
+  if (!q && image) q = 'Will I like this wine?';
   if (!q) throw new Error('Ask a question first');
   var ctx = cellarContext_();
   var messages = [];
@@ -1019,10 +1102,12 @@ function actionSommelier_(req) {
     messages.push({ role: 'user', content: String(h.q).slice(0, 1000) });
     messages.push({ role: 'assistant', content: String(h.a).slice(0, 2000) });
   });
-  messages.push({ role: 'user', content: q.slice(0, 1000) });
+  messages.push({ role: 'user', content: image
+    ? [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } }, { type: 'text', text: q.slice(0, 1000) }]
+    : q.slice(0, 1000) });
   var res = callClaude_({
     model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
-    max_tokens: 1200,
+    max_tokens: 1400,
     system: SOMMELIER_RULES + '\n\n' + ctx.text,
     messages: messages
   });
@@ -1031,7 +1116,8 @@ function actionSommelier_(req) {
   ctx.wines.forEach(function (w) { ids[String(w.id)] = true; });
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)
     .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
-  return { answer: String(d.answer || ''), picks: picks, buy: String(d.buy || '') };
+  var fit = d.fit === null || d.fit === undefined || d.fit === '' || isNaN(Number(d.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(d.fit))));
+  return { answer: String(d.answer || ''), picks: picks, buy: String(d.buy || ''), wine: image ? String(d.wine || '') : '', fit: image ? fit : null };
 }
 
 // ---------------------------------------------------------------- AI consultant and wishlist
@@ -1208,6 +1294,7 @@ function callClaudeMany_(bodies) {
       var r = replies[i];
       if (r.getResponseCode() !== 200) { x.done = true; x.out = null; return; }
       x.out = JSON.parse(r.getContentText());
+      noteUsage_(x.body.model, x.out.usage);
       if (x.out.stop_reason === 'pause_turn') x.messages.push({ role: 'assistant', content: x.out.content });
       else x.done = true;
     });
@@ -1238,6 +1325,7 @@ function callClaude_(body) {
       throw new Error('Claude API ' + code + ': ' + msg);
     }
     out = JSON.parse(txt);
+    noteUsage_(body.model, out.usage);
     if (out.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: out.content });
   }

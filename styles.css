@@ -468,9 +468,11 @@ button.ins-row:active { background: var(--surface); }
 .somm-wait span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
 .somm-picks { display: flex; flex-direction: column; gap: 8px; }
-.somm-pick { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; color: var(--text); }
-.somm-pick:active { background: var(--surface); }
+.somm-pick { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; }
+.somm-pick-link { display: flex; align-items: flex-start; gap: 12px; color: var(--text); }
+.somm-pick-link:active { opacity: 0.8; }
 .somm-pick .pill { flex: none; margin-top: 2px; }
+.somm-take { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--gold); font: inherit; font-size: 14px; font-weight: 500; }
 .somm-pick-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .somm-why { font-size: 13px; line-height: 1.45; color: var(--muted); }
 .somm-buy { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface); font-size: 14px; line-height: 1.45; }
@@ -522,3 +524,25 @@ div.ins-leg { cursor: default; }
 .cons-offer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface); }
 .cons-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
 .cons-actions .icon-btn { margin-left: auto; width: 36px; height: 36px; }
+
+/* 2.14.0: sort, duplicates, sommelier photo, usage, value over time */
+.sort-sel { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.sort-sel select { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; padding: 4px 2px; height: auto; width: auto; appearance: auto; }
+.dup-box { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--gold); border-radius: 12px; background: rgba(201, 161, 91, 0.08); font-size: 14px; line-height: 1.5; }
+.dup-box:empty, #dup-box:empty { display: none; }
+.somm-fit { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; }
+.somm-q-photo { display: block; width: 120px; border-radius: 10px; margin-bottom: 6px; }
+.somm-photo { max-width: 528px; margin: 0 auto 8px; display: flex; align-items: center; gap: 10px; }
+.somm-photo img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; }
+.somm-photo span { flex: 1; color: var(--muted); }
+.somm-cam { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); margin-left: -8px; cursor: pointer; }
+.usage-tab { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.usage-row { display: grid; grid-template-columns: 1.4fr 0.9fr 0.9fr 1fr; gap: 6px; padding: 8px 12px; font-size: 13px; border-top: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
+.usage-row:first-child { border-top: 0; }
+.usage-row.head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; background: var(--surface); }
+.usage-row span:not(:first-child) { text-align: right; }
+.vc { width: 100%; height: auto; display: block; }
+.vc .vc-l { fill: var(--faint); font-size: 10px; }
+.vc-legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
+.vc-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.vc .vc-v { fill: var(--text); font-size: 11px; font-weight: 600; }
