@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.13.1';
+const APP_VERSION = '2.13.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -1258,7 +1258,7 @@ function viewDiscover() {
       <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
       <label class="field">Anything else? (optional)<input data-input="cons-note" placeholder="More whites for summer, wines for guests" value="${esc(CONS.note)}"></label>
       <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Choosing wines and checking shops…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
-      <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops in your country, so you only get wines you can buy.' : 'You only get wines that an online shop in your country sells right now, with price and link. One round takes about a minute and costs about 20 to 30 cents.'}</p>
+      <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops in your country, so you only get wines you can buy.' : 'You only get wines that an online shop in your country sells right now, with price and link. One round takes about a minute and costs about 10 to 15 cents. Offers found in the last 7 days are reused.'}</p>
     </section>
     ${CONS.error ? `<p class="small" style="color:var(--danger);margin:0">${esc(CONS.error)}</p>` : ''}
     ${res ? `<section class="ins-sec"><div class="sec-head"><h2>Recommendations</h2></div>${res.summary ? `<p style="margin:0;line-height:1.5">${esc(res.summary)}</p>` : ''}
@@ -1296,7 +1296,8 @@ async function consOffer(p, key, wishId) {
   CONS.offerRun.add(key);
   refreshView();
   try {
-    const o = await api('offerFor', { wine: wishTitle(p), region: p.region, wishId: wishId || '' });
+    const had = wishId ? !!(S.wishlist.find(w => w.id === wishId) || {}).offer : !!CONS.offers[wishKey(p)];
+    const o = await api('offerFor', { wine: wishTitle(p), region: p.region, wishId: wishId || '', fresh: had });
     if (wishId) { const x = S.wishlist.find(w => w.id === wishId); if (x) x.offer = o; persist(); }
     else { CONS.offers[wishKey(p)] = o; saveConsult(); }
   } catch (e) {
@@ -1758,7 +1759,8 @@ async function updateOffer(id) {
   offerRun.add(id);
   refreshView();
   try {
-    upsertWine(normWine(await api('bestOffer', { id })));
+    const w0 = wineById(id);
+    upsertWine(normWine(await api('bestOffer', { id, fresh: !!(w0 && w0.offer) })));
     persist();
   } catch (e) {
     toast(aiErr(e.message), 5000);

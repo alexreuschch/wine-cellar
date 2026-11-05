@@ -12,7 +12,7 @@
  */
 
 var API_VERSION = 12;
-var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', fx: 'FX' };
+var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', fx: 'FX' };
 
 var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
@@ -27,11 +27,12 @@ var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food'
 var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name'];
+var OFFER_COLS = ['key', 'offer', 'date'];
 var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt'];
 var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '9';
+var SCHEMA_VERSION = '10';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -126,6 +127,8 @@ function ensureSchema_() {
     ensureSheet_(ss, SHEETS.retailers, RETAILER_COLS);
     ensureSheet_(ss, SHEETS.people, PEOPLE_COLS);
     ensureSheet_(ss, SHEETS.wishlist, WISH_COLS);
+    var oc = ensureSheet_(ss, SHEETS.offers, OFFER_COLS);
+    if (!oc.isSheetHidden()) oc.hideSheet();
     var prev = Number(p.getProperty('SCHEMA_VERSION') || 0);
     if (prev < 5) migrate5_();
     p.setProperty('SCHEMA_VERSION', SCHEMA_VERSION);
@@ -855,7 +858,7 @@ function actionBestOffer_(req) {
   var idx = findIndex_(t, req.id);
   if (idx < 0) throw new Error('Wine not found');
   var w = toObj_(t.headers, t.rows[idx]);
-  var offer = findOffer_([w.producer, w.name, w.vintage].filter(String).join(' '), w.region);
+  var offer = findOffer_([w.producer, w.name, w.vintage].filter(String).join(' '), w.region, !!req.fresh);
   return withLock_(function () {
     var t2 = table_(SHEETS.wines);
     var i2 = findIndex_(t2, req.id);
@@ -899,11 +902,61 @@ function offerFrom_(res) {
   };
 }
 
-/** Searches the web for the cheapest shop offer of one wine in the country of the chosen currency. */
-function findOffer_(wine, region) {
-  var offer = offerFrom_(callClaude_(offerRequest_(wine, region)));
+/** Searches the web for the cheapest shop offer of one wine in the country of the chosen currency.
+ *  An offer found in the last 7 days is reused, unless fresh is set (Update best offer). */
+function findOffer_(wine, region, fresh) {
+  var key = offerKey_(wine);
+  var mem = fresh ? null : offerMemory_([key], false)[key];
+  var offer = mem ? mem.offer : offerFrom_(callClaude_(offerRequest_(wine, region)));
+  if (!mem) rememberOffers_([[key, offer]]);
   if (!offer) throw new Error('No shop in ' + (OFFER_REGIONS[settings_().currency] || OFFER_REGIONS.CHF).area + ' currently sells this wine online');
   return offer;
+}
+
+// ---------------------------------------------------------------- offer memory (hidden tab Offers)
+
+var OFFER_DAYS = 7;      // found offers are reused for a week
+var NO_OFFER_DAYS = 3;   // wines without a shop are not searched again for the consultant for a few days
+
+function offerKey_(wine) {
+  return settings_().currency + '|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Remembered results by key. Without allowMissing, only real offers are returned. */
+function offerMemory_(keys, allowMissing) {
+  var out = {};
+  var want = {};
+  keys.forEach(function (k) { want[k] = true; });
+  var now = Date.now();
+  readAll_(SHEETS.offers).forEach(function (r) {
+    var k = String(r.key);
+    if (!want[k]) return;
+    var age = (now - new Date(String(r.date)).getTime()) / 86400000;
+    var offer = null;
+    try { offer = r.offer ? JSON.parse(r.offer) : null; } catch (e) { offer = null; }
+    if (offer && age <= OFFER_DAYS) out[k] = { offer: offer };
+    else if (!offer && allowMissing && age <= NO_OFFER_DAYS) out[k] = { offer: null };
+  });
+  return out;
+}
+
+/** Stores results as [key, offer or null] pairs and drops entries older than 30 days. */
+function rememberOffers_(pairs) {
+  if (!pairs.length) return;
+  withLock_(function () {
+    var t = table_(SHEETS.offers);
+    var kc = t.headers.indexOf('key');
+    var now = new Date().toISOString();
+    pairs.forEach(function (p) {
+      var idx = -1;
+      for (var i = 0; i < t.rows.length; i++) { if (String(t.rows[i][kc]) === p[0]) { idx = i; break; } }
+      writeRow_(t, idx, { key: p[0], offer: p[1] ? JSON.stringify(p[1]) : '', date: now });
+    });
+    var dc = t.headers.indexOf('date');
+    for (var j = t.rows.length - 1; j >= 0; j--) {
+      if (Date.now() - new Date(String(t.rows[j][dc])).getTime() > 30 * 86400000) t.sh.deleteRow(j + 2);
+    }
+  });
 }
 
 // ---------------------------------------------------------------- AI sommelier
@@ -986,7 +1039,7 @@ function actionSommelier_(req) {
 var CONSULTANT_RULES = [
   'You are an independent wine consultant who helps the owner of a private cellar decide which wines to buy next.',
   'You get the profile of the owner, the cellar with stock, ratings and prices, wines already finished and the journal of bottles opened.',
-  'Recommend exactly 8 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops in the country of the owner currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
+  'Recommend exactly 10 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops in the country of the owner currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
   'Rules:',
   '1. Fit the taste of the owner: styles, grapes and regions they rate highly and drink often. Avoid styles they rated low.',
   '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
@@ -1042,7 +1095,7 @@ function actionConsultant_(req) {
   var stock = {};
   ctx.wines.forEach(function (w) { stock[String(w.id)] = w; });
   var labels = ['Safe bet', 'Discovery', 'Top value'];
-  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer); }).slice(0, 8).map(function (p) {
+  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer); }).slice(0, 10).map(function (p) {
     var rep = String(p.replaces || '');
     if (!stock[rep]) rep = '';
     return {
@@ -1054,24 +1107,40 @@ function actionConsultant_(req) {
       replaces: rep, replaceWhy: rep ? String(p.replaceWhy || '') : ''
     };
   });
-  // only wines that a shop really sells: check all candidates at the same time
-  var offers = callClaudeMany_(picks.map(function (p) { return offerRequest_([p.producer, p.name, p.vintage].filter(String).join(' '), p.region, 3); })).map(offerFrom_);
-  var verified = [];
-  picks.forEach(function (p, i) { if (offers[i]) { p.offer = offers[i]; p.price = offers[i].v; verified.push(p); } });
+  // only wines that a shop really sells: check the best 6 first, then refill only the places without a shop
   var max = req.budget ? Number(req.budget.max) || 0 : 0;
-  if (max) {
-    var inBudget = verified.filter(function (p) { return p.price <= max * 1.25; });
-    if (inBudget.length >= 3) verified = inBudget;
+  var queue = picks.slice();
+  var verified = [], over = [];
+  var label = function (p) { return [p.producer, p.name, p.vintage].filter(String).join(' '); };
+  while (verified.length < 6 && queue.length) {
+    var wave = queue.splice(0, 6 - verified.length);
+    var mem = offerMemory_(wave.map(function (p) { return offerKey_(label(p)); }), true);
+    var search = wave.filter(function (p) { return !mem[offerKey_(label(p))]; });
+    var found = {};
+    if (search.length) {
+      var replies = callClaudeMany_(search.map(function (p) { return offerRequest_(label(p), p.region, 2); }));
+      var pairs = search.map(function (p, i) { var o = offerFrom_(replies[i]); found[offerKey_(label(p))] = o; return [offerKey_(label(p)), o]; });
+      rememberOffers_(pairs);
+    }
+    wave.forEach(function (p) {
+      var k = offerKey_(label(p));
+      var o = mem[k] ? mem[k].offer : found[k];
+      if (!o) return;
+      p.offer = o;
+      p.price = o.v;
+      (max && p.price > max * 1.25 ? over : verified).push(p);
+    });
   }
+  if (verified.length < 3) verified = verified.concat(over).slice(0, 6);
   if (!verified.length) throw new Error('None of the suggested wines is sold online in ' + area + ' right now. Please try again, maybe with another focus or budget.');
-  return { summary: String(d.summary || ''), picks: verified.slice(0, 6), checked: picks.length };
+  return { summary: String(d.summary || ''), picks: verified.slice(0, 6) };
 }
 
 /** Best offer for a wine that is not in the cellar yet, for example a suggestion of the consultant. */
 function actionOfferFor_(req) {
   var wine = String(req.wine || '').trim();
   if (!wine) throw new Error('Missing wine');
-  var offer = findOffer_(wine.slice(0, 200), String(req.region || '').slice(0, 100));
+  var offer = findOffer_(wine.slice(0, 200), String(req.region || '').slice(0, 100), !!req.fresh);
   if (req.wishId) {
     withLock_(function () {
       var t = table_(SHEETS.wishlist);
