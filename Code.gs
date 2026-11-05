@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 9;
+var API_VERSION = 10;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', fx: 'FX' };
 
 var WINE_COLS = [
@@ -24,13 +24,13 @@ var WINE_COLS = [
 // The Removals tab is the journal: bottles going out (dir "out") and coming in (dir "in").
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
   'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer'];
-var LOCATION_COLS = ['name'];
+var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name'];
 var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '7';
+var SCHEMA_VERSION = '8';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -58,6 +58,7 @@ var ACTIONS = {
   deleteRetailer: actionDeleteRetailer_,
   renameRetailer: actionRenameRetailer_,
   renameLocation: actionRenameLocation_,
+  setShelfNames: actionSetShelfNames_,
   savePerson: actionSavePerson_,
   deletePerson: actionDeletePerson_,
   renamePerson: actionRenamePerson_,
@@ -355,6 +356,7 @@ function actionLoad_() {
     wines: readAll_(SHEETS.wines),
     removals: readAll_(SHEETS.removals),
     locations: readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String),
+    locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(function (r) { return { name: String(r.name), shelves: parseShelves_(r.shelves) }; }),
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
     people: peopleList_(),
     settings: settings_(),
@@ -550,6 +552,26 @@ function deleteRowsWhere_(name, col, value) {
   for (var i = vals.length - 1; i >= 1; i--) {
     if (lower_(vals[i][c]) === lower_(value)) sh.deleteRow(i + 1);
   }
+}
+
+function parseShelves_(v) {
+  try { var o = JSON.parse(v || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; }
+}
+
+/** Own names for the shelves of one location, for example {"0": "A", "1": "B"}. Empty names fall back to the number. */
+function actionSetShelfNames_(req) {
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('Missing location name');
+  var clean = {};
+  Object.keys(req.shelves || {}).forEach(function (k) {
+    var v = String(req.shelves[k] || '').trim();
+    if (v && /^\d+$/.test(k)) clean[k] = v;
+  });
+  return withLock_(function () {
+    var n = updateRows_(SHEETS.locations, function (o) { if (lower_(o.name) !== lower_(name)) return false; o.shelves = JSON.stringify(clean); return true; });
+    if (!n) throw new Error('Location not found');
+    return clean;
+  });
 }
 
 function actionRenameLocation_(req) {

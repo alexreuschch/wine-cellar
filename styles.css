@@ -400,3 +400,10 @@ textarea.autosize { resize: vertical; min-height: 120px; overflow: hidden; line-
 .detail > section { padding-top: 18px; border-top: 1px solid var(--line); }
 .detail > section h2, .detail > section .rating-head h2 { font-size: 17px; font-weight: 600; }
 .detail > section .info-list .info-row:first-child { padding-top: 4px; }
+
+/* 2.8.0: shelves from 0 with own names */
+.shelf-val { min-width: 52px; max-width: 110px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepper span.shelf-val { display: block; line-height: 44px; text-align: center; }
+.shelf-list { display: flex; flex-direction: column; gap: 6px; }
+.shelf-row { display: flex; align-items: center; gap: 12px; }
+.shelf-row > span { width: 52px; flex: none; }

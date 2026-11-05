@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.8.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -103,7 +103,7 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [], retailers: [], people: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
+const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [], people: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
@@ -205,7 +205,12 @@ const parseMoney = v => { const s = str(v).trim().replace(/[^\d.,-]/g, '').repla
 const shelfVal = v => (v === '' || v === null || v === undefined || isNaN(Number(v)) ? null : Number(v));
 const placeKey = e => [lc(str(e.loc).trim()), shelfVal(e.shelf) === null ? '' : String(shelfVal(e.shelf)), lc(str(e.pos).trim())].join('|');
 const samePlace = (a, b) => placeKey(a) === placeKey(b);
-const placeLabel = e => [e.loc || 'No location', shelfVal(e.shelf) !== null ? `Shelf ${shelfVal(e.shelf)}` : '', str(e.pos).trim()].filter(Boolean).join(' · ');
+/* shelves are numbered from 0; each location can give them own names in Settings */
+const shelfName = (loc, n) => { const m = S.shelfNames[lc(str(loc))]; return m && m[String(n)] ? str(m[String(n)]) : ''; };
+const shelfLabel = (loc, n) => (n === null || n === undefined || n === '' ? '' : shelfName(loc, n) || `Shelf ${n}`);
+const shelfText = (loc, n) => (n === null || n === undefined || n === '' ? 'None' : shelfName(loc, n) || String(n));
+const shelfStep = (v, d) => { if (v === null || v === undefined || v === '') return d > 0 ? 0 : null; const x = Number(v) + d; return x < 0 ? null : Math.min(x, 99); };
+const placeLabel = e => [e.loc || 'No location', shelfLabel(e.loc, shelfVal(e.shelf)), str(e.pos).trim()].filter(Boolean).join(' · ');
 const placeOf = e => ({ loc: str(e.loc), shelf: shelfVal(e.shelf), pos: str(e.pos).trim() });
 
 const inEntries = w => S.removals.filter(r => r.wineId === w.id && r.dir === 'in');
@@ -295,6 +300,7 @@ function loadCache() {
   S.wines = (c.wines || []).map(normWine);
   S.removals = (c.removals || []).map(normRemoval);
   if (Array.isArray(c.locations)) S.locations = c.locations;
+  if (c.shelfNames) S.shelfNames = c.shelfNames;
   if (Array.isArray(c.retailers)) S.retailers = c.retailers;
   if (Array.isArray(c.people)) S.people = c.people;
   if (c.settings) S.settings = Object.assign({ currency: 'CHF' }, c.settings);
@@ -302,7 +308,7 @@ function loadCache() {
   if (c.version) S.version = c.version;
 }
 function persist() {
-  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, retailers: S.retailers, people: S.people, settings: S.settings, fx: S.fx, version: S.version });
+  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, retailers: S.retailers, people: S.people, settings: S.settings, fx: S.fx, version: S.version });
 }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
@@ -455,6 +461,8 @@ async function sync(silent) {
     S.wines = (d.wines || []).map(normWine).filter(w => w.id);
     S.removals = (d.removals || []).map(normRemoval).filter(r => r.id);
     S.locations = Array.isArray(d.locations) ? d.locations : [];
+    S.shelfNames = {};
+    (d.locationInfo || []).forEach(l => { if (l && l.name && l.shelves && Object.keys(l.shelves).length) S.shelfNames[lc(l.name)] = l.shelves; });
     S.retailers = Array.isArray(d.retailers) ? d.retailers.map(r => ({ name: str(r.name), website: str(r.website) })).filter(r => r.name) : [];
     S.people = Array.isArray(d.people) ? d.people.map(str).filter(Boolean) : [];
     if (d.settings) S.settings = Object.assign({ currency: 'CHF' }, d.settings);
@@ -890,7 +898,7 @@ function statsHtml() {
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
     <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 9 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+  const notice = S.version && S.version < 10 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -1103,7 +1111,7 @@ function viewJournal() {
 
 /* ------------------------------------------------------------ view: wine detail */
 
-const whereText = e => [e.shelf !== null && e.shelf !== '' ? `Shelf ${e.shelf}` : '', e.pos].filter(Boolean).join(' · ');
+const whereText = e => [shelfLabel(e.loc, shelfVal(e.shelf)), e.pos].filter(Boolean).join(' · ');
 
 function stockHtml(w) {
   const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}</div>
@@ -1391,7 +1399,7 @@ function renderSheet() {
   } else {
     const showSite = RS.type === 'Purchase' && RS.rp.people.length;
     const place = RS.mode === 'add' ? `<div class="store-row">
-        <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" style="min-width:48px">${RS.shelf === null ? 'None' : RS.shelf}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
+        <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" class="shelf-val">${esc(shelfText(RS.loc, RS.shelf))}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input name="pos" data-input="rs" placeholder="Back row, left" value="${esc(RS.pos)}"></label>
       </div><p class="muted tiny" style="margin:-6px 0 0" id="rs-hint">${placeHint()}</p>` : '';
     body = `${typeGrid}${locs}${place}${qty}${date}
@@ -1635,7 +1643,7 @@ function deletePanelHtml(w, r) {
       ${r.loc && !d.loc ? `<p class="muted small" style="margin:0">${esc(r.loc)} no longer exists.</p>` : ''}
       <div class="chips">${S.locations.map(l => `<button class="chip${lc(l) === lc(d.loc) ? ' on' : ''}" data-act="del-loc" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}</div>
       ${d.loc ? `<div class="store-row">
-        <div class="field">Shelf (optional)<div class="stepper"><button data-act="del-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="del-shelf" style="min-width:48px">${d.shelf === null ? 'None' : d.shelf}</span><button data-act="del-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
+        <div class="field">Shelf (optional)<div class="stepper"><button data-act="del-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="del-shelf" class="shelf-val">${esc(shelfText(d.loc, d.shelf))}</span><button data-act="del-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input data-input="del-pos" placeholder="Back row, left" value="${esc(d.pos)}"></label>
       </div><p class="muted tiny" style="margin:-6px 0 0" id="del-hint">${delHint()}</p>` : ''}`;
   }
@@ -1804,7 +1812,7 @@ function stockEditorHtml() {
     return `<div class="stock-edit${e.n === 0 ? ' zero' : ''}">
       <div style="display:flex;gap:10px;align-items:${add ? 'flex-end' : 'center'}">${locSel}<div class="stepper"><button data-act="st-n" data-i="${i}" data-d="-1" aria-label="Fewer bottles">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="st-n-${i}" data-input="qty-in" data-change="qty-in" data-k="st" data-i="${i}" aria-label="Number of bottles" value="${e.n}"><button data-act="st-n" data-i="${i}" data-d="1" aria-label="More bottles">${ICON.plus}</button></div></div>
       <div class="store-row">
-        <div class="field">Shelf (optional)<div class="stepper"><button data-act="st-shelf" data-i="${i}" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="st-shelf-${i}" style="min-width:48px">${e.shelf === null || e.shelf === '' ? 'None' : esc(e.shelf)}</span><button data-act="st-shelf" data-i="${i}" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
+        <div class="field">Shelf (optional)<div class="stepper"><button data-act="st-shelf" data-i="${i}" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="st-shelf-${i}" class="shelf-val">${esc(shelfText(e.loc, shelfVal(e.shelf)))}</span><button data-act="st-shelf" data-i="${i}" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input data-input="st-pos" data-i="${i}" placeholder="Back row, left" value="${esc(e.pos)}"></label>
       </div>
       ${!add && e.n === 0 ? '<p class="muted tiny" style="margin:0">Empty. Hidden after saving.</p>' : ''}
@@ -2425,6 +2433,47 @@ function editRowHtml(name, website) {
     <p class="muted tiny" style="margin:0">Renaming also changes all entries in the journal${U.edit && U.edit.kind === 'loc' ? ' and all bottles stored there' : ''}.</p></div>`;
 }
 
+function shelvesHtml() {
+  if (!S.locations.length) return '';
+  const loc = S.locations.find(l => l === U.shelfLoc) || S.locations[0];
+  U.shelfLoc = loc;
+  const names = S.shelfNames[lc(loc)] || {};
+  let top = 3;
+  S.wines.forEach(w => w.stock.forEach(e => { if (lc(e.loc) === lc(loc) && shelfVal(e.shelf) !== null) top = Math.max(top, shelfVal(e.shelf)); }));
+  Object.keys(names).forEach(k => { top = Math.max(top, Number(k)); });
+  top = Math.max(top, U.shelfExtra && U.shelfExtra[loc] ? U.shelfExtra[loc] : 0);
+  const rows = [];
+  for (let n = 0; n <= top; n++) {
+    rows.push(`<div class="shelf-row"><span class="muted small">Shelf ${n}</span><label class="field" style="flex:1"><span class="sr-only">Name of shelf ${n}</span><input data-change="shelf-name" data-v="${esc(loc)}" data-n="${n}" placeholder="${n}" value="${esc(names[String(n)] || '')}" autocapitalize="sentences" enterkeyhint="done"></label></div>`);
+  }
+  return `<section class="box"><span class="box-title">Shelves</span>
+    <label class="field">Location<select data-change="shelf-loc">${S.locations.map(l => `<option${l === loc ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    <div class="shelf-list">${rows.join('')}</div>
+    <button class="btn dashed" data-act="shelf-more">Add shelf</button>
+    <p class="muted tiny" style="margin:0">Shelves are numbered from 0. Give them your own names, for example A, B, C or Top, Middle, Bottom. Leave a field empty to use the number.</p>
+  </section>`;
+}
+
+async function saveShelfName(loc, n, value) {
+  const key = lc(loc);
+  const prev = Object.assign({}, S.shelfNames[key] || {});
+  const next = Object.assign({}, prev);
+  if (value.trim()) next[String(n)] = value.trim(); else delete next[String(n)];
+  if (Object.keys(next).length) S.shelfNames[key] = next; else delete S.shelfNames[key];
+  persist();
+  try {
+    const saved = await api('setShelfNames', { name: loc, shelves: next });
+    if (saved && Object.keys(saved).length) S.shelfNames[key] = saved; else delete S.shelfNames[key];
+    persist();
+    toast('Shelf name saved');
+  } catch (e) {
+    if (Object.keys(prev).length) S.shelfNames[key] = prev; else delete S.shelfNames[key];
+    persist();
+    refreshView();
+    toast('Not saved: ' + e.message);
+  }
+}
+
 function retailersHtml() {
   const used = {};
   S.removals.forEach(r => { if (r.retailer) used[lc(r.retailer)] = (used[lc(r.retailer)] || 0) + 1; });
@@ -2464,6 +2513,7 @@ function renameLocal(kind, from, to) {
   const eq = v => lc(str(v).trim()) === lc(from);
   if (kind === 'loc') {
     S.locations = S.locations.map(l => (eq(l) ? to : l));
+    if (S.shelfNames[lc(from)]) { S.shelfNames[lc(to)] = S.shelfNames[lc(from)]; if (lc(from) !== lc(to)) delete S.shelfNames[lc(from)]; }
     S.wines.forEach(w => { w.stock.forEach(e => { if (eq(e.loc)) e.loc = to; }); if (eq(w.location)) w.location = to; });
     S.removals.forEach(r => { if (eq(r.loc)) r.loc = to; });
     if (eq(store.get('wc-lastloc', ''))) store.set('wc-lastloc', to);
@@ -2518,6 +2568,7 @@ function viewSettings(first) {
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
       <p class="muted tiny" style="margin:0">Claude looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
     ${first ? '' : locationsHtml()}
+    ${first ? '' : shelvesHtml()}
     ${first ? '' : retailersHtml()}
     ${first ? '' : peopleHtml()}
     ${first ? '' : '<h2 style="font-size:15px;font-weight:600;margin-top:8px">Connection</h2>'}
@@ -2582,6 +2633,13 @@ const ACTS = {
   },
   'ed-open': el => { U.edit = { kind: el.dataset.k, name: el.dataset.v }; U.locMove = null; refreshView(); const i = $('#ed-name'); if (i) i.focus(); },
   'ed-cancel': () => { U.edit = null; refreshView(); },
+  'shelf-more': () => {
+    const loc = U.shelfLoc;
+    U.shelfExtra = U.shelfExtra || {};
+    const rows = document.querySelectorAll('.shelf-row').length;
+    U.shelfExtra[loc] = rows;
+    refreshView();
+  },
   'ed-save': () => saveEdit(),
   'ret-add': async () => {
     const name = ($('#new-ret').value || '').replace(/\s+/g, ' ').trim(), website = ($('#new-ret-site').value || '').trim();
@@ -2704,9 +2762,8 @@ const ACTS = {
   'rs-loc': el => { RS.loc = el.dataset.v; placeFromStock(); renderSheet(); },
   'rs-place': el => { const w = wineById(RS.wineId); Object.assign(RS, placeOf(w.stock[Number(el.dataset.i)])); RS.qty = clamp(RS.qty, 1, qtyMax()); renderSheet(); },
   'rs-shelf': el => {
-    const v = clamp((RS.shelf || 0) + Number(el.dataset.d), 0, 99);
-    RS.shelf = v === 0 ? null : v;
-    $('#rs-shelf').textContent = v === 0 ? 'None' : v;
+    RS.shelf = shelfStep(RS.shelf, Number(el.dataset.d));
+    $('#rs-shelf').textContent = shelfText(RS.loc, RS.shelf);
     const h = $('#rs-hint');
     if (h) h.textContent = placeHint();
   },
@@ -2724,9 +2781,8 @@ const ACTS = {
     renderSheet();
   },
   'del-shelf': el => {
-    const v = clamp((RS.del.shelf || 0) + Number(el.dataset.d), 0, 99);
-    RS.del.shelf = v === 0 ? null : v;
-    $('#del-shelf').textContent = v === 0 ? 'None' : v;
+    RS.del.shelf = shelfStep(RS.del.shelf, Number(el.dataset.d));
+    $('#del-shelf').textContent = shelfText(RS.del.loc, RS.del.shelf);
     const h = $('#del-hint');
     if (h) h.textContent = delHint();
   },
@@ -2752,9 +2808,8 @@ const ACTS = {
   },
   'st-shelf': el => {
     const e = D.stock[Number(el.dataset.i)];
-    const v = clamp((Number(e.shelf) || 0) + Number(el.dataset.d), 0, 99);
-    e.shelf = v === 0 ? null : v;
-    $('#st-shelf-' + el.dataset.i).textContent = v === 0 ? 'None' : v;
+    e.shelf = shelfStep(shelfVal(e.shelf), Number(el.dataset.d));
+    $('#st-shelf-' + el.dataset.i).textContent = shelfText(e.loc, e.shelf);
   },
   'st-add-open': () => { D.addLoc = true; D.move = null; renderStockBox(); },
   'st-add-close': () => { D.addLoc = false; renderStockBox(); },
@@ -2893,6 +2948,8 @@ const CHANGES = {
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
   rsys: el => { if (D) D.ratings[Number(el.dataset.i)].sys = el.value; },
   'ret-site': el => saveRetailerSite(el.dataset.v, el.value.trim()),
+  'shelf-loc': el => { U.shelfLoc = el.value; refreshView(); },
+  'shelf-name': el => saveShelfName(el.dataset.v, Number(el.dataset.n), el.value),
   currency: async el => {
     S.settings = Object.assign({}, S.settings, { currency: el.value });
     persist();
