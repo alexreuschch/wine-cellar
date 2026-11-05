@@ -29,8 +29,8 @@ const monthKey = name => { const [mo, y] = String(name).split(' '); return `${y}
 const vintageOf = w => (w.vintage ? String(w.vintage) : 'NV');
 const drinkByOf = w => { const p = windowParts(w); return p ? [String(Math.max(now.getFullYear(), p.u))] : []; };
 const byYearDesc = (a, b) => (a.name === 'NV') - (b.name === 'NV') || Number(b.name) - Number(a.name);
-const F_VINTAGE = { label: 'Vintage', plural: 'vintages', prefix: 'Vintage ', of: w => [vintageOf(w)], sort: byYearDesc, sortHint: 'Newest first. ' };
-const F_DRINKBY = { label: 'Drink by', plural: 'years', prefix: 'Drink by ', sortHint: 'The year the drinking window ends, wines past it count for this year. ', of: drinkByOf, sort: (a, b) => Number(a.name) - Number(b.name) };
+const F_VINTAGE = { hidden: true, label: 'Vintage', plural: 'vintages', prefix: 'Vintage ', of: w => [vintageOf(w)], sort: byYearDesc, sortHint: 'Newest first. ' };
+const F_DRINKBY = { hidden: true, label: 'Drink by', plural: 'years', prefix: 'Drink by ', sortHint: 'The year the drinking window ends, wines past it count for this year. ', of: drinkByOf, sort: (a, b) => Number(a.name) - Number(b.name) };
 const F_PRICE = { label: 'Street', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
 const CTX = {
   cellar: {
@@ -56,7 +56,7 @@ const CTX = {
       person: { label: 'Person', plural: 'people', of: r => namesOf(r.people) },
       type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added'] },
       retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) },
-      month: { label: 'Month', plural: 'months', sortHint: 'Newest first. ', of: r => (monthOf(r) ? [monthOf(r)] : []), sort: (a, b) => monthKey(b.name).localeCompare(monthKey(a.name)) }
+      month: { hidden: true, label: 'Month', plural: 'months', sortHint: 'Newest first. ', of: r => (monthOf(r) ? [monthOf(r)] : []), sort: (a, b) => monthKey(b.name).localeCompare(monthKey(a.name)) }
     },
     items: () => allEntries(),
     text: r => journalTextMatch(r),
@@ -182,7 +182,8 @@ function filterArea(ctx) {
     const badges = c.badges();
     return active.length || badges ? `<div class="chips">${active.map(activeChip).join('')}${badges}${clear}</div>` : '';
   }
-  const tabs = Object.keys(c.facets).filter(k => (isRange(c.facets[k]) ? rangeMax(ctx, k) > 0 : isRating(c.facets[k]) ? ratingSystems(ctx).length > 0 : allVals[k].length));
+  // hidden facets are only set from Insights: no tab, but a chip to remove them
+  const tabs = Object.keys(c.facets).filter(k => !c.facets[k].hidden).filter(k => (isRange(c.facets[k]) ? rangeMax(ctx, k) > 0 : isRating(c.facets[k]) ? ratingSystems(ctx).length > 0 : allVals[k].length));
   const extra = c.extra();
   if (!tabs.length) return `<div class="card filter-panel"><p class="muted small" style="margin:0">Nothing to filter by yet.</p>${extra}</div>`;
   if (!tabs.includes(st.tab)) st.tab = tabs[0];
@@ -359,15 +360,13 @@ function wineRow(w) {
 }
 
 /* sort order of the cellar list, remembered on this device */
-const SORTS = { az: 'A to Z', window: 'Drinking window', value: 'Value', rating: 'My rating', recent: 'Recently added' };
+const SORTS = { az: 'A-Z', value: 'Value' };
 let SORT = (() => { const v = store.get('wc-sort', 'az'); return SORTS[v] ? v : 'az'; })();
 function sortCmp(a, b) {
   const az = wineTitle(a).localeCompare(wineTitle(b)) || str(a.vintage).localeCompare(str(b.vintage));
   const desc = (x, y) => (x === null && y === null ? 0 : x === null ? 1 : y === null ? -1 : y - x);
-  if (SORT === 'window') return urgencyCmp(a, b) || az;
-  if (SORT === 'value') { const v = w => { const s = streetOf(w); return s === null ? null : s * Math.max(1, w.count); }; return desc(v(a), v(b)) || az; }
-  if (SORT === 'rating') return desc(a.myRating, b.myRating) || az;
-  if (SORT === 'recent') return str(b.createdAt).localeCompare(str(a.createdAt)) || az;
+  // value: street price of a single bottle, highest first, wines without one at the end
+  if (SORT === 'value') return desc(streetOf(a), streetOf(b)) || az;
   return az;
 }
 const sortSelectHtml = () => `<label class="sort-sel"><span class="sr-only">Sort by</span>${ICON.sort}<select data-change="sort">${Object.keys(SORTS).map(k => `<option value="${k}"${k === SORT ? ' selected' : ''}>${SORTS[k]}</option>`).join('')}</select></label>`;
