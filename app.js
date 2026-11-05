@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.12.0';
+const APP_VERSION = '2.13.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -41,6 +41,7 @@ const TODAY = now.getFullYear() + now.getMonth() / 12 + (now.getDate() - 1) / 36
 const svg = (d, size = 20, sw = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {
   plus: svg('<path d="M5 12h14M12 5v14"/>', 18, 2.2),
+  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 18, 2.2),
   minus: svg('<path d="M5 12h14"/>', 18, 2.2),
   plusBig: svg('<path d="M5 12h14M12 5v14"/>', 26, 2.4),
   search: svg('<circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/>', 18, 2),
@@ -107,7 +108,7 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [], people: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
+const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [], people: [], wishlist: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
@@ -307,12 +308,13 @@ function loadCache() {
   if (c.shelfNames) S.shelfNames = c.shelfNames;
   if (Array.isArray(c.retailers)) S.retailers = c.retailers;
   if (Array.isArray(c.people)) S.people = c.people;
+  if (Array.isArray(c.wishlist)) S.wishlist = c.wishlist;
   if (c.settings) S.settings = Object.assign({ currency: 'CHF' }, c.settings);
   if (c.fx) S.fx = c.fx;
   if (c.version) S.version = c.version;
 }
 function persist() {
-  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, retailers: S.retailers, people: S.people, settings: S.settings, fx: S.fx, version: S.version });
+  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, retailers: S.retailers, people: S.people, wishlist: S.wishlist, settings: S.settings, fx: S.fx, version: S.version });
 }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
@@ -488,6 +490,7 @@ async function sync(silent) {
     (d.locationInfo || []).forEach(l => { if (l && l.name && l.shelves && Object.keys(l.shelves).length) S.shelfNames[lc(l.name)] = l.shelves; });
     S.retailers = Array.isArray(d.retailers) ? d.retailers.map(r => ({ name: str(r.name), website: str(r.website) })).filter(r => r.name) : [];
     S.people = Array.isArray(d.people) ? d.people.map(str).filter(Boolean) : [];
+    S.wishlist = Array.isArray(d.wishlist) ? d.wishlist.map(normWish) : [];
     if (d.settings) S.settings = Object.assign({ currency: 'CHF' }, d.settings);
     if (d.fx) S.fx = d.fx;
     persist();
@@ -593,6 +596,7 @@ function render() {
     case 'top': html = viewTop(); break;
     case 'insights': html = viewInsights(); break;
     case 'sommelier': html = viewSommelier(); break;
+    case 'discover': html = viewDiscover(); break;
     case 'journal': html = viewJournal(); break;
     case 'wine': html = viewWine(r.id); break;
     case 'add': html = viewForm('add', null); break;
@@ -925,7 +929,7 @@ function statsHtml() {
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
     <div class="top-actions"><a class="icon-btn magic-btn" href="#/sommelier" aria-label="AI Sommelier">${ICON.magic}</a><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 11 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+  const notice = S.version && S.version < 12 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -1117,6 +1121,230 @@ function sommStopVoice() {
   SOMM.listening = false;
 }
 
+/* ------------------------------------------------------------ AI consultant and wishlist */
+
+function normWish(x) {
+  let offer = null;
+  try { offer = x.offer ? (typeof x.offer === 'string' ? JSON.parse(x.offer) : x.offer) : null; } catch (e) { offer = null; }
+  return {
+    id: str(x.id), producer: str(x.producer), name: str(x.name), vintage: str(x.vintage), type: str(x.type), region: str(x.region), grapes: str(x.grapes),
+    price: numOrNull(x.price), priceCur: str(x.priceCur) || cur(), label: str(x.label), why: str(x.why), value: str(x.value),
+    qty: numOrNull(x.qty), replaces: str(x.replaces), offer: offer && offer.shop ? offer : null, createdAt: str(x.createdAt)
+  };
+}
+const wishTitle = x => [x.producer, x.name, x.vintage].filter(Boolean).join(' ');
+const wishKey = x => lc([x.producer, x.name].join('|'));
+
+const CONS = { focus: '', budget: null, note: '', busy: false, result: null, error: '', offers: {}, offerRun: new Set() };
+(() => { const c = store.get('wc-consult', null); if (c && c.result) { CONS.result = c.result; CONS.offers = c.offers || {}; } })();
+const saveConsult = () => store.set('wc-consult', { result: CONS.result, offers: CONS.offers });
+const CONS_FOCUS = ['Like my favorites', 'Discover something new', 'Everyday wines', 'Special bottles', 'Top value'];
+const LABEL_CLS = { 'Safe bet': 'safe', Discovery: 'disc', 'Top value': 'value' };
+
+function quantile(sorted, q) {
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+/* the taste profile, calculated in the app from stock, finished wines, ratings, journal and purchase prices */
+function tasteProfile() {
+  const stock = S.wines.filter(w => w.count > 0);
+  const since = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+  const opened = S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift');
+  const recent = opened.filter(r => str(r.date) >= since);
+  const qty = r => Number(r.qty) || 1;
+  // bottles ever owned per wine: purchases and gifts in, otherwise the stock plus what went out
+  const owned = w => { const ins = inEntries(w).reduce((a, r) => a + qty(r), 0); return ins || w.count + S.removals.filter(r => r.wineId === w.id && r.dir === 'out').reduce((a, r) => a + qty(r), 0); };
+  const all = S.wines.map(w => ({ w, n: owned(w) })).filter(x => x.n > 0);
+  const totalOwned = all.reduce((a, x) => a + x.n, 0) || 1;
+  const byType = TYPES.map(t => ({ t, n: all.filter(x => x.w.type === t).reduce((a, x) => a + x.n, 0) })).filter(x => x.n).sort((a, b) => b.n - a.n);
+  const tallyTop = (keyOf, k) => { const m = new Map(); all.forEach(x => keyOf(x.w).forEach(v => { const key = lc(v); const e = m.get(key) || { v, n: 0 }; e.n += x.n; m.set(key, e); })); return [...m.values()].sort((a, b) => b.n - a.n).slice(0, k).map(e => e.v); };
+  const grapes = tallyTop(grapeNames, 4);
+  const regions = tallyTop(w => (w.region ? [str(w.region).split(',')[0].trim()] : []), 4);
+  const prices = [];
+  S.removals.filter(r => r.dir === 'in' && r.type === 'Purchase' && r.price !== null && r.price > 0).forEach(r => { const v = conv(r.price, r.priceCur || cur()); if (v) for (let i = 0; i < Math.min(qty(r), 24); i++) prices.push(v); });
+  if (!prices.length) stock.forEach(w => { const v = streetOf(w); if (v) prices.push(v); });
+  prices.sort((a, b) => a - b);
+  const p25 = quantile(prices, 0.25), p50 = quantile(prices, 0.5), p75 = quantile(prices, 0.75);
+  const rated = S.wines.filter(w => w.myRating !== null).sort((a, b) => b.myRating - a.myRating);
+  const top = rated.filter(w => w.myRating >= 85).slice(0, 4);
+  const low = rated.filter(w => w.myRating < 75).slice(-3);
+  const tagM = new Map();
+  rated.filter(w => w.myRating >= 85).forEach(w => w.tasteTags.forEach(t => { const k = lc(t); tagM.set(k, (tagM.get(k) || 0) + 1); }));
+  const tags = [...tagM.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+  const perMonth = recent.reduce((a, r) => a + qty(r), 0) / 12;
+  const occ = tally(recent, r => [entryType(r)], qty).sort((a, b) => b.n - a.n).slice(0, 2).map(e => e.k);
+  const cover = TYPES.map(t => {
+    const st = stock.filter(w => w.type === t).reduce((a, w) => a + w.count, 0);
+    const used = recent.filter(r => { const w = wineById(r.wineId); return w && w.type === t; }).reduce((a, r) => a + qty(r), 0);
+    return { t, stock: st, used, months: used ? Math.round(st / (used / 12)) : null };
+  }).filter(c => c.stock || c.used);
+  const fmtP = v => fmtNum(Math.round(v), 0);
+  const lines = [];
+  if (byType.length) lines.push(['Wine types', byType.slice(0, 3).map(x => `${x.t} ${pct(x.n, totalOwned)}%`).join(', ')]);
+  if (grapes.length) lines.push(['Grapes', grapes.join(', ')]);
+  if (regions.length) lines.push(['Regions', regions.join(', ')]);
+  if (p50 !== null) lines.push(['Usual price', `${cur()} ${fmtP(p25)} to ${fmtP(p75)} per bottle, median ${fmtP(p50)}`]);
+  if (top.length) lines.push(['Rated highest', top.map(w => `${wineTitle(w)} ${w.vintage} ${w.myRating}%`).join(', ')]);
+  if (tags.length) lines.push(['Style you like', tags.join(', ')]);
+  lines.push(['Drinking', perMonth ? `about ${fmtNum(perMonth, 1)} bottles per month${occ.length ? `, mostly ${occ.join(' and ').toLowerCase()}` : ''}` : 'no bottles opened in the last 12 months']);
+  const text = [
+    ...lines.map(l => `${l[0]}: ${l[1]}`),
+    low.length ? `Rated lowest: ${low.map(w => `${fullName(w)} ${w.myRating}%`).join(', ')}` : '',
+    'Stock compared with drinking over the last 12 months:',
+    ...cover.map(c => `${c.t}: ${btl(c.stock)} in stock, ${c.used} opened in 12 months${c.months !== null ? `, lasts about ${c.months} months` : ''}`)
+  ].filter(Boolean).join('\n');
+  const round5 = v => Math.max(5, Math.round(v / 5) * 5);
+  return { lines, cover, text, budget: p50 !== null ? { min: round5(p25 * 0.8), max: round5(p75 * 1.2) } : { min: '', max: '' } };
+}
+
+function offerLineHtml(o) {
+  return `<div class="cons-offer"><div style="min-width:0"><p class="ellipsis" style="margin:0;font-weight:600">${esc(o.shop)}</p><p class="tiny muted" style="margin:2px 0 0">${esc([o.area, o.vintage ? `vintage ${o.vintage}` : '', o.date ? `checked ${fmtDate(o.date)}` : ''].filter(Boolean).join(' · '))}</p></div>
+    <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>`;
+}
+
+function pickCardHtml(p, i, saved) {
+  const key = wishKey(p);
+  const rw = p.replaces ? wineById(p.replaces) : null;
+  const o = CONS.offers[key];
+  const busyO = CONS.offerRun.has(key);
+  const c = countryOf(p);
+  return `<div class="cons-card">
+    <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${LABEL_CLS[p.label] || 'disc'}">${esc(p.label)}</span>${p.price ? `<span class="small muted">≈ ${esc(priceText(p.price, p.priceCur || cur()))}</span>` : ''}</div>
+    <div><p class="cons-title">${esc(wishTitle(p))}</p><p class="small muted" style="margin:2px 0 0">${c ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</p></div>
+    ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
+    ${p.value ? `<p class="small cons-value" style="margin:0">${ICON.cash}<span>${esc(p.value)}</span></p>` : ''}
+    <p class="small" style="margin:0"><b>Buy ${p.qty || 1} ${p.qty === 1 ? 'bottle' : 'bottles'}</b>${rw ? ` · replaces <a href="#/wine/${encodeURIComponent(rw.id)}">${esc(wineTitle(rw))} ${esc(rw.vintage)}</a> (${rw.count} left)` : ' · new addition'}</p>
+    ${rw && p.replaceWhy ? `<p class="tiny muted" style="margin:-4px 0 0">${esc(p.replaceWhy)}</p>` : ''}
+    ${o ? offerLineHtml(o) : ''}
+    <div class="cons-actions"><button class="link-btn" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
+      <button class="link-btn" data-act="cons-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
+  </div>`;
+}
+
+function wishCardHtml(x) {
+  const busyO = CONS.offerRun.has('wish:' + x.id);
+  return `<div class="cons-card">
+    <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${LABEL_CLS[x.label] || 'disc'}">${esc(x.label || 'Wishlist')}</span>${x.price ? `<span class="small muted">≈ ${esc(priceText(x.price, x.priceCur))}</span>` : ''}</div>
+    <div><p class="cons-title">${esc(wishTitle(x))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(x) ? flagOf(x) : ''}${esc([x.region, x.type].filter(Boolean).join(' · '))}${x.qty ? ` · buy ${x.qty}` : ''}</p></div>
+    ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
+    ${x.offer ? offerLineHtml(x.offer) : ''}
+    <div class="cons-actions"><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
+      <button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
+      <button class="icon-btn" data-act="wish-del" data-id="${esc(x.id)}" aria-label="Remove from wishlist">${ICON.trash}</button></div>
+  </div>`;
+}
+
+function viewDiscover() {
+  const prof = tasteProfile();
+  if (!CONS.budget) CONS.budget = prof.budget;
+  const old = S.version && S.version < 12;
+  const savedKeys = new Set(S.wishlist.map(wishKey));
+  const res = CONS.result;
+  const cover = prof.cover.length ? `<div class="cons-cover"><div class="cons-cover-row head"><span>Type</span><span>In stock</span><span>Opened</span><span>Lasts</span></div>
+    ${prof.cover.map(c => `<div class="cons-cover-row"><span><span class="sw" style="background:${TYPE_CHART[c.t] || OTHER_C}"></span>${esc(c.t)}</span><span>${c.stock}</span><span>${c.used}</span><span>${c.months === null ? 'n/a' : c.months > 99 ? '99+ mo.' : `${c.months} mo.`}</span></div>`).join('')}</div>` : '';
+  return `<main class="screen has-nav discover">
+    <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
+    <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Discover</h1></header>
+    ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The consultant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
+    <section class="ins-sec" style="border-top:0;padding-top:0"><div class="sec-head"><h2>Your profile</h2></div>
+      <p class="small muted" style="margin:0">Calculated in the app from your stock, finished wines, ratings, journal and purchase prices. The consultant bases its suggestions on it.</p>
+      <div class="info-list">${prof.lines.map(l => infoRowWide(l[0], l[1])).join('')}</div>
+      <p class="small muted" style="margin:6px 0 0">Stock compared with what you drank in the last 12 months</p>${cover}
+    </section>
+    <section class="ins-sec"><div class="sec-head"><h2>What are you looking for?</h2></div>
+      <div class="chips">${CONS_FOCUS.map(f => `<button class="chip${CONS.focus === f ? ' on' : ''}" data-act="cons-focus" data-v="${esc(f)}">${esc(f)}</button>`).join('')}</div>
+      <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
+      <label class="field">Anything else? (optional)<input data-input="cons-note" placeholder="More whites for summer, wines for guests" value="${esc(CONS.note)}"></label>
+      <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Thinking…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
+      <p class="tiny muted" style="margin:0">Suggestions come from AI and cost about 5 cents per round. Prices are estimates until you tap Find best offer, which searches the web for about 2 to 4 cents.</p>
+    </section>
+    ${CONS.error ? `<p class="small" style="color:var(--danger);margin:0">${esc(CONS.error)}</p>` : ''}
+    ${res ? `<section class="ins-sec"><div class="sec-head"><h2>Recommendations</h2></div>${res.summary ? `<p style="margin:0;line-height:1.5">${esc(res.summary)}</p>` : ''}
+      <div class="cons-list">${res.picks.map((p, i) => pickCardHtml(p, i, savedKeys.has(wishKey(p)))).join('')}</div></section>` : ''}
+    <section class="ins-sec"><div class="sec-head"><h2>Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
+      ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save suggestions here. When you buy one, Add to cellar opens the form with its details.</p>'}
+    </section>
+  </main>${nav('insights')}`;
+}
+const infoRowWide = (label, value) => `<div class="info-row wide"><span class="info-label">${esc(label)}</span><span class="info-val">${esc(value)}</span></div>`;
+
+async function consRun() {
+  if (CONS.busy) return;
+  const prof = tasteProfile();
+  CONS.busy = true; CONS.error = '';
+  render();
+  const avoid = S.wishlist.map(wishTitle).concat(CONS.result ? CONS.result.picks.map(wishTitle) : []);
+  try {
+    const r = await api('consultant', { profile: prof.text, focus: CONS.focus, budget: { min: Number(CONS.budget.min) || 0, max: Number(CONS.budget.max) || 0 }, note: CONS.note, avoid });
+    CONS.result = { summary: str(r.summary), picks: (r.picks || []).map(p => Object.assign({}, p, { vintage: str(p.vintage) })) };
+    CONS.offers = {};
+    saveConsult();
+  } catch (e) {
+    CONS.error = /Unknown action/i.test(e.message) ? 'The consultant needs the new Code.gs. Update the script, then try again.' : aiErr(e.message);
+  }
+  CONS.busy = false;
+  render();
+  const h = [...document.querySelectorAll('.discover h2')].find(x => x.textContent === 'Recommendations');
+  if (h) h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function consOffer(p, key, wishId) {
+  if (CONS.offerRun.has(key)) return;
+  CONS.offerRun.add(key);
+  refreshView();
+  try {
+    const o = await api('offerFor', { wine: wishTitle(p), region: p.region, wishId: wishId || '' });
+    if (wishId) { const x = S.wishlist.find(w => w.id === wishId); if (x) x.offer = o; persist(); }
+    else { CONS.offers[wishKey(p)] = o; saveConsult(); }
+  } catch (e) {
+    toast(aiErr(e.message), 5000);
+  }
+  CONS.offerRun.delete(key);
+  refreshView();
+}
+
+async function consSave(p) {
+  const x = normWish(Object.assign({}, p, { id: newId('x'), offer: CONS.offers[wishKey(p)] || null, createdAt: new Date().toISOString() }));
+  S.wishlist.push(x);
+  persist();
+  refreshView();
+  try {
+    await api('saveWish', { wish: Object.assign({}, x, { offer: x.offer ? JSON.stringify(x.offer) : '' }) });
+    toast('Saved to your wishlist');
+  } catch (e) {
+    S.wishlist = S.wishlist.filter(w => w.id !== x.id);
+    persist();
+    refreshView();
+    toast('Not saved: ' + e.message);
+  }
+}
+
+async function wishDelete(id) {
+  const prev = S.wishlist;
+  S.wishlist = S.wishlist.filter(w => w.id !== id);
+  persist();
+  refreshView();
+  try { await api('deleteWish', { id }); } catch (e) { S.wishlist = prev; persist(); refreshView(); toast('Not deleted: ' + e.message); }
+}
+
+/* opens the add form with the details of a wishlist wine; the AI fills in the rest */
+function wishToCellar(id) {
+  const x = S.wishlist.find(w => w.id === id);
+  if (!x) return;
+  D = newDraft('add', null);
+  D.step = 'form';
+  D.fromWish = x.id;
+  const set = (k, v) => { if (str(v)) { D.fields[k] = str(v); D.touched.add(k); } };
+  set('producer', x.producer); set('name', x.name); set('vintage', x.vintage); set('region', x.region); set('grapes', x.grapes);
+  if (TYPES.includes(x.type)) { D.fields.type = x.type; D.touched.add('type'); }
+  if (x.offer) { D.fields.price = priceInput(x.offer.v, x.offer.cur); D.acq.website = ''; }
+  if (x.qty) D.stock[0].n = x.qty;
+  go('#/add');
+  setTimeout(() => { if (D && D.fromWish === x.id) runAnalysis(); }, 50);
+}
+
 /* ------------------------------------------------------------ insights */
 
 /* colors for wine types, checked for color blindness on the dark surface; always shown with name and number */
@@ -1155,8 +1383,9 @@ function columns(cols, color) {
 }
 
 /* donut for the share of wine types, with a legend that names every slice */
-function donut(rows, total) {
-  const r = 42, C = 2 * Math.PI * r, gap = rows.length > 1 ? 1.6 : 0;
+/* ring chart with a legend that names every slice; rows: { k, label, n, c, go } */
+function donut(rows, total, opts = {}) {
+  const r = 42, C = 2 * Math.PI * r, gap = rows.length > 1 ? 2.4 : 0;
   let off = 0;
   const arcs = rows.map(x => {
     const len = x.n / total * C;
@@ -1164,14 +1393,46 @@ function donut(rows, total) {
     off += len;
     return a;
   }).join('');
-  return `<div class="ins-donut"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="Bottles by wine type">${arcs}<text x="60" y="58" text-anchor="middle" class="d-n">${total}</text><text x="60" y="74" text-anchor="middle" class="d-l">bottles</text></svg>
-    <div class="ins-legend">${rows.map(x => `<button class="ins-leg" data-act="ins-go" data-k="type" data-v="${esc(x.k)}"><span class="sw" style="background:${x.c}"></span><span class="ellipsis">${esc(x.k)}</span><b>${x.n}</b><small>${pct(x.n, total)}%</small></button>`).join('')}</div></div>`;
+  const center = opts.center || [total, 'bottles'];
+  const legend = rows.map(x => {
+    const tag = x.go ? 'button' : 'div';
+    const attrs = x.go ? ` data-act="ins-go" data-k="${esc(x.go[0])}" data-v="${esc(x.go[1])}"` : '';
+    return `<${tag} class="ins-leg"${attrs}><span class="sw" style="background:${x.c}"></span><span class="ellipsis">${esc(x.label || x.k)}</span><b>${opts.pctOnly ? '' : Math.round(x.n)}</b><small>${pct(x.n, total)}%</small></${tag}>`;
+  }).join('');
+  return `<div class="ins-donut"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="${esc(opts.label || 'Share')}">${arcs}<text x="60" y="58" text-anchor="middle" class="d-n">${esc(center[0])}</text><text x="60" y="74" text-anchor="middle" class="d-l">${esc(center[1])}</text></svg>
+    <div class="ins-legend">${legend}</div></div>`;
+}
+
+/* grapes: red and white varieties get the color family of their wine */
+const RED_GRAPES = ['pinot noir', 'nebbiolo', 'tempranillo', 'graciano', 'merlot', 'cabernet sauvignon', 'cabernet franc', 'syrah', 'shiraz', 'grenache', 'garnacha', 'cinsault', 'sangiovese', 'touriga nacional', 'touriga franca', 'malbec', 'zinfandel', 'primitivo', 'gamay', 'mourvèdre', 'monastrell', 'carmenère', 'petit verdot', 'barbera', 'dolcetto', 'corvina', 'aglianico', "nero d'avola", 'blaufränkisch', 'zweigelt', 'pinotage', 'tannat', 'montepulciano', 'cornalin', 'humagne rouge', 'gamaret', 'garanoir', 'carignan', 'negroamaro', 'petite sirah', 'mencía', 'lagrein', 'teroldego', 'sagrantino', 'xinomavro', 'saperavi', 'pinot meunier', 'meunier', 'st. laurent', 'merlot noir'];
+const WHITE_GRAPES = ['chardonnay', 'riesling', 'chasselas', 'sauvignon blanc', 'sémillon', 'semillon', 'grüner veltliner', 'pinot gris', 'pinot grigio', 'pinot blanc', 'gewürztraminer', 'viognier', 'chenin blanc', 'muscat', 'moscato', 'albariño', 'verdejo', 'vermentino', 'garganega', 'glera', 'trebbiano', 'petite arvine', 'müller-thurgau', 'silvaner', 'marsanne', 'roussanne', 'furmint', 'assyrtiko', 'godello', 'fiano', 'greco', 'friulano', 'savagnin', 'heida', 'malvasia', 'palomino', 'pedro ximénez', 'macabeo', 'viura', 'xarel-lo', 'parellada', 'arneis', 'cortese', 'sauvignon gris', 'muscadelle'];
+const RED_SHADES = ['#C2414F', '#E58E98', '#962D3C'];
+const WHITE_SHADES = ['#B39028', '#E0C66E', '#8C6E1C'];
+const OTHER_C = '#6F6468';
+const REGION_C = ['#3987E5', '#D95926', '#199E70', '#C98500', '#D55181'];
+
+/* bottles per grape, split by the shares in the grapes field, otherwise equally */
+function grapeShares(w) {
+  const parts = String(w.grapes || '').split(/[,;\/+&]/).map(x => x.trim()).filter(Boolean)
+    .map(x => { const m = /(\d+(?:[.,]\d+)?)\s*%/.exec(x); return { name: cap(x.replace(/\d+([.,]\d+)?\s*%?/g, '').replace(/\s+/g, ' ').trim()), p: m ? Number(m[1].replace(',', '.')) : null }; })
+    .filter(x => x.name.length > 1);
+  if (!parts.length) return [];
+  const sum = parts.every(x => x.p !== null) ? parts.reduce((a, x) => a + x.p, 0) : 0;
+  return parts.map(x => ({ name: x.name, n: w.count * (sum > 0 ? x.p / sum : 1 / parts.length) }));
+}
+function grapeIsRed(name, wines) {
+  const k = lc(name);
+  if (RED_GRAPES.some(g => k === g || k.startsWith(g + ' '))) return true;
+  if (WHITE_GRAPES.some(g => k === g || k.startsWith(g + ' '))) return false;
+  let red = 0, white = 0;
+  wines.forEach(w => { if (grapeNames(w).some(g => lc(g) === k)) { if (['Red', 'Rosé', 'Fortified'].includes(w.type)) red += w.count; else white += w.count; } });
+  return red >= white;
 }
 
 const insSection = (title, sub, body) => `<section class="ins-sec"><div class="sec-head"><h2>${title}</h2>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>${body}</section>`;
 
 function viewInsights() {
-  const head = `<header class="top"><h1 class="title">Insights</h1></header>`;
+  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><a class="chip discover-chip" href="#/discover">${ICON.magic}Discover</a></div></header>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
   if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;
@@ -1182,7 +1443,7 @@ function viewInsights() {
   // wine types
   const types = tally(wines, w => [w.type || 'Other'], bottles).sort((a, b) => TYPES.indexOf(a.k) - TYPES.indexOf(b.k));
   types.forEach(t => { t.c = TYPE_CHART[t.k] || '#8F837C'; });
-  out.push(insSection('Wine types', `${wines.length} wines`, donut(types, total)));
+  out.push(insSection('Wine types', `${wines.length} wines`, donut(types.map(t => ({ k: t.k, n: t.n, c: t.c, go: ['type', t.k] })), total, { label: 'Bottles by wine type' })));
 
   // countries
   const cName = {};
@@ -1227,7 +1488,7 @@ function viewInsights() {
   const change = cost > 0 && withCost === withStreet ? Math.round((street - cost) / cost * 100) : null;
   out.push(insSection('Value', '', `<div class="ins-tiles"><div><span>Total Costs</span><b>${esc(money(cost, 0))}</b></div><div><span>Total Street Value</span><b>${esc(money(street, 0))}</b>${change !== null ? `<small>${change > 0 ? '+' : ''}${change}% vs. purchase</small>` : ''}</div></div>
     <p class="small muted" style="margin:12px 0 0">Total Street Value by wine type</p>
-    ${barRows(valRows.filter(v => v.s > 0).sort((a, b) => b.s - a.s).map(v => ({ label: v.t, n: Math.round(v.s), go: ['type', v.t] })), { money: true })}
+    ${barRows(valRows.filter(v => v.s > 0).sort((a, b) => b.s - a.s).map(v => ({ label: v.t, n: Math.round(v.s), c: TYPE_CHART[v.t], go: ['type', v.t] })), { money: true })}
     <p class="small muted" style="margin:12px 0 0">Bottles by street price per bottle (${esc(cur())})</p>
     ${barRows(bandRows.filter(b => b.n > 0).concat(noStreet ? [{ label: 'No street price', n: noStreet }] : []), { share: true, total })}`));
 
@@ -1245,12 +1506,30 @@ function viewInsights() {
     ${ppl.length ? `<p class="small muted" style="margin:12px 0 0">Shared most with</p>${barRows(ppl.map(e => ({ label: e.k, n: e.n, go: ['person', e.k] })))}` : ''}`
     : '<p class="muted small" style="margin:0">No bottles opened yet. Remove a bottle with minus to start your journal.</p>'));
 
-  // grapes and regions
-  const grapes = tally(wines, w => grapeNames(w), bottles).sort((a, b) => b.n - a.n || a.k.localeCompare(b.k)).slice(0, 6);
-  const regions = tally(wines, w => { const r = str(w.region).split(',')[0].trim(); return [r]; }, bottles).sort((a, b) => b.n - a.n || a.k.localeCompare(b.k)).slice(0, 6);
-  if (grapes.length) out.push(insSection('Top grapes', '', barRows(grapes.map(e => ({ label: e.k, n: e.n, go: ['grape', e.k] })))));
-  if (regions.length) out.push(insSection('Top regions', '', barRows(regions.map(e => ({ label: e.k, n: e.n, go: ['search', e.k] })))));
+  // grapes and regions as rings: top five and the rest
+  const gm = new Map();
+  wines.forEach(w => grapeShares(w).forEach(g => { const k = lc(g.name); const e = gm.get(k) || { k: g.name, n: 0 }; e.n += g.n; gm.set(k, e); }));
+  const gAll = [...gm.values()].sort((a, b) => b.n - a.n || a.k.localeCompare(b.k));
+  if (gAll.length) {
+    const gTotal = gAll.reduce((a, g) => a + g.n, 0);
+    let ri = 0, wi = 0;
+    const gRows = gAll.slice(0, 5).map(g => { const red = grapeIsRed(g.k, wines); return { k: g.k, n: g.n, c: red ? RED_SHADES[ri++ % RED_SHADES.length] : WHITE_SHADES[wi++ % WHITE_SHADES.length], go: ['grape', g.k] }; });
+    const gRest = gTotal - gRows.reduce((a, g) => a + g.n, 0);
+    if (gRest > 0.01) gRows.push({ k: 'Other grapes', n: gRest, c: OTHER_C });
+    out.push(insSection('Top grapes', 'red and white varieties', donut(gRows, gTotal, { center: [gAll.length, gAll.length === 1 ? 'grape' : 'grapes'], pctOnly: true, label: 'Share of grapes' })));
+  }
+  const regions = tally(wines, w => { const r = str(w.region).split(',')[0].trim(); return [r]; }, bottles).sort((a, b) => b.n - a.n || a.k.localeCompare(b.k));
+  if (regions.length) {
+    const rRows = regions.slice(0, 5).map((e, i) => ({ k: e.k, n: e.n, c: REGION_C[i], go: ['search', e.k] }));
+    const rRest = regions.slice(5).reduce((a, e) => a + e.n, 0);
+    if (rRest) rRows.push({ k: 'Other regions', n: rRest, c: OTHER_C });
+    out.push(insSection('Top regions', '', donut(rRows, total, { center: [regions.length, regions.length === 1 ? 'region' : 'regions'], label: 'Bottles by region' })));
+  }
 
+  out.push(`<section class="ins-sec discover-card"><div class="sec-head"><h2>Discover new wines</h2></div>
+    <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
+    <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a>
+    ${S.wishlist.length ? `<a class="small" href="#/discover" style="text-align:center">Wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</a>` : ''}</section>`);
   return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row to see the wines.</p>${out.join('')}</main>${nav('insights')}`;
 }
 
@@ -2726,8 +3005,10 @@ async function saveWineForm() {
       if (r.retailer && !S.retailers.some(x => lc(x.name) === lc(r.retailer))) S.retailers.push({ name: r.retailer, website: '' });
     });
     persist();
+    const fromWish = D.fromWish;
     D = null;
     busy(false);
+    if (fromWish) wishDelete(fromWish);
     go('#/wine/' + encodeURIComponent(saved.id), true);
     const ret = acq && acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '';
     if (ret && str(acq.website).trim() !== str(acq.websiteInit).trim()) saveRetailerSite(ret, str(acq.website).trim());
@@ -3063,6 +3344,13 @@ const ACTS = {
   winf: el => { U.winFilter = el.dataset.v; render(); },
   'top-mode': el => { U.topMode = el.dataset.v; render(); },
   'ins-go': el => insightsGo(el.dataset.k, el.dataset.v),
+  'cons-focus': el => { CONS.focus = CONS.focus === el.dataset.v ? '' : el.dataset.v; refreshView(); },
+  'cons-run': () => consRun(),
+  'cons-offer': el => { const p = CONS.result && CONS.result.picks[Number(el.dataset.i)]; if (p) consOffer(p, wishKey(p)); },
+  'cons-save': el => { const p = CONS.result && CONS.result.picks[Number(el.dataset.i)]; if (p) consSave(p); },
+  'wish-offer': el => { const x = S.wishlist.find(w => w.id === el.dataset.id); if (x) consOffer(x, 'wish:' + x.id, x.id); },
+  'wish-del': el => wishDelete(el.dataset.id),
+  'wish-add': el => wishToCellar(el.dataset.id),
   'somm-send': () => { const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
   'somm-example': el => sommAsk(el.dataset.v),
   'somm-mic': () => { if (SOMM.listening) { sommStopVoice(); sommRefresh(false); } else sommStartVoice(); },
@@ -3282,6 +3570,9 @@ const INPUTS = {
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
+  'cons-min': el => { CONS.budget.min = el.value.replace(/[^0-9]/g, ''); },
+  'cons-max': el => { CONS.budget.max = el.value.replace(/[^0-9]/g, ''); },
+  'cons-note': el => { CONS.note = el.value; },
   'acq-site': el => { if (D && D.acq) D.acq.website = el.value; },
   'del-pos': el => { if (!RS || !RS.del) return; RS.del.pos = el.value; const h = $('#del-hint'); if (h) h.textContent = delHint(); },
   'st-pos': el => { if (D) D.stock[Number(el.dataset.i)].pos = el.value; },

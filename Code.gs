@@ -11,8 +11,8 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 11;
-var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', fx: 'FX' };
+var API_VERSION = 12;
+var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', fx: 'FX' };
 
 var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
@@ -27,10 +27,11 @@ var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food'
 var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name'];
+var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt'];
 var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '8';
+var SCHEMA_VERSION = '9';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -52,6 +53,10 @@ var ACTIONS = {
   streetPrice: actionStreetPrice_,
   bestOffer: actionBestOffer_,
   sommelier: actionSommelier_,
+  consultant: actionConsultant_,
+  offerFor: actionOfferFor_,
+  saveWish: actionSaveWish_,
+  deleteWish: actionDeleteWish_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
   moveLocation: actionMoveLocation_,
@@ -120,6 +125,7 @@ function ensureSchema_() {
     ensureSheet_(ss, SHEETS.locations, LOCATION_COLS);
     ensureSheet_(ss, SHEETS.retailers, RETAILER_COLS);
     ensureSheet_(ss, SHEETS.people, PEOPLE_COLS);
+    ensureSheet_(ss, SHEETS.wishlist, WISH_COLS);
     var prev = Number(p.getProperty('SCHEMA_VERSION') || 0);
     if (prev < 5) migrate5_();
     p.setProperty('SCHEMA_VERSION', SCHEMA_VERSION);
@@ -360,6 +366,7 @@ function actionLoad_() {
     locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(function (r) { return { name: String(r.name), shelves: parseShelves_(r.shelves) }; }),
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
     people: peopleList_(),
+    wishlist: readAll_(SHEETS.wishlist).filter(function (r) { return r.id; }),
     settings: settings_(),
     fx: fxRates_()
   };
@@ -848,11 +855,24 @@ function actionBestOffer_(req) {
   var idx = findIndex_(t, req.id);
   if (idx < 0) throw new Error('Wine not found');
   var w = toObj_(t.headers, t.rows[idx]);
+  var offer = findOffer_([w.producer, w.name, w.vintage].filter(String).join(' '), w.region);
+  return withLock_(function () {
+    var t2 = table_(SHEETS.wines);
+    var i2 = findIndex_(t2, req.id);
+    var obj = toObj_(t2.headers, t2.rows[i2]);
+    obj.offer = JSON.stringify(offer);
+    obj.updatedAt = new Date().toISOString();
+    writeRow_(t2, i2, obj);
+    return obj;
+  });
+}
+
+/** Searches the web for the cheapest shop offer of one wine in the country of the chosen currency. */
+function findOffer_(wine, region) {
   var cur = settings_().currency;
   var reg = OFFER_REGIONS[cur] || OFFER_REGIONS.CHF;
-  var wine = [w.producer, w.name, w.vintage].filter(String).join(' ');
   var prompt = 'Find the online shop based in ' + reg.where + ' that currently sells this wine at the lowest price per 0.75 l bottle: ' + wine +
-    (w.region ? ' (' + w.region + ')' : '') + '. Search the web for shop offers of exactly this wine and vintage. ' +
+    (region ? ' (' + region + ')' : '') + '. Search the web for shop offers of exactly this wine and vintage. ' +
     'Only consider shops that sell to customers in ' + reg.where + ' with prices in ' + cur + '. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
     'The link must be the product page of this wine at that shop, taken from your search results. Never use a home page, a category page or a search page. ' +
     'Return ONLY a JSON object, no other text: {"shop": "shop name", "price": number per bottle in ' + cur + ', "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
@@ -866,19 +886,10 @@ function actionBestOffer_(req) {
   var d = parseJson_(textOf_(res), 'No offer found');
   var url = String(d.url || '');
   if (!d.shop || !(Number(d.price) > 0) || !/^https?:\/\/[^\/]+\/.+/.test(url)) throw new Error('No offer found for this wine in ' + reg.area);
-  var offer = {
+  return {
     shop: String(d.shop), v: Math.round(Number(d.price) * 100) / 100, cur: cur, url: url, vintage: String(d.vintage || ''), area: reg.area,
     date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
   };
-  return withLock_(function () {
-    var t2 = table_(SHEETS.wines);
-    var i2 = findIndex_(t2, req.id);
-    var obj = toObj_(t2.headers, t2.rows[i2]);
-    obj.offer = JSON.stringify(offer);
-    obj.updatedAt = new Date().toISOString();
-    writeRow_(t2, i2, obj);
-    return obj;
-  });
 }
 
 // ---------------------------------------------------------------- AI sommelier
@@ -954,6 +965,122 @@ function actionSommelier_(req) {
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)
     .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
   return { answer: String(d.answer || ''), picks: picks, buy: String(d.buy || '') };
+}
+
+// ---------------------------------------------------------------- AI consultant and wishlist
+
+var CONSULTANT_RULES = [
+  'You are an independent wine consultant who helps the owner of a private cellar decide which wines to buy next.',
+  'You get the profile of the owner, the cellar with stock, ratings and prices, wines already finished and the journal of bottles opened.',
+  'Recommend exactly 6 wines that are NOT in the cellar list, real wines that are generally available in shops.',
+  'Rules:',
+  '1. Fit the taste of the owner: styles, grapes and regions they rate highly and drink often. Avoid styles they rated low.',
+  '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
+  '3. Plan quantities sensibly. Compare the stock of each style with how fast the owner drinks it. Where the stock is large, only suggest small quantities of a clearly different style. Where stock is low compared to consumption, suggest more bottles.',
+  '4. A suggestion may replace a wine in stock with few bottles left (1 to 3) when it has better ratings and a better price to quality ratio. Then give the id of that wine in "replaces" and the reason in "replaceWhy". Otherwise leave both empty.',
+  '5. Mix the labels: "Safe bet" (close to their favorites), "Discovery" (new grape or region that fits their taste), "Top value" (outstanding price to quality).',
+  '6. "price" is your estimate of the typical shop price per bottle in the currency of the owner. "vintage" is a recommended recent vintage as a number, or null.',
+  '7. Follow the focus and wishes of the owner if given.',
+  '8. Write in English. Keep "summary" to two to four sentences about what the cellar needs and how much to buy, "why" and "value" to one sentence each. Do not use dashes as punctuation.',
+  '9. Return ONLY a JSON object, no other text: {"summary": "text", "picks": [{"producer": "", "name": "", "vintage": 2021, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "price": 0, "label": "Safe bet|Discovery|Top value", "why": "", "value": "", "qty": 3, "replaces": "", "replaceWhy": ""}]}.'
+].join('\n');
+
+/** Finished wines with rating and price, as taste history for the consultant. */
+function finishedContext_() {
+  var buys = {};
+  readAll_(SHEETS.removals).forEach(function (r) {
+    if (r.dir !== 'in' || r.price === '' || r.price === null || r.price === undefined) return;
+    var b = buys[r.wineId] || (buys[r.wineId] = []);
+    b.push(Number(r.price) + ' ' + (r.priceCur || ''));
+  });
+  return readAll_(SHEETS.wines).filter(function (w) {
+    var n = parseStock_(w.stock).reduce(function (a, e) { return a + (Number(e.n) || 0); }, 0);
+    return w.id && !n;
+  }).map(function (w) {
+    return [[w.producer, w.name, w.vintage].filter(String).join(' '), w.type, w.region, w.grapes,
+      w.myRating !== '' && w.myRating !== null && w.myRating !== undefined ? 'my rating ' + w.myRating + '%' : '',
+      buys[w.id] ? 'paid ' + buys[w.id].join(', ') : ''].filter(String).join(' | ');
+  });
+}
+
+function actionConsultant_(req) {
+  var cur = settings_().currency;
+  var ctx = cellarContext_();
+  var finished = finishedContext_();
+  var wishes = [];
+  if (req.focus) wishes.push('Focus: ' + String(req.focus).slice(0, 100));
+  if (req.budget && (Number(req.budget.min) > 0 || Number(req.budget.max) > 0)) wishes.push('Budget per bottle: ' + (Number(req.budget.min) || 0) + ' to ' + (Number(req.budget.max) || 'any') + ' ' + cur);
+  if (req.note) wishes.push('Wish: ' + String(req.note).slice(0, 500));
+  var avoid = (req.avoid || []).slice(0, 30).map(function (x) { return String(x).slice(0, 120); });
+  var text = 'PROFILE OF THE OWNER (calculated by the app):\n' + String(req.profile || '').slice(0, 5000) +
+    '\n\nWISHES:\n' + (wishes.join('\n') || 'None, use the profile.') +
+    (avoid.length ? '\n\nDo not suggest these again, they are already on the wishlist or were suggested before:\n' + avoid.join('\n') : '') +
+    '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finished.join('\n') || 'None yet.');
+  var res = callClaude_({
+    model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
+    max_tokens: 3500,
+    system: CONSULTANT_RULES,
+    messages: [{ role: 'user', content: text }]
+  });
+  var d = parseJson_(textOf_(res), 'The consultant gave no answer. Please try again.');
+  var stock = {};
+  ctx.wines.forEach(function (w) { stock[String(w.id)] = w; });
+  var labels = ['Safe bet', 'Discovery', 'Top value'];
+  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer); }).slice(0, 8).map(function (p) {
+    var rep = String(p.replaces || '');
+    if (!stock[rep]) rep = '';
+    return {
+      producer: String(p.producer || ''), name: String(p.name || ''), vintage: Number(p.vintage) > 1900 ? Number(p.vintage) : '',
+      type: String(p.type || ''), region: String(p.region || ''), grapes: String(p.grapes || ''),
+      price: Number(p.price) > 0 ? Math.round(Number(p.price) * 100) / 100 : '', priceCur: cur,
+      label: labels.indexOf(String(p.label)) >= 0 ? String(p.label) : 'Discovery',
+      why: String(p.why || ''), value: String(p.value || ''), qty: Math.max(1, Math.min(24, Math.round(Number(p.qty) || 1))),
+      replaces: rep, replaceWhy: rep ? String(p.replaceWhy || '') : ''
+    };
+  });
+  return { summary: String(d.summary || ''), picks: picks };
+}
+
+/** Best offer for a wine that is not in the cellar yet, for example a suggestion of the consultant. */
+function actionOfferFor_(req) {
+  var wine = String(req.wine || '').trim();
+  if (!wine) throw new Error('Missing wine');
+  var offer = findOffer_(wine.slice(0, 200), String(req.region || '').slice(0, 100));
+  if (req.wishId) {
+    withLock_(function () {
+      var t = table_(SHEETS.wishlist);
+      var idx = findIndex_(t, req.wishId);
+      if (idx < 0) return;
+      var obj = toObj_(t.headers, t.rows[idx]);
+      obj.offer = JSON.stringify(offer);
+      writeRow_(t, idx, obj);
+    });
+  }
+  return offer;
+}
+
+function actionSaveWish_(req) {
+  var w = req.wish || {};
+  if (!w.id) throw new Error('Missing id');
+  return withLock_(function () {
+    var t = table_(SHEETS.wishlist);
+    var idx = findIndex_(t, w.id);
+    var obj = idx >= 0 ? toObj_(t.headers, t.rows[idx]) : {};
+    WISH_COLS.forEach(function (c) { if (w[c] !== undefined) obj[c] = typeof w[c] === 'object' && w[c] !== null ? JSON.stringify(w[c]) : w[c]; });
+    if (!obj.createdAt) obj.createdAt = new Date().toISOString();
+    writeRow_(t, idx, obj);
+    return obj;
+  });
+}
+
+function actionDeleteWish_(req) {
+  return withLock_(function () {
+    var t = table_(SHEETS.wishlist);
+    var idx = findIndex_(t, req.id);
+    if (idx < 0) return { deleted: false };
+    t.sh.deleteRow(idx + 2);
+    return { deleted: true };
+  });
 }
 
 function testClaude() {
