@@ -407,3 +407,9 @@ textarea.autosize { resize: vertical; min-height: 120px; overflow: hidden; line-
 .shelf-list { display: flex; flex-direction: column; gap: 6px; }
 .shelf-row { display: flex; align-items: center; gap: 12px; }
 .shelf-row > span { width: 52px; flex: none; }
+
+/* 2.10.0: wine type dot and country flag */
+.type-dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px rgba(255,255,255,0.18); margin-right: 7px; vertical-align: 1px; }
+.flag { margin-right: 5px; font-size: 1.05em; line-height: 1; vertical-align: -1px; }
+.meta .type-dot { margin-right: 5px; }
+.meta-type { margin-right: 8px; }

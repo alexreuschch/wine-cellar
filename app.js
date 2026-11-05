@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.9.0';
+const APP_VERSION = '2.10.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -317,6 +317,27 @@ function upsertWine(w) {
 }
 
 const wineTitle = w => w.name || w.producer || 'Unnamed wine';
+/* wine type color and country flag */
+const TYPE_COLORS = { Red: '#8E1F2B', White: '#E6D98F', 'Rosé': '#E79AA6', Sparkling: '#F4E7B5', Dessert: '#D9A23A', Fortified: '#8A4B2A' };
+const typeDot = w => `<span class="type-dot" style="--c:${TYPE_COLORS[w.type] || '#8F837C'}" title="${esc(w.type)}" aria-label="${esc(w.type)}"></span>`;
+const COUNTRY_CODES = {
+  france: 'FR', frankreich: 'FR', italy: 'IT', italien: 'IT', italia: 'IT', spain: 'ES', spanien: 'ES', 'españa': 'ES', portugal: 'PT',
+  germany: 'DE', deutschland: 'DE', austria: 'AT', 'österreich': 'AT', switzerland: 'CH', schweiz: 'CH', suisse: 'CH', svizzera: 'CH',
+  usa: 'US', 'united states': 'US', 'united states of america': 'US', 'u.s.a.': 'US', us: 'US', california: 'US',
+  argentina: 'AR', chile: 'CL', australia: 'AU', 'new zealand': 'NZ', 'south africa': 'ZA', greece: 'GR', hungary: 'HU',
+  lebanon: 'LB', israel: 'IL', canada: 'CA', uruguay: 'UY', slovenia: 'SI', croatia: 'HR', georgia: 'GE', romania: 'RO',
+  moldova: 'MD', bulgaria: 'BG', england: 'GB', 'united kingdom': 'GB', uk: 'GB', mexico: 'MX', brazil: 'BR', china: 'CN',
+  japan: 'JP', luxembourg: 'LU', 'czech republic': 'CZ', czechia: 'CZ', slovakia: 'SK', turkey: 'TR', 'türkiye': 'TR',
+  cyprus: 'CY', serbia: 'RS', 'north macedonia': 'MK', armenia: 'AM', morocco: 'MA', belgium: 'BE', netherlands: 'NL',
+  denmark: 'DK', sweden: 'SE', india: 'IN', peru: 'PE', bolivia: 'BO', montenegro: 'ME', 'bosnia and herzegovina': 'BA', malta: 'MT'
+};
+function countryOf(w) {
+  const parts = str(w.region).split(',').map(x => x.trim()).filter(Boolean);
+  for (let i = parts.length - 1; i >= 0; i--) { const c = COUNTRY_CODES[lc(parts[i])]; if (c) return { code: c, name: parts[i] }; }
+  return null;
+}
+const flagOf = w => { const c = countryOf(w); return c ? `<span class="flag" title="${esc(c.name)}" aria-label="${esc(c.name)}">${String.fromCodePoint(...[...c.code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))}</span>` : ''; };
+
 const wineSub = w => [w.name ? w.producer : '', w.vintage].filter(Boolean).join(' · ') || w.region || w.type;
 const fullName = w => [w.producer, w.name, w.vintage].filter(Boolean).join(' ');
 function initials(w) {
@@ -929,7 +950,7 @@ function priceLine(w) {
 
 function wineRow(w) {
   return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
-    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${esc(wineSub(w))}</span></div></a>
+    <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${typeDot(w)}${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${flagOf(w)}${esc(wineSub(w))}</span></div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove a bottle"${w.count ? '' : ' disabled'}>${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add bottles">${ICON.plus}</button></div>
     <a class="row-foot" href="#/wine/${encodeURIComponent(w.id)}">${priceLine(w)}</a>
   </div>`;
@@ -964,7 +985,7 @@ function viewWindow() {
     : `<div class="overview">${overview}</div><div class="chips">${filters}</div>` + shown.map(g => `<section>
         <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="--c:${STATUS[g.s].c};width:10px;height:10px"></span><h2>${g.s}</h2><span class="muted small">${g.items.length} ${g.items.length === 1 ? 'wine' : 'wines'}</span></div>
         <p class="muted tiny" style="margin:-6px 0 0 18px">${STATUS[g.s].hint}</p>
-        ${g.items.map(w => `<a class="journal-row" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center">${thumbHtml(w, true)}<div class="row-text" style="gap:6px"><div class="between"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}</span><span class="muted small" style="flex:none">${w.count} btl</span></div>${timelineHtml(w)}<span class="muted tiny">${esc(windowText(w) || 'No drinking window yet')}</span></div></a>`).join('')}
+        ${g.items.map(w => `<a class="journal-row" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center">${thumbHtml(w, true)}<div class="row-text" style="gap:6px"><div class="between"><span class="row-title">${typeDot(w)}${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}</span><span class="muted small" style="flex:none">${w.count} btl</span></div>${timelineHtml(w)}<span class="muted tiny">${esc(windowText(w) || 'No drinking window yet')}</span></div></a>`).join('')}
       </section>`).join('');
   return `<main class="screen has-nav"><header><h1 class="title">Drinking window</h1><p class="muted small" style="margin:2px 0 0">${bottles} bottles · ${items.length} wines · sorted by urgency</p></header>${body}</main>${nav('window')}`;
 }
@@ -1005,7 +1026,7 @@ function topRow(w, i, visual, score, sub) {
   const s = streetOf(w);
   const subLine = [sub, s !== null ? `Street ${money(s)}` : ''].filter(Boolean).join(' · ');
   return `<a class="journal-row${w.count === 0 ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
-    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
+    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${typeDot(w)}${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
     <div class="score">${score}</div></a>`;
 }
 
@@ -1207,11 +1228,11 @@ function viewWine(id) {
   const label = w.thumb || w.labelFileId
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
-  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type].filter(Boolean).join(' · ');
+  const meta = [w.name ? w.producer : '', w.region, w.vintage].filter(Boolean).join(' · ');
   return `<main class="screen detail">
     <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
-    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${esc(meta)}</p></div>
+    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${typeDot(w)}<span class="meta-type">${esc(w.type)}</span>${flagOf(w)}${esc(meta)}</p></div>
     ${stockHtml(w)}
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
