@@ -33,10 +33,14 @@ function barRows(rows, opts = {}) {
 /* vertical columns with the value on top and the label below */
 function columns(cols, color) {
   const max = Math.max(1, ...cols.map(c => c.n));
-  return `<div class="ins-cols" style="grid-template-columns:repeat(${cols.length},minmax(0,1fr))">${cols.map(c => `<div class="ins-col" title="${esc(c.label)}: ${c.n}">
+  return `<div class="ins-cols" style="grid-template-columns:repeat(${cols.length},minmax(0,1fr))">${cols.map(c => {
+    const tag = c.go && c.n ? 'button' : 'div';
+    const attrs = tag === 'button' ? ` data-act="ins-go" data-k="${esc(c.go[0])}" data-v="${esc(c.go[1])}"` : '';
+    return `<${tag} class="ins-col" title="${esc(c.label)}: ${c.n}"${attrs}>
     <span class="ins-col-n">${c.n || ''}</span>
     <span class="ins-col-bar"><span style="height:${c.n ? Math.max(3, c.n / max * 100).toFixed(1) : 0}%;${color ? `background:${color}` : ''}"></span></span>
-    <span class="ins-col-l">${esc(c.label)}</span></div>`).join('')}</div>`;
+    <span class="ins-col-l">${esc(c.label)}</span></${tag}>`;
+  }).join('')}</div>`;
 }
 
 /* donut for the share of wine types, with a legend that names every slice */
@@ -113,37 +117,39 @@ function viewInsights() {
   // vintages
   const vint = tally(wines, w => [w.vintage ? Number(w.vintage) : 'NV'], bottles);
   const years = vint.filter(e => e.k !== 'NV').sort((a, b) => a.k - b.k);
-  let cols = years.map(e => ({ label: `’${String(e.k).slice(-2)}`, n: e.n, y: e.k }));
+  let cols = years.map(e => ({ label: `’${String(e.k).slice(-2)}`, n: e.n, y: e.k, go: ['vintage', String(e.k)] }));
   if (cols.length > 12) {
     const keep = cols.slice(-11), older = cols.slice(0, -11);
-    cols = [{ label: `≤’${String(older[older.length - 1].y).slice(-2)}`, n: older.reduce((a, c) => a + c.n, 0) }, ...keep];
+    cols = [{ label: `≤’${String(older[older.length - 1].y).slice(-2)}`, n: older.reduce((a, c) => a + c.n, 0), go: ['vintage', older.map(c => c.y).join('|')] }, ...keep];
   }
   const nv = vint.find(e => e.k === 'NV');
-  if (nv) cols.push({ label: 'NV', n: nv.n });
+  if (nv) cols.push({ label: 'NV', n: nv.n, go: ['vintage', 'NV'] });
   const oldest = years.length ? years[0].k : null, newest = years.length ? years[years.length - 1].k : null;
   out.push(insSection('Vintages', oldest ? (oldest === newest ? String(oldest) : `${oldest} to ${newest}`) : '', columns(cols)));
 
   // drinking window
   const byStatus = tally(wines, w => [statusOf(w)], bottles).sort((a, b) => STATUS_ORDER.indexOf(a.k) - STATUS_ORDER.indexOf(b.k));
   const due = [];
-  for (let y = year; y < year + 8; y++) due.push({ label: y === year ? 'Now' : `’${String(y).slice(-2)}`, n: 0 });
+  for (let y = year; y < year + 8; y++) due.push({ label: y === year ? 'Now' : `’${String(y).slice(-2)}`, n: 0, go: ['drinkby', String(y)] });
   wines.forEach(w => { const p = windowParts(w); if (!p) return; const i = Math.max(0, p.u - year); if (i < due.length) due[i].n += w.count; });
   out.push(insSection('Drinking window', '', `${barRows(byStatus.map(e => ({ label: e.k, n: e.n, c: STATUS[e.k].c, go: ['window', e.k] })), { share: true, total })}
     <p class="small muted" style="margin:10px 0 0">Bottles to drink by the end of each year</p>${columns(due, 'var(--gold)')}`));
 
   // value
-  let cost = 0, street = 0, withCost = 0, withStreet = 0;
+  let cost = 0, street = 0, withCost = 0, withStreet = 0, costB = 0, streetB = 0;
   const valRows = TYPES.map(t => ({ t, c: 0, s: 0 }));
   wines.forEach(w => {
     const a = avgPrice(w), st = streetOf(w), v = valRows.find(x => x.t === w.type);
     if (a !== null) { cost += a * w.count; withCost += w.count; if (v) v.c += a * w.count; }
     if (st !== null) { street += st * w.count; withStreet += w.count; if (v) v.s += st * w.count; }
+    if (a !== null && st !== null) { costB += a * w.count; streetB += st * w.count; }
   });
   const bands = [[0, 20], [20, 40], [40, 60], [60, 100], [100, Infinity]];
-  const bandRows = bands.map(([lo, hi]) => ({ label: hi === Infinity ? `${lo} and more` : `${lo} to ${hi}`, n: wines.filter(w => { const v = streetOf(w); return v !== null && v >= lo && v < hi; }).reduce((a, w) => a + w.count, 0) }));
+  const bandRows = bands.map(([lo, hi]) => ({ label: hi === Infinity ? `${lo} and more` : `${lo} to ${hi}`, go: ['price', `${lo}|${hi === Infinity ? '' : hi}`], n: wines.filter(w => { const v = streetOf(w); return v !== null && v >= lo && v < hi; }).reduce((a, w) => a + w.count, 0) }));
   const noStreet = total - withStreet;
-  const change = cost > 0 && withCost === withStreet ? Math.round((street - cost) / cost * 100) : null;
-  out.push(insSection('Value', '', `<div class="ins-tiles"><div><span>Total Costs</span><b>${esc(money(cost, 0))}</b></div><div><span>Total Street Value</span><b>${esc(money(street, 0))}</b>${change !== null ? `<small>${change > 0 ? '+' : ''}${change}% vs. purchase</small>` : ''}</div></div>
+  // compare only bottles that have both a purchase price and a street price
+  const change = costB > 0 ? Math.round((streetB - costB) / costB * 100) : null;
+  out.push(insSection('Value', '', `<div class="ins-tiles"><div><span>Total Costs</span><b class="${change === null || streetB === costB ? '' : costB < streetB ? 'up' : 'down'}">${esc(money(cost, 0))}</b></div><div><span>Total Street Value</span><b>${esc(money(street, 0))}</b>${change !== null ? `<small>${change > 0 ? '+' : ''}${change}% vs. purchase</small>` : ''}</div></div>
     <p class="small muted" style="margin:12px 0 0">Total Street Value by wine type</p>
     ${barRows(valRows.filter(v => v.s > 0).sort((a, b) => b.s - a.s).map(v => ({ label: v.t, n: Math.round(v.s), c: TYPE_CHART[v.t], go: ['type', v.t] })), { money: true })}
     <p class="small muted" style="margin:12px 0 0">Bottles by street price per bottle (${esc(cur())})</p>
@@ -153,7 +159,7 @@ function viewInsights() {
   const opened = S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift');
   const months = [];
   const d0 = new Date(now.getFullYear(), now.getMonth(), 1);
-  for (let i = 11; i >= 0; i--) { const d = new Date(d0.getFullYear(), d0.getMonth() - i, 1); months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'narrow' }), n: 0 }); }
+  for (let i = 11; i >= 0; i--) { const d = new Date(d0.getFullYear(), d0.getMonth() - i, 1); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; months.push({ key, label: d.toLocaleDateString('en-US', { month: 'narrow' }), n: 0, go: ['month', key] }); }
   opened.forEach(r => { const m = months.find(x => x.key === String(r.date).slice(0, 7)); if (m) m.n += Number(r.qty) || 1; });
   const yearN = months.reduce((a, m) => a + m.n, 0);
   const occ = tally(opened, r => [entryType(r)], r => Number(r.qty) || 1).sort((a, b) => b.n - a.n).slice(0, 5);
@@ -191,12 +197,22 @@ function viewInsights() {
     <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
     <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a>
     ${S.wishlist.length ? `<a class="small" href="#/discover" style="text-align:center">Wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</a>` : ''}</section>`);
-  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row to see the wines.</p>${out.join('')}</main>${nav('insights')}`;
+  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${out.join('')}</main>${nav('insights')}`;
 }
 
 /* opens the cellar or the journal with the filter that matches a row in Insights */
 function insightsGo(k, v) {
-  if (k === 'window') { go('#/window'); return; }
+  if (k === 'window') { U.winFilter = v; go('#/window'); return; }
+  if (k === 'month') {
+    // bottles opened in that month: the month and the occasions of opened bottles
+    U.f.journal = newF();
+    U.jSearch = '';
+    const name = monthOf({ date: v });
+    U.f.journal.sel.month = [lc(name)];
+    U.f.journal.sel.type = [...new Set(S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift' && monthOf(r) === name).map(r => lc(entryType(r))))];
+    go('#/journal');
+    return;
+  }
   if (k === 'person' || k === 'jtype') {
     U.f.journal = newF();
     U.f.journal.sel[k === 'person' ? 'person' : 'type'] = [lc(v)];
@@ -207,6 +223,9 @@ function insightsGo(k, v) {
   U.search = '';
   if (k === 'type') U.f.cellar.sel.wine = [lc(v)];
   else if (k === 'grape') U.f.cellar.sel.grape = [lc(v)];
+  else if (k === 'vintage') U.f.cellar.sel.vintage = v.split('|').map(lc);
+  else if (k === 'drinkby') U.f.cellar.sel.drinkby = [v];
+  else if (k === 'price') { const [lo, hi] = v.split('|'); U.f.cellar.range = { price: [Number(lo), hi ? Number(hi) - 0.01 : rangeMax('cellar', 'price')] }; }
   else U.search = v;
   go('#/cellar');
 }

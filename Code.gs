@@ -1023,7 +1023,7 @@ function offerFrom_(res) {
 }
 
 /** Searches the web for the cheapest shop offer of one wine in the country of the chosen currency.
- *  An offer found in the last 7 days is reused, unless fresh is set (Update best offer). */
+ *  An offer found in the last 14 days is reused, unless fresh is set (Update best offer). */
 function findOffer_(wine, region, fresh) {
   var key = offerKey_(wine);
   var mem = fresh ? null : offerMemory_([key], false)[key];
@@ -1035,8 +1035,8 @@ function findOffer_(wine, region, fresh) {
 
 // ---------------------------------------------------------------- offer memory (hidden tab Offers)
 
-var OFFER_DAYS = 7;      // found offers are reused for a week
-var NO_OFFER_DAYS = 3;   // wines without a shop are not searched again for the consultant for a few days
+var OFFER_DAYS = 14;     // found offers are reused for two weeks
+var NO_OFFER_DAYS = 7;   // wines without a shop are not searched again for the consultant for a week
 
 function offerKey_(wine) {
   return settings_().country + '|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim();
@@ -1182,7 +1182,7 @@ function actionSommelier_(req) {
 var CONSULTANT_RULES = [
   'You are an independent wine consultant who helps the owner of a private cellar decide which wines to buy next.',
   'You get the profile of the owner, the cellar with stock, ratings and prices, wines already finished and the journal of bottles opened.',
-  'Recommend exactly 10 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops where the owner buys currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
+  'Recommend exactly 8 wines that are NOT in the cellar list, ranked best first. Only real wines that online shops where the owner buys currently sell, preferably widely distributed ones. Avoid rarities and allocated wines.',
   'Rules:',
   '1. Fit the taste of the owner: styles, grapes and regions they rate highly and drink often. Avoid styles they rated low.',
   '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
@@ -1239,7 +1239,7 @@ function actionConsultant_(req) {
   var stock = {};
   ctx.wines.forEach(function (w) { stock[String(w.id)] = w; });
   var labels = ['Safe bet', 'Discovery', 'Top value'];
-  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer); }).slice(0, 10).map(function (p) {
+  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer); }).slice(0, 8).map(function (p) {
     var rep = String(p.replaces || '');
     if (!stock[rep]) rep = '';
     return {
@@ -1251,19 +1251,21 @@ function actionConsultant_(req) {
       replaces: rep, replaceWhy: rep ? String(p.replaceWhy || '') : ''
     };
   });
-  // only wines that a shop really sells: check the best 6 first, then refill only the places without a shop
+  // only wines that a shop really sells: check the best 5 with one search each, refill only while fewer than 3 have a shop
   var max = req.budget ? Number(req.budget.max) || 0 : 0;
   var queue = picks.slice();
   var verified = [], over = [];
   var label = function (p) { return [p.producer, p.name, p.vintage].filter(String).join(' '); };
-  while (verified.length < 6 && queue.length) {
+  var first = true;
+  while (queue.length && (first || verified.length < 3)) {
     if (elapsed_() > TIME_HARD || (verified.length >= 3 && elapsed_() > TIME_SOFT)) break;
-    var wave = queue.splice(0, 6 - verified.length);
+    var wave = queue.splice(0, first ? 5 : 3 - verified.length);
+    first = false;
     var mem = offerMemory_(wave.map(function (p) { return offerKey_(label(p)); }), true);
     var search = wave.filter(function (p) { return !mem[offerKey_(label(p))]; });
     var found = {};
     if (search.length) {
-      var replies = callClaudeMany_(search.map(function (p) { return offerRequest_(label(p), p.region, 2); }));
+      var replies = callClaudeMany_(search.map(function (p) { return offerRequest_(label(p), p.region, 1); }));
       var pairs = search.map(function (p, i) { var o = offerFrom_(replies[i]); found[offerKey_(label(p))] = o; return [offerKey_(label(p)), o]; });
       rememberOffers_(pairs);
     }
@@ -1280,9 +1282,9 @@ function actionConsultant_(req) {
       (max && total > max * 1.25 ? over : verified).push(p);
     });
   }
-  if (verified.length < 3) verified = verified.concat(over).slice(0, 6);
+  if (verified.length < 3) verified = verified.concat(over).slice(0, 5);
   if (!verified.length) throw new Error('None of the suggested wines is sold online in ' + area + ' right now. Please try again, maybe with another focus or budget.');
-  return { summary: String(d.summary || ''), picks: verified.slice(0, 6) };
+  return { summary: String(d.summary || ''), picks: verified.slice(0, 5) };
 }
 
 /** Best offer for a wine that is not in the cellar yet, for example a suggestion of the consultant. */

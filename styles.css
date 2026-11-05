@@ -425,6 +425,8 @@ button.ins-row:active { background: var(--surface); }
 .ins-num { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; min-width: 42px; white-space: nowrap; }
 .ins-num small { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; display: inline-block; min-width: 30px; }
 .ins-cols { display: grid; gap: 4px; align-items: end; margin-top: 4px; }
+button.ins-col { border: 0; background: transparent; font: inherit; padding: 0; color: inherit; cursor: pointer; }
+button.ins-col:active .ins-col-bar span { filter: brightness(1.25); }
 .ins-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .ins-col-n { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 14px; }
 .ins-col-bar { width: 100%; max-width: 26px; height: 96px; display: flex; align-items: flex-end; }

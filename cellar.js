@@ -22,6 +22,15 @@ const offChip = (act, label) => `<button class="chip on" data-act="${act}" aria-
 const F_WINE = { label: 'Wine', plural: 'wine types', of: w => [w.type], order: TYPES };
 const F_GRAPE = { label: 'Grape', plural: 'grapes', of: grapeNames };
 const F_RATING = { label: 'Rating', kind: 'rating', of: () => [] };
+/* journal month as 'Nov 2026', and back to '2026-11' for sorting */
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthOf = r => { const m = /^(\d{4})-(\d{2})/.exec(String(r.date || '')); return m ? `${MONTHS_EN[Number(m[2]) - 1]} ${m[1]}` : ''; };
+const monthKey = name => { const [mo, y] = String(name).split(' '); return `${y}-${String(MONTHS_EN.indexOf(mo) + 1).padStart(2, '0')}`; };
+const vintageOf = w => (w.vintage ? String(w.vintage) : 'NV');
+const drinkByOf = w => { const p = windowParts(w); return p ? [String(Math.max(now.getFullYear(), p.u))] : []; };
+const byYearDesc = (a, b) => (a.name === 'NV') - (b.name === 'NV') || Number(b.name) - Number(a.name);
+const F_VINTAGE = { label: 'Vintage', plural: 'vintages', prefix: 'Vintage ', of: w => [vintageOf(w)], sort: byYearDesc, sortHint: 'Newest first. ' };
+const F_DRINKBY = { label: 'Drink by', plural: 'years', prefix: 'Drink by ', sortHint: 'The year the drinking window ends, wines past it count for this year. ', of: drinkByOf, sort: (a, b) => Number(a.name) - Number(b.name) };
 const F_PRICE = { label: 'Street', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
 const CTX = {
   cellar: {
@@ -31,6 +40,8 @@ const CTX = {
       grape: F_GRAPE,
       food: { label: 'Food', plural: 'dishes', of: foodNames },
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
+      vintage: F_VINTAGE,
+      drinkby: F_DRINKBY,
       price: F_PRICE,
       rating: F_RATING
     },
@@ -44,7 +55,8 @@ const CTX = {
     facets: {
       person: { label: 'Person', plural: 'people', of: r => namesOf(r.people) },
       type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added'] },
-      retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) }
+      retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) },
+      month: { label: 'Month', plural: 'months', sortHint: 'Newest first. ', of: r => (monthOf(r) ? [monthOf(r)] : []), sort: (a, b) => monthKey(b.name).localeCompare(monthKey(a.name)) }
     },
     items: () => allEntries(),
     text: r => journalTextMatch(r),
@@ -126,6 +138,7 @@ function facetValues(items, def) {
     });
   });
   const list = [...m.values()];
+  if (def.sort) return list.sort(def.sort);
   if (def.order) {
     const idx = n => { const i = def.order.indexOf(n); return i < 0 ? 99 : i; };
     return list.sort((a, b) => idx(a.name) - idx(b.name));
@@ -157,7 +170,7 @@ function filterArea(ctx) {
     }
     allVals[k] = facetValues(base, def);
     st.sel[k] = sel(ctx, k).filter(v => allVals[k].some(x => x.key === v));
-    st.sel[k].forEach(v => active.push({ k, v, name: allVals[k].find(x => x.key === v).name }));
+    st.sel[k].forEach(v => active.push({ k, v, name: (def.prefix || '') + allVals[k].find(x => x.key === v).name }));
   });
   const clear = active.length ? `<button class="chip" data-act="f-clear" data-ctx="${ctx}">Clear all filters</button>` : '';
   const activeChip = a => (a.rating
@@ -204,7 +217,7 @@ function facetChipsHtml(ctx) {
   if (rest.length) parts.push(`<div class="chips${boxed ? ' scroll-box' : ''}">${rest.map(x => chip(x, false)).join('')}${more}</div>`);
   else if (q) parts.push('<p class="muted small" style="margin:0">No match.</p>');
   if (boxed) parts.push(`<div><button class="chip" data-act="f-less" data-ctx="${ctx}" data-k="${k}">Show fewer</button></div>`);
-  const how = def.order && !q ? '' : (q || boxed ? 'A to Z. ' : 'Most common first. ');
+  const how = (def.order || def.sort) && !q ? (def.sortHint || '') : (q || boxed ? 'A to Z. ' : 'Most common first. ');
   parts.push(`<p class="muted tiny" style="margin:0">${how}Numbers count the ${c.noun} that match together with your other filters.</p>`);
   return `<div style="display:flex;flex-direction:column;gap:8px">${parts.join('')}</div>`;
 }
