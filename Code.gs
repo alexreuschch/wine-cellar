@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 10;
+var API_VERSION = 11;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', fx: 'FX' };
 
 var WINE_COLS = [
@@ -51,6 +51,7 @@ var ACTIONS = {
   analyze: actionAnalyze_,
   streetPrice: actionStreetPrice_,
   bestOffer: actionBestOffer_,
+  sommelier: actionSommelier_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
   moveLocation: actionMoveLocation_,
@@ -878,6 +879,81 @@ function actionBestOffer_(req) {
     writeRow_(t2, i2, obj);
     return obj;
   });
+}
+
+// ---------------------------------------------------------------- AI sommelier
+
+var SOMMELIER_RULES = [
+  'You are a warm, knowledgeable sommelier who looks after the private wine cellar of the owner.',
+  'The owner tells you what they feel like, what they eat or what the occasion is. Recommend wines from the cellar below.',
+  'Rules:',
+  '1. Pick up to 3 wines that fit best, only from the cellar list, referenced by their id. Fewer is fine.',
+  '2. When wines fit equally well, prefer those at their peak or to drink soon, and those the owner rated highly or marked as a favorite.',
+  '3. Use the journal to understand the taste of the owner and the people mentioned.',
+  '4. If nothing in the cellar fits well, say so honestly and suggest in "buy" what style or wine to buy instead. Otherwise leave "buy" empty.',
+  '5. Answer in the language of the question. Keep "answer" to two to four sentences and each "why" to one sentence. Do not use dashes as punctuation.',
+  '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty"}.'
+].join('\n');
+
+/** One compact line per wine in stock, plus recent journal entries, as context for the sommelier. */
+function cellarContext_() {
+  var now = new Date();
+  var t = now.getFullYear() + now.getMonth() / 12;
+  var shelves = {};
+  readAll_(SHEETS.locations).forEach(function (l) { if (l.name) shelves[String(l.name).toLowerCase()] = parseShelves_(l.shelves); });
+  var shelfName = function (loc, n) { var m = shelves[String(loc).toLowerCase()] || {}; return m[String(n)] || ('shelf ' + n); };
+  var all = readAll_(SHEETS.wines).filter(function (w) { return w.id; });
+  var bottles = function (w) { var n = parseStock_(w.stock).reduce(function (a, e) { return a + (Number(e.n) || 0); }, 0); return n || Number(w.count) || 0; };
+  var wines = all.filter(function (w) { return bottles(w) > 0; });
+  var streetText = function (w) {
+    try { var st = JSON.parse(w.street || ''); return st && Number(st.v) > 0 ? 'street price ' + Number(st.v).toFixed(2) + ' ' + st.cur + ' per bottle' : ''; } catch (e) { return ''; }
+  };
+  var lines = wines.map(function (w) {
+    var ratings = [];
+    try { (JSON.parse(w.ratings || '[]') || []).forEach(function (r) { ratings.push(r.sys + ' ' + r.score); }); } catch (e) { /* ignore */ }
+    if (w.myRating !== '' && w.myRating !== null && w.myRating !== undefined) ratings.unshift('my rating ' + w.myRating + '%');
+    var where = parseStock_(w.stock).map(function (e) { return e.n + ' in ' + [e.loc, e.shelf === null || e.shelf === '' ? '' : shelfName(e.loc, e.shelf), e.pos].filter(String).join(', '); }).join('; ');
+    var win = [w.drinkFrom, w.drinkUntil].every(function (x) { return x !== '' && x !== null; }) ? ' (drink ' + w.drinkFrom + ' to ' + w.drinkUntil + (w.peakFrom !== '' && w.peakUntil !== '' ? ', peak ' + w.peakFrom + ' to ' + w.peakUntil : '') + ')' : '';
+    return [
+      w.id, [w.producer, w.name, w.vintage].filter(String).join(' '), w.type, w.region, w.grapes,
+      w.tasteTags ? 'style: ' + w.tasteTags : '', w.pairings ? 'pairs with: ' + w.pairings : '',
+      'status: ' + status_(w, t) + win, ratings.join(', '), streetText(w), where
+    ].filter(String).join(' | ');
+  });
+  var names = {};
+  all.forEach(function (w) { names[w.id] = [w.producer, w.name, w.vintage].filter(String).join(' '); });
+  var journal = readAll_(SHEETS.removals).filter(function (r) { return r.dir === 'out'; })
+    .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 40)
+    .map(function (r) {
+      return [r.date, r.wineName || names[r.wineId] || r.wineId, r.type, r.occasion, r.people ? 'with ' + r.people : '', r.food ? 'food: ' + r.food : '', r.note ? 'note: ' + r.note : '', r.hearts ? 'favorite of ' + r.hearts : ''].filter(String).join(' | ');
+    });
+  return { wines: wines, text: 'Today is ' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '. The owner uses ' + settings_().currency + '.\n\nCELLAR (wines in stock):\n' + (lines.join('\n') || 'The cellar is empty.') +
+    '\n\nJOURNAL (recent bottles opened, given or sold):\n' + (journal.join('\n') || 'No entries yet.') };
+}
+
+function actionSommelier_(req) {
+  var q = String(req.question || '').trim();
+  if (!q) throw new Error('Ask a question first');
+  var ctx = cellarContext_();
+  var messages = [];
+  (req.history || []).slice(-6).forEach(function (h) {
+    if (!h || !h.q || !h.a) return;
+    messages.push({ role: 'user', content: String(h.q).slice(0, 1000) });
+    messages.push({ role: 'assistant', content: String(h.a).slice(0, 2000) });
+  });
+  messages.push({ role: 'user', content: q.slice(0, 1000) });
+  var res = callClaude_({
+    model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
+    max_tokens: 1200,
+    system: SOMMELIER_RULES + '\n\n' + ctx.text,
+    messages: messages
+  });
+  var d = parseJson_(textOf_(res), 'The sommelier gave no answer. Please try again.');
+  var ids = {};
+  ctx.wines.forEach(function (w) { ids[String(w.id)] = true; });
+  var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)
+    .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
+  return { answer: String(d.answer || ''), picks: picks, buy: String(d.buy || '') };
 }
 
 function testClaude() {

@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.11.0';
+const APP_VERSION = '2.12.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -54,6 +54,9 @@ const ICON = {
   trophy: svg('<path d="M8 4h8v5a4 4 0 0 1-8 0V4zM12 13v4M9 20h6M8 6H5a3 3 0 0 0 3 3M16 6h3a3 3 0 0 1-3 3"/>', 22, 1.8),
   chart: svg('<path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/>', 22, 1.8),
   book: svg('<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM5 17a3 3 0 0 1 3-3h10"/>', 22, 1.8),
+  magic: svg('<path d="M10 4l1.9 5.1L17 11l-5.1 1.9L10 18l-1.9-5.1L3 11l5.1-1.9z"/><path d="M18.5 2.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>', 22, 1.7),
+  mic: svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>', 22, 1.8),
+  send: svg('<path d="M12 19V5M6 11l6-6 6 6"/>', 22, 2.2),
   spark: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>', 18, 1.8),
   filter: svg('<path d="M4 5h16l-6 7v6l-4 2v-8z"/>', 20, 1.9),
   heart: svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', 18, 1.9),
@@ -589,6 +592,7 @@ function render() {
     case 'window': html = viewWindow(); break;
     case 'top': html = viewTop(); break;
     case 'insights': html = viewInsights(); break;
+    case 'sommelier': html = viewSommelier(); break;
     case 'journal': html = viewJournal(); break;
     case 'wine': html = viewWine(r.id); break;
     case 'add': html = viewForm('add', null); break;
@@ -609,6 +613,7 @@ function afterRender(r) {
     const img = $('#label-img');
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
+  if (r.p === 'sommelier') { const ta = $('#somm-text'); if (ta) autosize(ta); }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); document.querySelectorAll('textarea.autosize').forEach(autosize); if (D.ai) updateBanner(); }
 }
@@ -919,8 +924,8 @@ function statsHtml() {
 
 function viewCellar() {
   const head = `<header class="top"><div><h1 class="title">Wine Cellar</h1></div>
-    <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
-  const notice = S.version && S.version < 10 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
+    <div class="top-actions"><a class="icon-btn magic-btn" href="#/sommelier" aria-label="AI Sommelier">${ICON.magic}</a><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
+  const notice = S.version && S.version < 11 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
     return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
@@ -970,6 +975,147 @@ function cellarList() {
 }
 
 /* ------------------------------------------------------------ view: drinking window */
+
+/* ------------------------------------------------------------ AI sommelier */
+
+const SOMM = { thread: [], draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false };
+const SOMM_EXAMPLES = ['I feel like a fresh white wine tonight', 'Steak with salad, which wine fits?', 'Cheese fondue for four people', 'Something special for a birthday dinner under CHF 80', 'Which bottles should I open this month?'];
+
+/* how to use the sommelier, shown before the first question and again with Tips */
+function sommGuideHtml() {
+  return `<div class="somm-guide">
+    <h3>How to ask</h3>
+    <ul>
+      <li><b>Say what you feel like</b>, for example light, fruity, bold or something sparkling.</li>
+      <li><b>Name the food</b> and how it is cooked: grilled steak, creamy pasta, spicy curry.</li>
+      <li><b>Add the occasion</b> and how many people join, so it can suggest how many bottles.</li>
+      <li><b>Set a limit</b> if you like: “under CHF 50” or “not my best bottles”.</li>
+      <li><b>Ask a follow-up</b>, for example “something lighter?” or “and for dessert?”.</li>
+    </ul>
+    <h3>Speak or type</h3>
+    <p>Tap the microphone and speak. Your words appear in the field, so you can correct them before you tap send. Nothing is sent without you.</p>
+    <h3>What it knows</h3>
+    <p>Your wines in stock with their drinking window, ratings, storage place and food pairings, and your recent journal with people, food and favorites. It suggests up to three wines from your cellar. Tap a wine to open it. If nothing fits, it tells you what to buy.</p>
+    <p class="tiny muted">Answers come from AI and are suggestions. Each question costs a few cents.</p>
+  </div>`;
+}
+
+function sommAnswerHtml(t) {
+  if (t.error) return `<div class="somm-a error"><p>${esc(t.error)}</p><button class="link-btn" data-act="somm-retry">${ICON.refresh}Try again</button></div>`;
+  if (!t.a) return '<div class="somm-a"><p class="somm-wait">Looking through your cellar<span>.</span><span>.</span><span>.</span></p></div>';
+  const picks = (t.a.picks || []).map(p => {
+    const w = wineById(p.id);
+    if (!w) return '';
+    const where = w.stock.map(e => placeLabel(e)).join(' · ');
+    return `<a class="somm-pick" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w, true)}<span class="somm-pick-text">
+      <span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}</span>
+      <span class="row-sub">${flagOf(w)}${esc(w.producer)}${w.count ? ` · ${w.count} btl` : ''}</span>
+      ${where ? `<span class="tiny muted ellipsis">${esc(where)}</span>` : ''}
+      ${p.why ? `<span class="somm-why">${esc(p.why)}</span>` : ''}</span>${pill(w)}</a>`;
+  }).join('');
+  return `<div class="somm-a">${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${picks ? `<div class="somm-picks">${picks}</div>` : ''}
+    ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
+}
+
+function sommThreadHtml() {
+  if (!SOMM.thread.length) {
+    return `<div class="somm-intro"><p class="muted">Tell me what you feel like, what you are eating or what the occasion is. I suggest wines from your cellar. Tap an example to try it.</p>
+      <div class="somm-examples">${SOMM_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
+      ${sommGuideHtml()}</div>`;
+  }
+  return (SOMM.tips ? sommGuideHtml() : '') + SOMM.thread.map(t => `<div class="somm-q">${esc(t.q)}</div>${sommAnswerHtml(t)}`).join('');
+}
+
+const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${SOMM.thread.length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">New question</button></div>` : ''}`;
+
+function viewSommelier() {
+  const old = S.version && S.version < 11;
+  return `<main class="screen somm">
+    <div class="detail-top" id="somm-top">${sommTopHtml()}</div>
+    <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
+    ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
+    <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
+  </main>
+  <div class="somm-bar">
+    <div class="somm-input${SOMM.listening ? ' listening' : ''}">
+      <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${SOMM.listening ? 'Listening…' : 'What do you feel like?'}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
+      <button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
+      <button class="somm-send" data-act="somm-send" aria-label="Send"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button>
+    </div>
+    <p id="somm-hint" class="tiny muted somm-hint">${SOMM.listening ? 'Speak now. Tap the microphone again to stop.' : SOMM.voiced ? 'Check the text and correct it if needed, then tap send.' : ''}</p>
+  </div>`;
+}
+
+function sommRefresh(scroll) {
+  const th = $('#somm-thread');
+  if (th) th.innerHTML = sommThreadHtml();
+  const top = $('#somm-top');
+  if (top) top.innerHTML = sommTopHtml();
+  const ta = $('#somm-text');
+  if (ta && ta.value !== SOMM.draft) { ta.value = SOMM.draft; autosize(ta); }
+  const send = $('.somm-send');
+  if (send) send.disabled = SOMM.busy;
+  const hint = $('#somm-hint');
+  if (hint) hint.textContent = SOMM.listening ? 'Speak now. Tap the microphone again to stop.' : SOMM.voiced ? 'Check the text and correct it if needed, then tap send.' : '';
+  const box = $('.somm-input');
+  if (box) box.classList.toggle('listening', SOMM.listening);
+  const mic = $('.somm-mic');
+  if (mic) { mic.classList.toggle('on', SOMM.listening); mic.setAttribute('aria-label', SOMM.listening ? 'Stop listening' : 'Speak'); }
+  if (ta) ta.placeholder = SOMM.listening ? 'Listening…' : 'What do you feel like?';
+  if (scroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+async function sommAsk(text) {
+  const q = str(text).trim();
+  if (!q || SOMM.busy) return;
+  if (SOMM.listening) sommStopVoice();
+  const history = SOMM.thread.filter(t => t.a).slice(-3).map(t => ({ q: t.q, a: JSON.stringify(t.a) }));
+  const turn = { q, a: null, error: '' };
+  SOMM.thread.push(turn);
+  SOMM.draft = '';
+  SOMM.voiced = false;
+  SOMM.busy = true;
+  SOMM.tips = false;
+  sommRefresh(true);
+  try {
+    turn.a = await api('sommelier', { question: q, history });
+  } catch (e) {
+    turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
+  }
+  SOMM.busy = false;
+  sommRefresh(true);
+}
+
+function sommStartVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); $('#somm-text').focus(); return; }
+  const rec = new SR();
+  rec.lang = navigator.language || 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  const base = SOMM.draft ? SOMM.draft.trim() + ' ' : '';
+  rec.onresult = e => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    SOMM.draft = base + txt.trim();
+    SOMM.voiced = true;
+    sommRefresh(false);
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak your question.', 5000);
+    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type your question.');
+  };
+  rec.onend = () => { SOMM.listening = false; SOMM.rec = null; sommRefresh(false); const ta = $('#somm-text'); if (ta && SOMM.draft) ta.focus(); };
+  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
+  SOMM.rec = rec;
+  SOMM.listening = true;
+  sommRefresh(false);
+}
+
+function sommStopVoice() {
+  if (SOMM.rec) { try { SOMM.rec.stop(); } catch (e) { /* already stopped */ } }
+  SOMM.listening = false;
+}
 
 /* ------------------------------------------------------------ insights */
 
@@ -2917,6 +3063,12 @@ const ACTS = {
   winf: el => { U.winFilter = el.dataset.v; render(); },
   'top-mode': el => { U.topMode = el.dataset.v; render(); },
   'ins-go': el => insightsGo(el.dataset.k, el.dataset.v),
+  'somm-send': () => { const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
+  'somm-example': el => sommAsk(el.dataset.v),
+  'somm-mic': () => { if (SOMM.listening) { sommStopVoice(); sommRefresh(false); } else sommStartVoice(); },
+  'somm-tips': () => { SOMM.tips = !SOMM.tips; render(); },
+  'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.thread = []; SOMM.draft = ''; SOMM.voiced = false; render(); },
+  'somm-retry': () => { const last = SOMM.thread.pop(); if (last) sommAsk(last.q); },
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
 
   rate: el => {
@@ -3129,6 +3281,7 @@ const INPUTS = {
   'ers-score': el => { if (!RT) return; RT.score = el.value; const p = $('#rt-preview'); if (p) p.innerHTML = rtPreview(); },
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
+  'somm-text': el => { SOMM.draft = el.value; autosize(el); },
   'acq-site': el => { if (D && D.acq) D.acq.website = el.value; },
   'del-pos': el => { if (!RS || !RS.del) return; RS.del.pos = el.value; const h = $('#del-hint'); if (h) h.textContent = delHint(); },
   'st-pos': el => { if (D) D.stock[Number(el.dataset.i)].pos = el.value; },
@@ -3262,11 +3415,17 @@ function init() {
     if (e.target && e.target.id === 'new-loc' && e.key === 'Enter') { e.preventDefault(); ACTS['loc-add'](); }
     if (e.target && e.target.dataset && e.target.dataset.input === 'tg-in' && e.key === 'Enter') { e.preventDefault(); addTag(e.target.dataset.k, e.target.value); }
     if (e.target && e.target.id === 'rt-score' && e.key === 'Enter') { e.preventDefault(); saveRatingSheet(); }
+    if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sommAsk(e.target.value); }
     if (e.target && e.target.id === 'new-person' && e.key === 'Enter') { e.preventDefault(); ACTS['person-add'](); }
     if (e.target && e.target.id === 'new-ret-site' && e.key === 'Enter') { e.preventDefault(); ACTS['ret-add'](); }
     if (e.target && (e.target.id === 'ed-name' || e.target.id === 'ed-site') && e.key === 'Enter') { e.preventDefault(); saveEdit(); }
   });
-  window.addEventListener('hashchange', () => { if (RS) closeSheet(); if (RT) { RT = null; renderRatingSheet(); } render(); });
+  window.addEventListener('hashchange', () => {
+    if (SOMM.listening && route().p !== 'sommelier') sommStopVoice();
+    if (RS) closeSheet();
+    if (RT) { RT = null; renderRatingSheet(); }
+    render();
+  });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && CFG && !isFormRoute()) sync(true); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ });
   loadCache();
