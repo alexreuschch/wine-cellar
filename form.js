@@ -151,7 +151,9 @@ function streetBox() {
 function formBody() {
   const f = D.fields;
   const field = (label, key, opts = {}) => `<label class="field${opts.full ? ' full' : ''}">${label}<input name="${key}" data-input="field" value="${esc(f[key])}"${opts.num ? ' inputmode="numeric"' : ''}${opts.ph ? ` placeholder="${esc(opts.ph)}"` : ''}></label>`;
-  const banner = '<div id="ai-banner" hidden></div><div id="dup-box">' + dupHtml() + '</div>';
+  // in Edit the AI status stands right above the update button, where you tapped
+  const aiBanner = '<div id="ai-banner" hidden></div>';
+  const banner = (D.mode === 'edit' ? '' : aiBanner) + '<div id="dup-box">' + dupHtml() + '</div>';
   return `
     ${D.preview ? `<img class="preview" src="${esc(D.preview)}" alt="Label">` : ''}
     <button class="btn ghost" data-act="new-photo">${D.preview ? 'Replace label photo' : 'Add label photo'}</button>
@@ -174,6 +176,7 @@ function formBody() {
     </div>
     <div class="box" id="tp-editor">${profileEditorHtml()}</div>
     <div class="box" id="ab-editor">${aboutEditorHtml()}</div>
+    ${D.mode === 'edit' ? aiBanner : ''}
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update wine info with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Fills in details, drinking window, taste profile and background from what you entered, for example the vintage. Fields you changed here stay as they are. About 3 cents.</p>
     <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
@@ -536,6 +539,7 @@ async function runAnalysis() {
   });
   if (!draft.imageB64 && !hints.producer && !hints.name) { toast('Add a label photo or enter the producer or wine name first.'); return; }
   draft.ai = 'busy';
+  draft.infoMsg = '';
   updateBanner();
   try {
     const res = await api('analyze', { image: draft.imageB64 || null, hints });
@@ -545,7 +549,18 @@ async function runAnalysis() {
     // no vintage on the label: ask for it, then fill in again for that vintage
     if (draft.noVintage && !draft.vintageAsked && D === draft) { draft.vintageAsked = true; vintageAsk(); }
     // the background on region, grapes, style and producer is brought up to date as well
-    if (draft.mode === 'edit' && D === draft) fillInfos([{ region: draft.fields.region, grapes: draft.fields.grapes, producer: draft.fields.producer, profile: draft.profile, count: 1 }]).then(n => { if (n) toast(`Background updated for ${n} ${n === 1 ? 'entry' : 'entries'}: region, grapes, style or producer.`); });
+    if (draft.mode === 'edit' && D === draft) {
+      draft.infoMsg = 'busy';
+      fillInfos([{ region: draft.fields.region, grapes: draft.fields.grapes, producer: draft.fields.producer, profile: draft.profile, count: 1 }])
+        .then(r => {
+          const en = n => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+          draft.infoMsg = !r.todo ? 'Background is up to date.'
+            : !r.done ? 'The background could not be written right now. It is written when you open it.'
+            : `Background updated for ${en(r.done)}.${r.failed ? ` ${en(r.failed)} could not be written right now and ${r.failed === 1 ? 'is' : 'are'} written when you open ${r.failed === 1 ? 'it' : 'them'}.` : ''}`;
+        })
+        .catch(() => { draft.infoMsg = ''; })
+        .then(() => { if (D === draft) updateBanner(); });
+    }
   } catch (e) {
     draft.ai = 'error';
     draft.aiMsg = e.message.replace(/Claude API/g, 'AI service').replace(/Claude Console/g, 'API console').replace(/\.?$/, '.');
@@ -597,8 +612,10 @@ function updateBanner() {
   if (!b || !D) return;
   b.hidden = false;
   b.className = 'banner' + (D.ai === 'error' ? ' error' : '');
+  if (D.mode === 'edit' && D.ai === 'busy') { const r = b.getBoundingClientRect(); if (r.top < 60 || r.bottom > innerHeight) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   b.innerHTML = D.ai === 'busy' ? '<span class="spinner"></span>Searching and completing details…'
-    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage on the label. Enter it, then tap Update wine info with AI for the right drinking window.' : 'Wine info completed. Review and correct.')
+    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage on the label. Enter it, then tap Update wine info with AI for the right drinking window.' : 'Wine info completed. Review and correct.') +
+      (D.infoMsg ? ` ${D.infoMsg === 'busy' ? '<span class="spinner"></span>Checking the background on region, grapes, style and producer…' : esc(D.infoMsg)}` : '')
     : `Details could not be completed: ${esc(D.aiMsg)} You can fill them in yourself.`;
 }
 

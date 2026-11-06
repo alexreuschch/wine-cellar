@@ -389,12 +389,23 @@ const INFO = { kind: null, name: '', context: '', data: null, busy: false, error
 const INFO_ICON = { region: () => AB_ICON.vineyard, grape: () => AB_ICON.grape, style: () => AB_ICON.style, producer: () => AB_ICON.producer };
 const infoFirst = v => lc(str(v).split(',')[0].trim()).replace(/\s+/g, ' ');
 const infoKey = (kind, name, context) => `${kind}|${kind === 'region' ? infoFirst(name) : lc(str(name).trim()).replace(/\s+/g, ' ')}${kind === 'producer' && context ? `|${infoFirst(context)}` : ''}`;
-function infoCache() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
+/* backgrounds are kept on the phone; what does not fit there any more is still kept for this session */
+const INFO_MEM = {};
+function infoStored() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
+function infoCache() { return Object.assign(infoStored(), INFO_MEM); }
 const countryName = c => { if (COUNTRY_NAMES[c]) return COUNTRY_NAMES[c]; try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch (e) { return c; } };
 /* a grape background from before the charts is written again once */
 const INFO_NEW = { grape: [3, 24], region: [3, 26], producer: [2, 25] };
 const infoOld = (kind, d) => !!INFO_NEW[kind] && ((d && d.v) || 0) < INFO_NEW[kind][0] && !(S.version && S.version < INFO_NEW[kind][1]);
-function infoRemember(key, data) { try { const c = infoCache(); c[key] = data; localStorage.setItem('wc-info', JSON.stringify(c)); } catch (e) { /* kept for this session */ } }
+function infoRemember(key, data) {
+  INFO_MEM[key] = data;
+  const c = infoStored(); c[key] = data;
+  try { localStorage.setItem('wc-info', JSON.stringify(c)); return; } catch (e) { /* full: make room below */ }
+  try {
+    Object.keys(c).forEach(k => { if (k !== key && infoOld(k.split('|')[0], c[k])) delete c[k]; });   // outdated ones are written again anyway
+    localStorage.setItem('wc-info', JSON.stringify(c));
+  } catch (e) { /* kept for this session */ }
+}
 
 async function openInfo(kind, name, context) {
   Object.assign(INFO, { kind, name, context: context || '', data: null, busy: false, error: '' });
@@ -662,17 +673,23 @@ function infoItems(w) {
   if (w.producer) out.push({ kind: 'producer', name: w.producer, context: w.region });
   return out;
 }
+/* returns how many were written and how many could not be written now (those are written when opened) */
 async function fillInfos(wines, progress) {
-  if (S.version && S.version < 20) return 0;
+  const out = { todo: 0, done: 0, failed: 0 };
+  if (S.version && S.version < 20) return out;
   const have = infoCache(), seen = new Set(), todo = [];
-  let done = 0;
-  wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (seen.has(k) || (have[k] && !infoOld(x.kind, have[k]))) return; seen.add(k); todo.push(x); }));
+  wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (seen.has(k) || (have[k] && !infoOld(x.kind, have[k]))) return; seen.add(k); todo.push(Object.assign({ key: k }, x)); }));
+  out.todo = todo.length;
   for (let i = 0; i < todo.length; i += 8) {
     if (progress) progress(i, todo.length);
+    const part = todo.slice(i, i + 8);
+    let infos = {};
     try {
-      const d = await api('infoFill', { items: todo.slice(i, i + 8) });
-      Object.keys(d.infos || {}).forEach(k => { if (!infoOld(d.infos[k].kind, d.infos[k])) done++; infoRemember(k, d.infos[k]); });
-    } catch (e) { if (/Unknown action/i.test(e.message)) return done; }
+      const d = await api('infoFill', { items: part.map(({ kind, name, context }) => ({ kind, name, context })) });
+      infos = d.infos || {};
+      Object.keys(infos).forEach(k => infoRemember(k, infos[k]));
+    } catch (e) { if (/Unknown action/i.test(e.message)) { out.failed += todo.length - i; return out; } }
+    part.forEach(x => { const d = infos[x.key]; if (d && !infoOld(x.kind, d)) out.done++; else out.failed++; });
   }
-  return done;
+  return out;
 }
