@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 17;
+var API_VERSION = 18;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
 
 var WINE_COLS = [
@@ -19,7 +19,7 @@ var WINE_COLS = [
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom',
-  'stock', 'street', 'offer'
+  'stock', 'street', 'offer', 'profile'
 ];
 // The Removals tab is the journal: bottles going out (dir "out") and coming in (dir "in").
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
@@ -40,7 +40,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '11';
+var SCHEMA_VERSION = '12';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -64,6 +64,7 @@ var ACTIONS = {
   sommelier: actionSommelier_,
   consultant: actionConsultant_,
   winelist: actionWineList_,
+  profiles: actionProfiles_,
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
@@ -263,7 +264,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list' };
+var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Taste profiles' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -894,6 +895,47 @@ function actionSaveRetailer_(req) {
 
 // ---------------------------------------------------------------- Claude: label analysis and street prices
 
+// taste profile and background of a wine, stored as JSON in the column "profile"
+var AROMA_KEYS = ['redfruit', 'darkfruit', 'citrus', 'treefruit', 'tropical', 'floral', 'herbal', 'spice', 'oak', 'earth', 'leather', 'mineral', 'honey'];
+var FOOD_KEYS = ['beef', 'lamb', 'pork', 'game', 'poultry', 'fish', 'seafood', 'pasta', 'pizza', 'vegetarian', 'mushrooms', 'spicy', 'asian', 'hardcheese', 'softcheese', 'curedmeat', 'dessert', 'aperitif'];
+var PROFILE_SPEC = [
+  '"profile": an object with these keys:',
+  '  "body", "sweet", "acid": numbers from 1 to 5 (body 1 light to 5 bold, sweet 1 dry to 5 sweet, acid 1 soft to 5 fresh),',
+  '  "tannin": number from 1 smooth to 5 tannic, or null for wines without noticeable tannin such as most white, rosé and sparkling wines,',
+  '  "aromas": the three main aroma groups, most important first, each {"g": one of ' + AROMA_KEYS.join(', ') + ', "n": "two or three notes, for example cherry, raspberry"},',
+  '  "foods": three to six food categories that suit the wine, best first, only from this list: ' + FOOD_KEYS.join(', ') + ',',
+  '  "style": a short style name, for example "Red Burgundy", "Southern Italy Red" or "Champagne Brut",',
+  '  "styleDesc": one short line on the style, for example "Elegant, light to medium bodied Pinot Noir",',
+  '  "sub": the sub-region or appellation if it is more specific than the region, otherwise "",',
+  '  "producerLine": one short line about the producer, for example "Family estate in Gevrey-Chambertin",',
+  '  "about": two or three sentences portraying the producer,',
+  '  "classification": for example "DOCG", "Grand Cru" or "AOC Bourgogne Côte de Nuits", or "",',
+  '  "alcohol": percent as a number, read from the label if it is visible,',
+  '  "ageing": for example "14 months in French oak, 25% new", or "",',
+  '  "closure": "Natural cork", "Screw cap", "Glass stopper" or "Synthetic cork", or "",',
+  '  "vineyard": vineyards, exposure and soil in one line, or "",',
+  '  "vintageNote": one or two sentences on this vintage in this region, or "" for a non-vintage wine,',
+  '  "typical": true if the grape shares in "grapes" are typical shares from your knowledge and not stated for this wine.',
+  '  Only write facts you know with reasonable confidence, otherwise use "" or null. Do not use dashes as punctuation.'
+].join('\n');
+
+/** Cleans the profile from the AI: numbers in range, known keys only. */
+function normProfile_(p) {
+  if (!p || typeof p !== 'object') return null;
+  var sc = function (v) { var n = Math.round(Number(v)); return n >= 1 && n <= 5 ? n : null; };
+  var txt = function (v, max) { return String(v === null || v === undefined ? '' : v).trim().slice(0, max || 300); };
+  var aromas = (Array.isArray(p.aromas) ? p.aromas : []).filter(function (a) { return a && AROMA_KEYS.indexOf(String(a.g)) >= 0; })
+    .slice(0, 3).map(function (a) { return { g: String(a.g), n: txt(a.n, 80) }; });
+  var foods = (Array.isArray(p.foods) ? p.foods : []).map(String).filter(function (f, i, arr) { return FOOD_KEYS.indexOf(f) >= 0 && arr.indexOf(f) === i; }).slice(0, 6);
+  var alc = Number(p.alcohol);
+  return {
+    v: 1, body: sc(p.body), tannin: sc(p.tannin), sweet: sc(p.sweet), acid: sc(p.acid), aromas: aromas, foods: foods,
+    style: txt(p.style, 60), styleDesc: txt(p.styleDesc, 120), sub: txt(p.sub, 80), producerLine: txt(p.producerLine, 120), about: txt(p.about, 700),
+    classification: txt(p.classification, 80), alcohol: alc > 3 && alc < 25 ? Math.round(alc * 10) / 10 : null, ageing: txt(p.ageing, 120),
+    closure: txt(p.closure, 40), vineyard: txt(p.vineyard, 160), vintageNote: txt(p.vintageNote, 400), typical: p.typical === true
+  };
+}
+
 var ANALYZE_PROMPT = [
   'You are an experienced sommelier. Read the wine label in this photo and return ONLY a JSON object, no other text, with these keys:',
   '"producer": the winery or producer,',
@@ -901,11 +943,12 @@ var ANALYZE_PROMPT = [
   '"vintage": the year as a number, or null for non-vintage,',
   '"type": exactly one of "Red", "White", "Rosé", "Sparkling", "Dessert", "Fortified",',
   '"region": region and country, for example "Piedmont, Italy",',
-  '"grapes": grape varieties with shares if known, for example "Nebbiolo 100%" or "Merlot 70%, Cabernet Franc 30%" (use your knowledge if the label does not say),',
+  '"grapes": grape varieties with shares, for example "Nebbiolo 100%" or "Merlot 70%, Cabernet Franc 30%" (if the label does not say, use typical shares from your knowledge and set "typical" in the profile to true),',
   '"taste": two or three sentences in English on style and aromas, including whether it is delicate, elegant, full-bodied or highly structured,',
   '"tasteTags": an array of exactly three short style tags, for example ["elegant", "medium body", "fresh acidity"],',
   '"pairings": an array of four to six dishes it pairs well with,',
-  '"drinkFrom", "peakFrom", "peakUntil", "drinkUntil": years as numbers, your best estimate of the drinking window and peak for this wine and vintage.',
+  '"drinkFrom", "peakFrom", "peakUntil", "drinkUntil": years as numbers, your best estimate of the drinking window and peak for this wine and vintage,',
+  PROFILE_SPEC,
   'Use null for anything you cannot determine. Do not include ratings, scores or prices.'
 ].join('\n');
 
@@ -922,8 +965,47 @@ function actionAnalyze_(req) {
   var content = [];
   if (req.image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: req.image } });
   content.push({ type: 'text', text: prompt });
-  var text = textOf_(callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1500, messages: [{ role: 'user', content: content }] }));
-  return parseJson_(text, 'The AI returned no wine data');
+  var text = textOf_(callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: content }] }));
+  var d = parseJson_(text, 'The AI returned no wine data');
+  d.profile = normProfile_(d.profile);
+  return d;
+}
+
+/** Taste profile and background for wines that have none yet, a few at a time, all at the same time. */
+function actionProfiles_(req) {
+  var ids = (Array.isArray(req.ids) ? req.ids : []).map(String).slice(0, 6);
+  if (!ids.length) return { wines: [] };
+  var t = table_(SHEETS.wines);
+  var rows = ids.map(function (id) { var i = findIndex_(t, id); return i < 0 ? null : toObj_(t.headers, t.rows[i]); }).filter(Boolean);
+  var ask = function (w) {
+    var known = ['producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste'].filter(function (k) { return String(w[k] || '').trim(); })
+      .map(function (k) { return k + ': ' + w[k]; }).join('\n');
+    var prompt = 'You are an experienced sommelier. For the wine below, return ONLY a JSON object, no other text, with these keys:\n' +
+      '"grapes": grape varieties with shares, for example "Merlot 70%, Cabernet Franc 30%"; keep the shares given below, otherwise use typical shares and set "typical" to true,\n' +
+      PROFILE_SPEC + '\n\nThe wine:\n' + known;
+    return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] };
+  };
+  var replies = callClaudeMany_(rows.map(ask));
+  var results = rows.map(function (w, i) {
+    try { var d = parseJson_(textOf_(replies[i]), 'No profile'); return { id: w.id, grapes: d.grapes, profile: normProfile_(d.profile) }; } catch (e) { return { id: w.id, profile: null }; }
+  });
+  return withLock_(function () {
+    var t2 = table_(SHEETS.wines), out = [];
+    results.forEach(function (r) {
+      if (!r.profile) return;
+      var idx = findIndex_(t2, r.id);
+      if (idx < 0) return;
+      var obj = toObj_(t2.headers, t2.rows[idx]);
+      var hasShares = /\d\s*%/.test(String(obj.grapes || ''));
+      if (r.grapes && !hasShares) obj.grapes = String(r.grapes).slice(0, 200);
+      else r.profile.typical = false;
+      obj.profile = JSON.stringify(r.profile);
+      obj.updatedAt = new Date().toISOString();
+      writeRow_(t2, idx, obj);
+      out.push(obj);
+    });
+    return { wines: out, failed: results.filter(function (r) { return !r.profile; }).map(function (r) { return r.id; }) };
+  });
 }
 
 function actionStreetPrice_(req) {

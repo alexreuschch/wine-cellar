@@ -60,7 +60,7 @@ function donut(rows, total, opts = {}) {
     const attrs = x.go ? ` data-act="ins-go" data-k="${esc(x.go[0])}" data-v="${esc(x.go[1])}"` : '';
     return `<${tag} class="ins-leg"${attrs}><span class="sw" style="background:${x.c}"></span><span class="ellipsis">${esc(x.label || x.k)}</span><b>${opts.pctOnly ? '' : Math.round(x.n)}</b><small>${pct(x.n, total)}%</small></${tag}>`;
   }).join('');
-  return `<div class="ins-donut"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="${esc(opts.label || 'Share')}">${arcs}<text x="60" y="58" text-anchor="middle" class="d-n">${esc(center[0])}</text><text x="60" y="74" text-anchor="middle" class="d-l">${esc(center[1])}</text></svg>
+  return `<div class="ins-donut${opts.wrap ? ' wrap' : ''}"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="${esc(opts.label || 'Share')}">${arcs}<text x="60" y="58" text-anchor="middle" class="d-n">${esc(center[0])}</text><text x="60" y="74" text-anchor="middle" class="d-l">${esc(center[1])}</text></svg>
     <div class="ins-legend">${legend}</div></div>`;
 }
 
@@ -223,6 +223,7 @@ function insightsGo(k, v) {
   U.search = '';
   if (k === 'type') U.f.cellar.sel.wine = [lc(v)];
   else if (k === 'grape') U.f.cellar.sel.grape = [lc(v)];
+  else if (k === 'food') U.f.cellar.sel.food = [lc(v)];
   else if (k === 'vintage') U.f.cellar.sel.vintage = v.split('|').map(lc);
   else if (k === 'drinkby') U.f.cellar.sel.drinkby = [v];
   else if (k === 'price') { const [lo, hi] = v.split('|'); U.f.cellar.range = { price: [Number(lo), hi ? Number(hi) - 0.01 : rangeMax('cellar', 'price')] }; }
@@ -493,6 +494,7 @@ function viewWine(id) {
     ${label}
     <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
     ${stockHtml(w)}
+    ${aboutHtml(w)}
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
       ${p ? `${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div><p class="muted tiny" style="margin:0">${windowText(w)}</p>`
@@ -510,14 +512,7 @@ function viewWine(id) {
     ${valueHtml(w)}
     ${offerHtml(w)}
     <section style="gap:4px">${secHead(ICON.cart, 'Purchases')}${purchasesHtml(w, false)}</section>
-    <section style="gap:14px">
-      <h2>Profile</h2>
-      ${w.grapes ? `<div class="kv"><span>Grapes</span><p>${esc(w.grapes)}</p></div>` : ''}
-      ${w.taste ? `<div class="kv"><span>Taste</span><p style="line-height:1.5">${esc(w.taste)}</p></div>` : ''}
-      ${w.tasteTags.length ? `<div class="kv"><span>Style</span><p class="style-line">${w.tasteTags.map(t => esc(cap(t))).join(' · ')}</p></div>` : ''}
-      ${w.pairings.length ? `<div class="kv"><span>Pairs with</span><p style="line-height:1.5">${esc(listSentence(w.pairings))}</p></div>` : ''}
-      ${!w.grapes && !w.taste && !w.pairings.length ? `<p class="muted small" style="margin:0">No profile yet. <a href="${editHref}">Edit</a> to add grapes, taste and food pairings.</p>` : ''}
-    </section>
+    ${profileHtml(w, editHref)}
     <section style="gap:0">
       <h2 style="margin-bottom:4px">Bottles removed</h2>
       ${hist.length ? hist.map(r => `<button class="hist as-btn" data-act="edit-entry" data-id="${esc(r.id)}" aria-label="Edit entry from ${esc(fmtDate(r.date))}"><span class="hist-head"><span class="tiny muted">${esc(fmtDate(r.date))}</span>${typeBadge(r.type)}</span>

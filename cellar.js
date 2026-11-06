@@ -8,7 +8,7 @@ const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const grapeNames = w => String(w.grapes || '').split(/[,;\/+&]/)
   .map(s => cap(s.replace(/\d+([.,]\d+)?\s*%?/g, '').replace(/\s+/g, ' ').trim()))
   .filter(s => s.length > 1);
-const foodNames = w => w.pairings.map(s => cap(s.trim())).filter(Boolean);
+const foodNames = w => foodsOf(w).map(k => FOODS[k][0]);
 const cellarPool = () => S.wines.filter(w => U.showFinished || w.count > 0);
 const topPool = () => S.wines.filter(w => U.topFinished || w.count > 0);
 const ENTRY_LABEL = { Gift: 'Gift given', Received: 'Gift received', Added: 'Added' };
@@ -38,7 +38,7 @@ const CTX = {
     facets: {
       wine: F_WINE,
       grape: F_GRAPE,
-      food: { label: 'Food', plural: 'dishes', of: foodNames },
+      food: { label: 'Food', plural: 'kinds of food', of: foodNames },
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
       vintage: F_VINTAGE,
       drinkby: F_DRINKBY,

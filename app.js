@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.19.1';
+const APP_VERSION = '2.20.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -225,6 +225,7 @@ function normWine(w) {
     ratings: parseRatings(w.ratings),
     labelFileId: str(w.labelFileId),
     thumb: str(w.thumb),
+    profile: typeof parseProfile === 'function' ? parseProfile(w.profile) : null,
     createdAt: str(w.createdAt),
     updatedAt: str(w.updatedAt)
   };
@@ -306,6 +307,7 @@ function serialWine(w) {
   o.stock = JSON.stringify(w.stock);
   o.street = w.street ? JSON.stringify(w.street) : '';
   o.offer = w.offer ? JSON.stringify(w.offer) : '';
+  o.profile = w.profile ? JSON.stringify(w.profile) : '';
   ['drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'myRating'].forEach(k => { if (o[k] === null) o[k] = ''; });
   return o;
 }

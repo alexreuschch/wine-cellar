@@ -30,6 +30,7 @@ function newDraft(mode, w) {
     ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score) })),
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
     src: null, corners: null, cornersTouched: false,
+    profile: src.profile ? JSON.parse(JSON.stringify(src.profile)) : emptyProfile(),
     ai: null, aiMsg: '', touched: new Set()
   };
 }
@@ -162,14 +163,17 @@ function formBody() {
       <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       ${field('Region', 'region', { full: true, ph: 'Piedmont, Italy' })}
       ${field('Grapes', 'grapes', { full: true, ph: 'Nebbiolo 100%' })}
-      <div class="field full">Pairs with<div id="tg-pairings">${tagEditorHtml('pairings')}</div></div>
+
       ${field('Drink from', 'drinkFrom', { num: true })}
       ${field('Drink until', 'drinkUntil', { num: true })}
       ${field('Peak from', 'peakFrom', { num: true })}
       ${field('Peak until', 'peakUntil', { num: true })}
       <label class="field full">Taste<textarea name="taste" class="autosize" data-input="field" rows="5">${esc(f.taste)}</textarea></label>
       <div class="field full">Taste tags<div id="tg-tasteTags">${tagEditorHtml('tasteTags')}</div></div>
+      <div class="field full">Dishes<div id="tg-pairings">${tagEditorHtml('pairings')}</div><span class="muted tiny">Exact dishes help the sommelier. The detail page shows the food categories below.</span></div>
     </div>
+    <div class="box" id="tp-editor">${profileEditorHtml()}</div>
+    <div class="box" id="ab-editor">${aboutEditorHtml()}</div>
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
     <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
@@ -577,6 +581,10 @@ function applyAnalysis(draft, r) {
     const t = TYPES.find(x => x.toLowerCase() === String(r.type).toLowerCase().replace('rose', 'rosé')) || null;
     if (t) { draft.fields.type = t; if (D === draft) { const el = document.querySelector('[name="type"]'); if (el) el.value = t; } }
   }
+  if (r.profile && !draft.touched.has('profile')) {
+    draft.profile = parseProfile(r.profile) || draft.profile;
+    if (D === draft) { renderProfileEditor(); const ab = $('#ab-editor'); if (ab) { ab.innerHTML = aboutEditorHtml(); ab.querySelectorAll('.autosize').forEach(autosize); } }
+  }
   if (D === draft) renderDup();
 }
 
@@ -656,7 +664,8 @@ async function saveWineForm() {
     stock, street,
     ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => ({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })),
     thumb: D.thumb || (base ? base.thumb : ''),
-    myRating: D.myRating
+    myRating: D.myRating,
+    profile: (() => { const p = profileFromDraft(); if (p && D.touched.has('grapes')) p.typical = false; return p; })()
   }));
   const entries = [];
   if (acq && w.count > 0) {

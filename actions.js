@@ -136,6 +136,16 @@ const ACTS = {
   'wish-add': el => wishToCellar(el.dataset.id),
   'somm-send': () => { if (SOMM.mode === 'list') { listAnalyze(); return; } const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
   'wl-go': () => listAnalyze(),
+  'about-more': el => { const id = (location.hash.split('/')[2] || ''); U.aboutOpen = U.aboutOpen === decodeURIComponent(id) ? null : decodeURIComponent(id); refreshView(); },
+  'profile-one': el => profileOne(el.dataset.id),
+  'profile-all': () => profileAll(),
+  'tp-set': el => { const k = el.dataset.k, v = Number(el.dataset.v); D.profile[k] = D.profile[k] === v ? null : v; D.touched.add('profile'); renderProfileEditor(); },
+  'tp-aroma': el => {
+    const g = el.dataset.v, a = D.profile.aromas, i = a.findIndex(x => x.g === g);
+    if (i >= 0) a.splice(i, 1); else if (a.length >= 3) { toast('Up to three main aromas. Remove one first.'); return; } else a.push({ g, n: '' });
+    D.touched.add('profile'); renderProfileEditor();
+  },
+  'tp-food': el => { const f = el.dataset.v, a = D.profile.foods, i = a.indexOf(f); if (i >= 0) a.splice(i, 1); else if (a.length >= 6) { toast('Up to six kinds of food.'); return; } else a.push(f); D.touched.add('profile'); renderProfileEditor(); },
   'pick-open': el => openPicker(el.dataset.k),
   'pick-close': () => closePicker(),
   pick: el => pickChoose(el.dataset.v),
@@ -365,6 +375,8 @@ const INPUTS = {
   'qty-in': el => setQty(el, false),
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
   'wl-min': el => { WL.min = el.value; },
+  'tp-note': el => { const a = D.profile.aromas[Number(el.dataset.i)]; if (a) a.n = el.value; D.touched.add('profile'); },
+  'tp-field': el => { D.profile[el.dataset.k] = el.value; D.touched.add('profile'); if (el.classList.contains('autosize')) autosize(el); },
   'pick-q': el => { PICK.q = el.value; const l = $('#pick-list'); if (l) l.innerHTML = pickListHtml(); },
   'wl-max': el => { WL.max = el.value; },
   'cons-min': el => { CONS.budget.min = el.value.replace(/[^0-9]/g, ''); },

@@ -212,7 +212,11 @@ async function exportExcel() {
         'My rating %': w.myRating ?? '', 'External ratings': w.ratings.map(r => `${r.sys} ${r.score}`).join(', '),
         [`Ø Cost (${c})`]: money2(a), [`Street (${c})`]: money2(st), [`Total Street (${c})`]: st !== null ? money2(st * w.count) : '',
         'Best offer shop': w.offer ? w.offer.shop : '', 'Best offer price': w.offer ? `${w.offer.v} ${w.offer.cur}` : '', 'Best offer link': w.offer ? w.offer.url : '',
-        Taste: w.taste, Style: w.tasteTags.join(', '), 'Pairs with': w.pairings.join(', '), Added: str(w.createdAt).slice(0, 10), 'Has window': p ? 'yes' : 'no'
+        Taste: w.taste, Style: w.tasteTags.join(', '), 'Pairs with': w.pairings.join(', '), 'Food': foodsOf(w).map(k => FOODS[k][0]).join(', '),
+        'Main aromas': w.profile ? w.profile.aromas.map(x => `${AROMAS[x.g][0]}${x.n ? ` (${x.n})` : ''}`).join(', ') : '',
+        'Body 1 to 5': w.profile && w.profile.body ? w.profile.body : '', 'Tannin 1 to 5': w.profile && w.profile.tannin ? w.profile.tannin : '',
+        'Sweetness 1 to 5': w.profile && w.profile.sweet ? w.profile.sweet : '', 'Acidity 1 to 5': w.profile && w.profile.acid ? w.profile.acid : '',
+        'Style name': w.profile ? w.profile.style : '', Classification: w.profile ? w.profile.classification : '', 'Alcohol %': w.profile && w.profile.alcohol ? w.profile.alcohol : '', Added: str(w.createdAt).slice(0, 10), 'Has window': p ? 'yes' : 'no'
       };
     });
     const journal = S.removals.slice().sort((a, b) => str(b.date).localeCompare(str(a.date))).map(r => {
@@ -258,6 +262,7 @@ function viewSettings(first) {
     ${first ? '' : locationsHtml()}
     ${first ? '' : retailersHtml()}
     ${first ? '' : peopleHtml()}
+    ${first ? '' : profilesBoxHtml()}
     ${first ? '' : usageHtml()}
     ${first ? '' : `<section class="box"><span class="box-title">Your data</span>
       <button class="btn block" data-act="export"${U.exporting ? ' disabled' : ''}>${ICON.download}${U.exporting ? 'Preparing file…' : 'Export all data to Excel'}</button>

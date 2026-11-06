@@ -608,3 +608,67 @@ div.ins-leg { cursor: default; }
 .wl-shop { align-items: flex-start; }
 .wl-shop a { color: var(--gold); text-decoration: none; min-width: 0; }
 .wl-shop svg { flex: none; margin-top: 2px; }
+
+/* about this wine */
+.ab-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.ab-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; padding: 14px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; text-align: left; align-items: start; width: 100%; }
+div.ab-row { grid-template-columns: 40px minmax(0, 1fr); }
+.ab-row > svg { color: var(--muted); align-self: center; width: 18px; height: 18px; }
+.ab-ic { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--gold) 12%, transparent); color: var(--gold); }
+.ab-ic svg { width: 22px; height: 22px; }
+.ab-flag { font-size: 22px; line-height: 1; }
+.ab-body b { display: block; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.ab-body small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.4; }
+.ab-hint { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; font-size: 13px; line-height: 1.4; }
+.ab-hint svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.ab-hint.good { color: #7FB069; } .ab-hint.new { color: var(--gold); } .ab-hint.meh { color: var(--muted); }
+.ab-more { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px; border: 0; background: transparent; color: var(--gold); font: inherit; font-size: 15px; }
+.ab-more svg { width: 18px; height: 18px; transition: transform .2s; }
+.ab-more[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.ab-more-body { display: flex; flex-direction: column; gap: 12px; }
+.ab-text { font-size: 15px; line-height: 1.55; margin: 0; }
+.ab-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ab-fact { display: flex; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.ab-fact.wide { grid-column: 1 / -1; }
+.ab-fact svg { width: 22px; height: 22px; color: var(--gold); flex: none; margin-top: 1px; }
+.ab-fact span { display: block; font-size: 12px; color: var(--muted); }
+.ab-fact b { display: block; font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+/* taste profile */
+.tp-block { display: flex; flex-direction: column; gap: 10px; }
+.tp-lead { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0; }
+.ins-donut.wrap .ins-leg .ellipsis { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
+.tp-scales { display: flex; flex-direction: column; gap: 14px; }
+.tp-row { display: grid; grid-template-columns: 62px 1fr 62px; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.tp-row span:last-child { text-align: right; }
+.tp-row .on { color: var(--text); font-weight: 600; }
+.tp-track { position: relative; height: 18px; }
+.tp-track::before { content: ''; position: absolute; left: 0; right: 0; top: 8px; height: 2px; border-radius: 1px; background: var(--line); }
+.tp-tick { position: absolute; top: 5px; width: 2px; height: 8px; margin-left: -1px; background: var(--line); border-radius: 1px; }
+.tp-fill { position: absolute; left: 0; top: 8px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--wc) 55%, transparent); }
+.tp-dot { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--wc); box-shadow: 0 0 0 4px color-mix(in srgb, var(--wc) 25%, transparent); }
+.tp-aromas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tp-aroma { display: flex; flex-direction: column; gap: 6px; padding: 12px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.tp-ic { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ac) 18%, transparent); color: var(--ac); }
+.tp-ic svg { width: 24px; height: 24px; }
+.tp-aroma b { font-size: 14px; line-height: 1.25; }
+.tp-aroma small { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.tp-foods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tp-food { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; line-height: 1.2; text-align: center; }
+.tp-food svg { width: 28px; height: 28px; color: var(--gold); }
+.tp-missing { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px dashed var(--line); border-radius: 14px; }
+/* edit: taste profile */
+.tpe-axes { display: flex; flex-direction: column; gap: 10px; }
+.tpe-row { display: grid; grid-template-columns: 58px 1fr 58px; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.tpe-row span:last-child { text-align: right; }
+.tpe-dots { display: flex; justify-content: space-between; }
+.tpe-dots button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: transparent; position: relative; }
+.tpe-dots button::after { content: ''; position: absolute; inset: 11px; border-radius: 50%; background: var(--line); }
+.tpe-dots button.on { border-color: var(--gold); }
+.tpe-dots button.on::after { inset: 8px; background: var(--gold); }
+.tpe-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tpe-chip { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: 18px; background: transparent; color: var(--text); font: inherit; font-size: 13px; }
+.tpe-chip svg { width: 18px; height: 18px; color: var(--ac); }
+.tpe-chip.on { border-color: var(--ac); background: color-mix(in srgb, var(--ac) 16%, transparent); }
+.tpe-notes { display: flex; flex-direction: column; gap: 8px; }
+.tp-food.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+#tp-editor .tp-food:not(.on) { opacity: .62; }
