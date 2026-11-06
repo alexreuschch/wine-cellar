@@ -42,6 +42,8 @@ const CTX = {
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
       vintage: F_VINTAGE,
       drinkby: F_DRINKBY,
+      // a sub-region, village or style tapped in a background: exactly the wines counted on its chip
+      term: { hidden: true, label: 'Background', plural: 'terms', of: w => (U.termPool || []).filter(x => termMatch(w, x)).map(x => x.t) },
       price: F_PRICE,
       rating: F_RATING
     },

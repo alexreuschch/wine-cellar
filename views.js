@@ -221,6 +221,7 @@ function insightsGo(k, v) {
   }
   U.f.cellar = newF();
   U.search = '';
+  if (k === 'term') { U.termPool = [v]; U.f.cellar.sel.term = [lc(v.t)]; go('#/cellar'); return; }
   if (k === 'type') U.f.cellar.sel.wine = [lc(v)];
   else if (k === 'grape') U.f.cellar.sel.grape = [lc(v)];
   else if (k === 'food') U.f.cellar.sel.food = [lc(v)];

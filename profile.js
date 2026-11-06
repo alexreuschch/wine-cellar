@@ -506,14 +506,28 @@ function cellarGrapes() {
 }
 /* grapes, sub regions, villages and styles named in the text become chips; the number shows your matching wines, counted when the sheet opens */
 const termNorm = v => str(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-function termCount(t, k, grapes) { return k === 'grape' ? grapes.get(lc(t)) || 0 : S.wines.filter(w => matches(w, t)).length; }
+/* the whole term is compared, accents and punctuation do not matter: "Cote des Blancs" is not "Blanc de Blancs" */
+const phraseNorm = v => ` ${termNorm(v).replace(/[^a-z0-9]+/g, ' ').trim()} `;
+const hasPhrase = (fields, t) => { const n = phraseNorm(t); return n.trim() !== '' && fields.some(f => phraseNorm(f).includes(n)); };
+/* words that would match almost every wine get no chip */
+const TERM_GENERIC = new Set(['rose', 'red', 'white', 'sparkling', 'still', 'vintage', 'non vintage', 'nv', 'brut', 'extra brut', 'sweet', 'dry', 'off dry', 'dessert', 'fortified', 'blend', 'blends', 'cuvee', 'cuvees', 'prestige cuvee', 'prestige cuvees',
+  'red wine', 'red wines', 'white wine', 'white wines', 'rose wine', 'rose wines', 'sparkling wine', 'sparkling wines', 'still wine', 'still wines', 'sweet wine', 'sweet wines', 'dry wine', 'dry wines', 'wine', 'wines', 'village', 'villages', 'regional']);
+const termGeneric = x => x.k !== 'grape' && TERM_GENERIC.has(phraseNorm(x.t).trim());
+/* which of your wines a term fits: grapes by the grapes, places by region, sub-region and classification, styles by style and name within this region */
+function termMatch(w, x) {
+  if (x.k === 'grape') return grapeShares(Object.assign({}, w, { count: 1 })).some(g => termNorm(g.name) === termNorm(x.t));
+  const p = w.profile || {};
+  if (x.k === 'style') return hasPhrase([p.style, w.name, p.classification], x.t) && (!x.region || hasPhrase([w.region, p.sub], x.region));
+  return hasPhrase([w.region, p.sub, p.classification], x.t);
+}
+const termCount = x => S.wines.filter(w => termMatch(w, x)).length;
 function termChip(text, x, grapes, inline) {
-  const n = termCount(x.t, x.k, grapes);
+  const n = termCount(x);
   const cls = `gi-chip${inline ? ' inline' : ''}`;
-  return n ? `<button class="${cls} link" data-act="info-term" data-k="${x.k === 'grape' ? 'grape' : 'search'}" data-t="${esc(x.t)}">${text}<em>${n}</em></button>` : `<span class="${cls}">${text}</span>`;
+  return n ? `<button class="${cls} link" data-act="info-term" data-k="${x.k}" data-t="${esc(x.t)}" data-r="${esc(x.region || '')}">${text}<em>${n}</em></button>` : `<span class="${cls}">${text}</span>`;
 }
 function termText(t, terms, grapes) {
-  const list = terms.filter(x => x.t).sort((a, b) => b.t.length - a.t.length);
+  const list = terms.filter(x => x.t && !termGeneric(x)).sort((a, b) => b.t.length - a.t.length);
   const out = esc(t);
   if (!list.length) return out;
   const by = new Map(list.map(x => [termNorm(esc(x.t)), x]));
@@ -617,7 +631,8 @@ function infoTextHtml(d) {
   const k = INFO.kind;
   const secs = k === 'grape' ? d.sections.filter(x => !/where it grows/i.test(x.h)) : d.sections;
   const grapes = k === 'region' ? cellarGrapes() : null;
-  const terms = grapes ? [...(d.terms || []), ...(d.grapes || []).map(t => ({ t, k: 'grape' }))].filter((x, i, a) => a.findIndex(y => termNorm(y.t) === termNorm(x.t)) === i) : [];
+  const region = str(d.title || INFO.name).split(',')[0].trim();
+  const terms = grapes ? [...(d.terms || []).map(x => Object.assign({ region }, x)), ...(d.grapes || []).map(t => ({ t, k: 'grape' }))].filter((x, i, a) => a.findIndex(y => termNorm(y.t) === termNorm(x.t)) === i) : [];
   return secs.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${grapes ? termText(x.t, terms, grapes) : esc(x.t)}</p></div>`).join('');
 }
 function grapeChartsHtml(d) {
