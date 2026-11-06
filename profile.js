@@ -144,7 +144,8 @@ function likeHint(kind, w, keyOf) {
 function abRow(icon, title, sub, hint, go) {
   const h = hint ? `<div class="ab-hint ${hint.cls}">${hint.icon}<span>${esc(hint.text)}</span></div>` : '';
   const inner = `<span class="ab-ic">${icon}</span><div class="ab-body"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}${h}</div>`;
-  return go ? `<button class="ab-row" data-act="ins-go" data-k="${esc(go[0])}" data-v="${esc(go[1])}">${inner}${ICON.chevron}</button>` : `<div class="ab-row">${inner}</div>`;
+  // go: [kind, name, context] opens the background on it
+  return go ? `<button class="ab-row" data-act="info-open" data-k="${esc(go[0])}" data-v="${esc(go[1])}" data-c="${esc(go[2] || '')}">${inner}${ICON.chevron}</button>` : `<div class="ab-row">${inner}</div>`;
 }
 
 function aboutHtml(w) {
@@ -152,20 +153,21 @@ function aboutHtml(w) {
   const rows = [];
   if (w.region) {
     const c = countryOf(w);
-    rows.push(abRow(c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : AB_ICON.vineyard, w.region, p ? p.sub : '', likeHint('region', w, regionKey), ['search', str(w.region).split(',')[0].trim()]));
+    rows.push(abRow(c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : AB_ICON.vineyard, w.region, p ? p.sub : '', likeHint('region', w, regionKey), ['region', w.region]));
   }
-  if (p && p.style) rows.push(abRow(AB_ICON.style, p.style, p.styleDesc, likeHint('style', w, x => (x.profile && x.profile.style ? lc(x.profile.style) : '')), null));
+  if (p && p.style) rows.push(abRow(AB_ICON.style, p.style, p.styleDesc, likeHint('style', w, x => (x.profile && x.profile.style ? lc(x.profile.style) : '')), ['style', p.style, w.region]));
   if (w.grapes) {
     const g = mainGrape(w);
     rows.push(abRow(AB_ICON.grape, w.grapes, p && p.typical ? 'Typical blend, not stated for this wine' : '', g ? likeHint('grape', w, x => lc(mainGrape(x))) : null, g ? ['grape', g] : null));
   }
-  if (w.producer) rows.push(abRow(AB_ICON.producer, w.producer, p ? p.producerLine : '', likeHint('producer', w, x => lc(x.producer)), ['search', w.producer]));
+  if (w.producer) rows.push(abRow(AB_ICON.producer, w.producer, p ? p.producerLine : '', likeHint('producer', w, x => lc(x.producer)), ['producer', w.producer, w.region]));
   if (!rows.length) return '';
   const more = p && (p.about || p.classification || p.alcohol || p.ageing || p.closure || p.vineyard || p.vintageNote);
   const open = U.aboutOpen === w.id;
   return `<section style="gap:12px"><h2>About this wine</h2>
     <div class="ab-list">${rows.join('')}
-      ${more ? `<button class="ab-more" data-act="about-more" aria-expanded="${open}">${open ? 'Less about this wine' : 'More about this wine'}${ICON.chevron}</button>` : ''}
+      ${more ? `<button class="ab-more" data-act="about-more" aria-expanded="${open}">${open ? 'Less about this wine' : 'More about this wine'}${ICON.chevron}</button>`
+        : hasProfile(w) ? '' : `<button class="ab-more" data-act="profile-one" data-id="${esc(w.id)}"${PROF.busy ? ' disabled' : ''}>${PROF.one === w.id ? 'Adding taste profile and background…' : 'Add taste profile and background with AI'}${ICON.spark}</button>`}
     </div>${more && open ? moreHtml(w) : ''}</section>`;
 }
 
@@ -207,7 +209,7 @@ function grapeRingHtml(w) {
     let c = shades[(rank[lc(g.name)] !== undefined ? rank[lc(g.name)] : i) % shades.length];
     if (used.has(c)) c = shades.find(s => !used.has(s)) || c;
     used.add(c);
-    return { k: g.name, n: g.n, c, go: ['grape', g.name] };
+    return { k: g.name, n: g.n, c, info: g.name };
   });
   const center = rows.length === 1 ? ['100%', 'grape'] : [String(rows.length), 'grapes'];
   return `<div class="tp-block"><p class="tp-lead">Grapes${w.profile && w.profile.typical ? ' · typical blend' : ''}</p>${donut(rows, 100, { label: 'Grapes', pctOnly: true, center, wrap: true })}</div>`;
@@ -361,4 +363,72 @@ function profileFromDraft() {
   const empty = !p.body && !p.tannin && !p.sweet && !p.acid && !p.aromas.length && !p.foods.length &&
     !['style', 'styleDesc', 'sub', 'producerLine', 'about', 'classification', 'ageing', 'closure', 'vineyard', 'vintageNote'].some(k => str(p[k]).trim()) && !p.alcohol;
   return empty ? null : p;
+}
+
+/* ---------------------------------------------------------------- background on a region, grape, style or producer */
+
+const INFO = { kind: null, name: '', context: '', data: null, busy: false, error: '' };
+const INFO_ICON = { region: () => AB_ICON.vineyard, grape: () => AB_ICON.grape, style: () => AB_ICON.style, producer: () => AB_ICON.producer };
+const infoKey = (kind, name, context) => `${kind}|${lc(name)}${kind === 'producer' && context ? `|${lc(context)}` : ''}`;
+function infoCache() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
+function infoRemember(key, data) { try { const c = infoCache(); c[key] = data; localStorage.setItem('wc-info', JSON.stringify(c)); } catch (e) { /* kept for this session */ } }
+
+async function openInfo(kind, name, context) {
+  Object.assign(INFO, { kind, name, context: context || '', data: null, busy: false, error: '' });
+  const key = infoKey(kind, name, context);
+  const hit = infoCache()[key];
+  if (hit) { INFO.data = hit; renderInfo(); return; }
+  INFO.busy = true;
+  renderInfo();
+  try {
+    const d = await api('info', { kind, name, context: context || '' });
+    if (INFO.kind !== kind || INFO.name !== name) return;
+    INFO.data = d.info;
+    if (d.info) infoRemember(key, d.info); else INFO.error = `No background found on ${name}.`;
+  } catch (e) {
+    INFO.error = /Unknown action/i.test(e.message) ? 'The background needs the new Code.gs.' : aiErr(e.message);
+  }
+  INFO.busy = false;
+  renderInfo();
+}
+function closeInfo() { INFO.kind = null; renderInfo(); }
+
+/* your own wines with it, to open the cellar filtered */
+function infoMine() {
+  const k = INFO.kind, n = lc(INFO.name);
+  const match = k === 'region' ? (x => lc(x.region) === n || regionKey(x) === lc(str(INFO.name).split(',')[0]))
+    : k === 'grape' ? (x => grapeShares(Object.assign({}, x, { count: 1 })).some(g => lc(g.name) === n))
+    : k === 'producer' ? (x => lc(x.producer) === n)
+    : (x => x.profile && lc(x.profile.style) === n);
+  const all = S.wines.filter(match);
+  const inStock = all.filter(x => x.count > 0);
+  const go = k === 'grape' ? ['grape', INFO.name] : k === 'region' ? ['search', str(INFO.name).split(',')[0].trim()] : k === 'producer' ? ['search', INFO.name] : null;
+  return { all, inStock, go };
+}
+
+function renderInfo() {
+  let root = $('#info-root');
+  if (!root) { root = document.createElement('div'); root.id = 'info-root'; document.body.appendChild(root); }
+  if (!INFO.kind) { root.innerHTML = ''; return; }
+  const d = INFO.data;
+  const label = { region: 'Region', grape: 'Grape', style: 'Style', producer: 'Producer' }[INFO.kind];
+  const flag = INFO.kind === 'region' ? (() => { const c = countryOf({ region: INFO.name }); return c ? flagEmoji(c.code) : ''; })() : '';
+  const mine = infoMine();
+  const body = INFO.busy
+    ? `<div class="info-wait"><p class="somm-wait">Looking up ${esc(INFO.name)}<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Written once by AI, then kept for all your wines.</p></div>`
+    : INFO.error ? `<p class="small" style="margin:0;color:var(--red, #E06C6C)">${esc(INFO.error)}</p>`
+    : d ? `${d.summary ? `<p class="info-summary">${esc(d.summary)}</p>` : ''}
+        ${d.facts.length ? `<div class="ab-facts">${d.facts.map((f, i) => `<div class="ab-fact${d.facts.length % 2 && i === d.facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div></div>`).join('')}</div>` : ''}
+        ${d.sections.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${esc(x.t)}</p></div>`).join('')}
+        <p class="tiny muted" style="margin:0">Written by AI from its knowledge, kept for all your wines.</p>` : '';
+  const yours = mine.all.length && mine.go
+    ? `<button class="btn ghost block" data-act="info-mine">${ICON.glass}Your wines: ${mine.all.length}${mine.inStock.length !== mine.all.length ? `, ${mine.inStock.length} in stock` : ''}</button>` : '';
+  root.innerHTML = `<div class="sheet-backdrop" data-act="info-close"></div>
+  <div class="sheet info-sheet" role="dialog" aria-modal="true" aria-label="${esc(INFO.name)}">
+    <div class="between" style="align-items:flex-start;gap:12px">
+      <div class="info-head"><span class="ab-ic">${flag ? `<span class="ab-flag">${flag}</span>` : INFO_ICON[INFO.kind]()}</span><div><span class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em">${label}</span><h2>${esc(d && d.title ? d.title : INFO.name)}</h2></div></div>
+      <button class="icon-btn" data-act="info-close" aria-label="Close">${ICON.x}</button>
+    </div>
+    <div class="info-body">${body}${yours}</div>
+  </div>`;
 }

@@ -56,8 +56,8 @@ function donut(rows, total, opts = {}) {
   }).join('');
   const center = opts.center || [total, 'bottles'];
   const legend = rows.map(x => {
-    const tag = x.go ? 'button' : 'div';
-    const attrs = x.go ? ` data-act="ins-go" data-k="${esc(x.go[0])}" data-v="${esc(x.go[1])}"` : '';
+    const tag = x.go || x.info ? 'button' : 'div';
+    const attrs = x.info ? ` data-act="info-open" data-k="grape" data-v="${esc(x.info)}"` : x.go ? ` data-act="ins-go" data-k="${esc(x.go[0])}" data-v="${esc(x.go[1])}"` : '';
     return `<${tag} class="ins-leg"${attrs}><span class="sw" style="background:${x.c}"></span><span class="ellipsis">${esc(x.label || x.k)}</span><b>${opts.pctOnly ? '' : Math.round(x.n)}</b><small>${pct(x.n, total)}%</small></${tag}>`;
   }).join('');
   return `<div class="ins-donut${opts.wrap ? ' wrap' : ''}"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="${esc(opts.label || 'Share')}">${arcs}<text x="60" y="58" text-anchor="middle" class="d-n">${esc(center[0])}</text><text x="60" y="74" text-anchor="middle" class="d-l">${esc(center[1])}</text></svg>

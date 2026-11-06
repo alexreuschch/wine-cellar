@@ -11,8 +11,8 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 18;
-var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
+var API_VERSION = 19;
+var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
@@ -28,6 +28,7 @@ var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name'];
 var OFFER_COLS = ['key', 'offer', 'date'];
+var INFO_COLS = ['key', 'kind', 'name', 'data', 'date'];
 var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
 var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt'];
 // all countries with their currency [name, currency], and the EU members
@@ -40,7 +41,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '12';
+var SCHEMA_VERSION = '13';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -65,6 +66,7 @@ var ACTIONS = {
   consultant: actionConsultant_,
   winelist: actionWineList_,
   profiles: actionProfiles_,
+  info: actionInfo_,
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
@@ -142,6 +144,8 @@ function ensureSchema_() {
     if (!oc.isSheetHidden()) oc.hideSheet();
     var hc = ensureSheet_(ss, SHEETS.history, HISTORY_COLS);
     if (!hc.isSheetHidden()) hc.hideSheet();
+    var ic = ensureSheet_(ss, SHEETS.info, INFO_COLS);
+    if (!ic.isSheetHidden()) ic.hideSheet();
     var prev = Number(p.getProperty('SCHEMA_VERSION') || 0);
     if (prev < 5) migrate5_();
     p.setProperty('SCHEMA_VERSION', SCHEMA_VERSION);
@@ -264,7 +268,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Taste profiles' };
+var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Taste profiles', info: 'Background' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -1196,6 +1200,45 @@ function rememberOffers_(pairs) {
       if (Date.now() - new Date(String(t.rows[j][dc])).getTime() > 30 * 86400000) t.sh.deleteRow(j + 2);
     }
   });
+}
+
+// ---------------------------------------------------------------- background on a region, grape, style or producer
+
+var INFO_ASK = {
+  region: 'the wine region "%s". Sections: "The region" (location, size, history), "Climate and soils", "Wines and grapes" (main grapes and styles), "Where the best wines come from" (sub-regions, appellations, classification). Facts: Country, Climate, Vineyard area, Main grapes, Best known for.',
+  grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Where it grows" (home and other important regions), "Styles" (how it is made and blended), "With food". Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
+  style: 'the wine style "%s". Sections: "What it is", "Typical character", "How to serve it" (temperature, glass, decanting), "How long to keep it". Facts: Serving temperature, Glass, Decanting, Ageing potential.',
+  producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area, Farming.'
+};
+
+/** Background on a region, grape, style or producer, written once by the AI and kept in the hidden tab Info for everyone. */
+function actionInfo_(req) {
+  var kind = String(req.kind || ''), name = String(req.name || '').trim().slice(0, 120);
+  if (!INFO_ASK[kind] || !name) throw new Error('Nothing to look up');
+  var context = String(req.context || '').trim().slice(0, 200);
+  var key = kind + '|' + name.toLowerCase() + (kind === 'producer' && context ? '|' + context.toLowerCase() : '');
+  var hit = readAll_(SHEETS.info).filter(function (r) { return String(r.key) === key; })[0];
+  if (hit) { try { return { info: JSON.parse(hit.data), cached: true }; } catch (e) { /* written again below */ } }
+  var prompt = 'You are an experienced sommelier and wine writer. Write a short, factual guide in English about ' + INFO_ASK[kind].replace('%s', name) +
+    (context ? ' Context: ' + context + '.' : '') +
+    ' Each section is two to four sentences. Facts are short values of a few words. Only write what you know with reasonable confidence; leave out a fact you do not know. Do not use dashes as punctuation.' +
+    ' Return ONLY a JSON object, no other text: {"title": "name as it is usually written", "summary": "one or two sentences", "facts": [{"label": "", "value": ""}], "sections": [{"h": "heading", "t": "text"}]}.' +
+    ' If you do not know it at all, return {"title": null}.';
+  var d = parseJson_(textOf_(callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] })), 'No background found');
+  if (!d.title) return { info: null };
+  var txt = function (v, n) { return String(v || '').trim().slice(0, n); };
+  var info = {
+    kind: kind, title: txt(d.title, 120), summary: txt(d.summary, 500),
+    facts: (Array.isArray(d.facts) ? d.facts : []).filter(function (f) { return f && f.label && f.value; }).slice(0, 6).map(function (f) { return { label: txt(f.label, 40), value: txt(f.value, 120) }; }),
+    sections: (Array.isArray(d.sections) ? d.sections : []).filter(function (x) { return x && x.h && x.t; }).slice(0, 5).map(function (x) { return { h: txt(x.h, 60), t: txt(x.t, 900) }; })
+  };
+  withLock_(function () {
+    var t = table_(SHEETS.info);
+    var kc = t.headers.indexOf('key'), idx = -1;
+    for (var i = 0; i < t.rows.length; i++) { if (String(t.rows[i][kc]) === key) { idx = i; break; } }
+    writeRow_(t, idx, { key: key, kind: kind, name: name, data: JSON.stringify(info), date: new Date().toISOString() });
+  });
+  return { info: info, cached: false };
 }
 
 // ---------------------------------------------------------------- AI sommelier
