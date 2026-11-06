@@ -695,6 +695,9 @@ div.ab-row { grid-template-columns: 40px minmax(0, 1fr); }
 .gi-age-ax em { position: absolute; transform: translateX(-50%); font-style: normal; font-size: 11px; color: var(--muted); }
 .gi-age-ax em:first-child { transform: none; }
 .gi-age-ax em:last-child { transform: translateX(-100%); }
+.gi-aka { display: grid; gap: 10px; padding: 12px 14px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.gi-aka > span { font-size: 12px; color: var(--muted); }
+.gi-aka .gi-chip { background: color-mix(in srgb, var(--gold) 12%, transparent); border-color: color-mix(in srgb, var(--gold) 35%, transparent); font-weight: 600; }
 .gi-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .gi-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 16px; font-size: 14px; background: var(--surface); }
 .gi-sec { display: grid; gap: 8px; }

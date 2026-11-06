@@ -436,7 +436,7 @@ function grapeFactsHtml(d) {
     const flag = /^origin$/i.test(f.label) && d.originCountry ? `<span class="gi-fflag">${flagEmoji(d.originCountry)}</span> ` : '';
     return `<div class="ab-fact${facts.length % 2 && i === facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${flag}${esc(f.value)}</b></div></div>`;
   };
-  const aka = (d.aka || []).length ? `<div class="gi-sec"><h3>Also known as</h3><div class="gi-chips">${d.aka.map(a => `<span class="gi-chip">${esc(a)}</span>`).join('')}</div></div>` : '';
+  const aka = (d.aka || []).length ? `<div class="gi-aka"><span>Also known as</span><div class="gi-chips">${d.aka.map(a => `<span class="gi-chip">${esc(a)}</span>`).join('')}</div></div>` : '';
   return `${aka}${facts.length ? `<div class="ab-facts">${facts.map(tile).join('')}</div>` : ''}${age ? grapeAgeHtml(d) : ''}`;
 }
 function grapeAgeHtml(d) {
@@ -477,8 +477,9 @@ function renderInfo() {
     ? `<div class="info-wait"><p class="somm-wait">Looking up ${esc(INFO.name)}<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Written once by AI, then kept for all your wines.</p></div>`
     : INFO.error ? `<p class="small" style="margin:0;color:var(--red, #E06C6C)">${esc(INFO.error)}</p>`
     : d ? `${d.summary ? `<p class="info-summary">${esc(d.summary)}</p>` : ''}
-        ${INFO.kind === 'grape' ? `${grapeFactsHtml(d)}${grapeChartsHtml(d)}` : d.facts.length ? `<div class="ab-facts">${d.facts.map((f, i) => `<div class="ab-fact${d.facts.length % 2 && i === d.facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div></div>`).join('')}</div>` : ''}
-        ${d.sections.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${esc(x.t)}</p></div>`).join('')}
+        ${INFO.kind === 'grape' ? grapeFactsHtml(d) : d.facts.length ? `<div class="ab-facts">${d.facts.map((f, i) => `<div class="ab-fact${d.facts.length % 2 && i === d.facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div></div>`).join('')}</div>` : ''}
+        ${(INFO.kind === 'grape' ? d.sections.filter(x => !/where it grows/i.test(x.h)) : d.sections).map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${esc(x.t)}</p></div>`).join('')}
+        ${INFO.kind === 'grape' ? grapeChartsHtml(d) : ''}
         <p class="tiny muted" style="margin:0">Written by AI from its knowledge, kept for all your wines.</p>` : '';
   const yours = INFO.kind === 'grape' ? (d && !INFO.busy ? grapeMineHtml(mine) : '') : mine.all.length && mine.go
     ? `<button class="btn ghost block" data-act="info-mine">${ICON.glass}Your wines: ${mine.all.length}${mine.inStock.length !== mine.all.length ? `, ${mine.inStock.length} in stock` : ''}</button>` : '';

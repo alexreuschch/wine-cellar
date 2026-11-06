@@ -1334,7 +1334,7 @@ function rememberOffers_(pairs) {
 
 var INFO_ASK = {
   region: 'the wine region "%s". Sections: "The region" (location, size, history), "Climate and soils", "Wines and grapes" (main grapes and styles), "Where the best wines come from" (sub-regions, appellations, classification). Facts: Country, Climate, Vineyard area, Main grapes, Best known for.',
-  grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Where it grows" (home and other important regions), "Styles" (how it is made and blended). Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
+  grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Styles" (how it is made and blended, where it gives its best wines). Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
   style: 'the wine style "%s". Sections: "What it is", "Typical character", "How to serve it" (temperature, glass, decanting), "How long to keep it". Facts: Serving temperature, Glass, Decanting, Ageing potential.',
   producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area, Farming.'
 };
