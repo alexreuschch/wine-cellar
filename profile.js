@@ -167,7 +167,7 @@ function aboutHtml(w) {
   return `<section style="gap:12px"><h2>About this wine</h2>
     <div class="ab-list">${rows.join('')}
       ${more ? `<button class="ab-more" data-act="about-more" aria-expanded="${open}">${open ? 'Less about this wine' : 'More about this wine'}${ICON.chevron}</button>`
-        : hasProfile(w) ? '' : `<button class="ab-more" data-act="profile-one" data-id="${esc(w.id)}"${PROF.busy ? ' disabled' : ''}>${PROF.one === w.id ? 'Adding taste profile and background…' : 'Add taste profile and background with AI'}${ICON.spark}</button>`}
+        : ''}
     </div>${more && open ? moreHtml(w) : ''}</section>`;
 }
 
@@ -249,7 +249,7 @@ function profileHtml(w, editHref) {
       ${w.taste ? `<div class="kv"><span>Taste</span><p style="line-height:1.5">${esc(w.taste)}</p></div>` : ''}
       ${w.tasteTags.length ? `<div class="kv"><span>Style</span><p class="style-line">${w.tasteTags.map(t => esc(cap(t))).join(' · ')}</p></div>` : ''}
       ${foodTilesHtml(w)}
-      ${missing ? `<div class="tp-missing"><p class="small muted" style="margin:0">No taste profile yet: taste axes, main aromas and the background of the wine.</p><button class="btn ghost" data-act="profile-one" data-id="${esc(w.id)}"${PROF.busy ? ' disabled' : ''}>${ICON.spark}${PROF.one === w.id ? 'Adding…' : 'Add taste profile with AI'}</button></div>` : ''}
+      ${missing ? `<p class="small muted" style="margin:0">No taste profile yet with taste axes, main aromas and background. <a href="${editHref}">Edit</a> to add it with AI.</p>` : ''}
       ${!w.grapes && !w.taste && !w.pairings.length && !p ? `<p class="muted small" style="margin:0">No profile yet. <a href="${editHref}">Edit</a> to add grapes, taste and food pairings.</p>` : ''}
     </section>`;
 }
@@ -257,7 +257,7 @@ function profileHtml(w, editHref) {
 /* ---------------------------------------------------------------- filling profiles with AI */
 
 const PROF = { busy: false, one: null, done: 0, total: 0, failed: 0 };
-const PROF_BATCH = 5;
+const PROF_BATCH = 3;
 
 function applyProfiles(rows) {
   (rows || []).forEach(r => {
@@ -267,24 +267,11 @@ function applyProfiles(rows) {
   persist();
 }
 
-async function profileOne(id) {
-  if (PROF.busy) return;
-  PROF.busy = true; PROF.one = id;
-  refreshView();
-  try {
-    const d = await api('profiles', { ids: [id] });
-    applyProfiles(d.wines);
-    if (!d.wines || !d.wines.length) toast('No taste profile found for this wine. Try again later.');
-  } catch (e) { toast(/Unknown action/i.test(e.message) ? 'Taste profiles need the new Code.gs.' : aiErr(e.message)); }
-  PROF.busy = false; PROF.one = null;
-  refreshView();
-}
-
 async function profileAll() {
   if (PROF.busy) return;
   const todo = S.wines.filter(w => !hasProfile(w)).sort((a, b) => (b.count > 0) - (a.count > 0)).map(w => w.id);
   if (!todo.length) { toast('All wines have a taste profile.'); return; }
-  Object.assign(PROF, { busy: true, done: 0, total: todo.length, failed: 0 });
+  Object.assign(PROF, { busy: true, done: 0, total: todo.length, failed: 0, lastError: '' });
   refreshView();
   try {
     for (let i = 0; i < todo.length; i += PROF_BATCH) {
@@ -292,10 +279,12 @@ async function profileAll() {
       applyProfiles(d.wines);
       PROF.done = Math.min(todo.length, i + PROF_BATCH);
       PROF.failed += (d.failed || []).length;
+      if ((d.failed || []).length) PROF.lastError = d.failed[0].error || '';
       const el = $('#prof-progress');
       if (el) el.textContent = `${PROF.done} of ${PROF.total} wines done…`;
     }
-    toast(PROF.failed ? `Done. ${PROF.failed} ${PROF.failed === 1 ? 'wine' : 'wines'} could not be profiled, try again later.` : 'All taste profiles added.');
+    await fillInfos(S.wines, (n, t) => { const el = $('#prof-progress'); if (el) el.textContent = `Background on regions, grapes, styles and producers: ${n} of ${t}…`; });
+    toast(PROF.failed ? `Done. ${PROF.failed} ${PROF.failed === 1 ? 'wine' : 'wines'} without a profile: ${aiErr(PROF.lastError || 'no answer')} Tap the button again for the rest.` : 'All taste profiles and backgrounds added.');
   } catch (e) { toast(/Unknown action/i.test(e.message) ? 'Taste profiles need the new Code.gs.' : aiErr(e.message)); }
   PROF.busy = false;
   refreshView();
@@ -312,13 +301,42 @@ function profilesBoxHtml() {
 
 /* ---------------------------------------------------------------- edit */
 
+/* Edit: the AI fills the taste profile from everything entered in the form; saved with Save wine */
+async function editProfileAI() {
+  if (!D || D.profileBusy) return;
+  const f = D.fields;
+  if (!str(f.name).trim() && !str(f.producer).trim()) { toast('Enter at least a producer or a wine name first.'); return; }
+  const draft = D;
+  draft.profileBusy = true;
+  renderProfileEditor();
+  try {
+    const d = await api('profiles', { wine: { producer: f.producer, name: f.name, vintage: f.vintage, type: f.type, region: f.region, grapes: f.grapes, taste: f.taste, tasteTags: splitList(f.tasteTags), pairings: splitList(f.pairings) } });
+    draft.profile = parseProfile(d.profile) || draft.profile;
+    draft.touched.add('profile');
+    if (d.grapes && !draft.touched.has('grapes') && !/\d\s*%/.test(str(f.grapes))) {
+      f.grapes = d.grapes;
+      const g = $('[name=grapes]');
+      if (g && D === draft) g.value = d.grapes;
+    }
+    if (D === draft) { const ab = $('#ab-editor'); if (ab) { ab.innerHTML = aboutEditorHtml(); ab.querySelectorAll('.autosize').forEach(autosize); } }
+    toast('Taste profile filled in. Check it and tap Save wine.');
+    fillInfos([{ region: f.region, grapes: d.grapes || f.grapes, producer: f.producer, profile: draft.profile, count: 1 }]);
+  } catch (e) {
+    toast(/Unknown action/i.test(e.message) ? 'Taste profiles need the new Code.gs.' : 'No taste profile: ' + aiErr(e.message));
+  }
+  draft.profileBusy = false;
+  if (D === draft) renderProfileEditor();
+}
+
 function profileEditorHtml() {
   const p = D.profile;
+  const ai = `<button class="btn ghost block" data-act="tp-ai"${D.profileBusy ? ' disabled' : ''}>${ICON.spark}${D.profileBusy ? 'The AI is filling in the profile…' : hasProfile({ profile: p }) ? 'Fill in again with AI' : 'Add taste profile with AI'}</button><p class="muted tiny" style="margin:-4px 0 0">Uses everything entered above, about 2 cents.</p>`;
   const axis = ([k, l, r]) => `<div class="tpe-row"><span>${l}</span><div class="tpe-dots">${[1, 2, 3, 4, 5].map(v => `<button class="${p[k] === v ? 'on' : ''}" data-act="tp-set" data-k="${k}" data-v="${v}" aria-label="${l} to ${r}: ${v} of 5"></button>`).join('')}</div><span>${r}</span></div>`;
   const aromaChips = Object.keys(AROMAS).map(g => { const i = p.aromas.findIndex(a => a.g === g); return `<button class="tpe-chip${i >= 0 ? ' on' : ''}" data-act="tp-aroma" data-v="${g}" style="--ac:${AROMAS[g][1]}">${AROMAS[g][2]}${esc(AROMAS[g][0])}</button>`; }).join('');
   const notes = p.aromas.map((a, i) => `<label class="field">${esc(AROMAS[a.g][0])}<input data-input="tp-note" data-i="${i}" value="${esc(a.n)}" placeholder="For example cherry, raspberry"></label>`).join('');
   const foods = Object.keys(FOODS).map(f => `<button class="tp-food${p.foods.includes(f) ? ' on' : ''}" data-act="tp-food" data-v="${f}">${FOODS[f][1]}<span>${esc(FOODS[f][0])}</span></button>`).join('');
   return `<span class="box-title">Taste profile</span>
+    ${ai}
     <p class="muted tiny" style="margin:-4px 0 0">Tap a dot to set it, tap it again to clear.</p>
     <div class="tpe-axes">${AXES.map(axis).join('')}</div>
     <span class="box-title" style="margin-top:6px">Main aromas</span>
@@ -369,7 +387,8 @@ function profileFromDraft() {
 
 const INFO = { kind: null, name: '', context: '', data: null, busy: false, error: '' };
 const INFO_ICON = { region: () => AB_ICON.vineyard, grape: () => AB_ICON.grape, style: () => AB_ICON.style, producer: () => AB_ICON.producer };
-const infoKey = (kind, name, context) => `${kind}|${lc(name)}${kind === 'producer' && context ? `|${lc(context)}` : ''}`;
+const infoFirst = v => lc(str(v).split(',')[0].trim()).replace(/\s+/g, ' ');
+const infoKey = (kind, name, context) => `${kind}|${kind === 'region' ? infoFirst(name) : lc(str(name).trim()).replace(/\s+/g, ' ')}${kind === 'producer' && context ? `|${infoFirst(context)}` : ''}`;
 function infoCache() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
 function infoRemember(key, data) { try { const c = infoCache(); c[key] = data; localStorage.setItem('wc-info', JSON.stringify(c)); } catch (e) { /* kept for this session */ } }
 
@@ -431,4 +450,27 @@ function renderInfo() {
     </div>
     <div class="info-body">${body}${yours}</div>
   </div>`;
+}
+
+/* ---------------------------------------------------------------- background written ahead, so the rows open at once */
+
+function infoItems(w) {
+  const out = [];
+  if (w.region) out.push({ kind: 'region', name: w.region });
+  grapeShares(Object.assign({}, w, { count: 1 })).forEach(g => out.push({ kind: 'grape', name: g.name }));
+  if (w.profile && w.profile.style) out.push({ kind: 'style', name: w.profile.style, context: w.region });
+  if (w.producer) out.push({ kind: 'producer', name: w.producer, context: w.region });
+  return out;
+}
+async function fillInfos(wines, progress) {
+  if (S.version && S.version < 20) return;
+  const have = infoCache(), seen = new Set(), todo = [];
+  wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (seen.has(k) || have[k]) return; seen.add(k); todo.push(x); }));
+  for (let i = 0; i < todo.length; i += 8) {
+    if (progress) progress(i, todo.length);
+    try {
+      const d = await api('infoFill', { items: todo.slice(i, i + 8) });
+      Object.keys(d.infos || {}).forEach(k => infoRemember(k, d.infos[k]));
+    } catch (e) { if (/Unknown action/i.test(e.message)) return; }
+  }
 }

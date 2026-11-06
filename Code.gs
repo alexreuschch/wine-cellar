@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 19;
+var API_VERSION = 20;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -67,6 +67,7 @@ var ACTIONS = {
   winelist: actionWineList_,
   profiles: actionProfiles_,
   info: actionInfo_,
+  infoFill: actionInfoFill_,
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
@@ -268,7 +269,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Taste profiles', info: 'Background' };
+var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Taste profiles', info: 'Background', infoFill: 'Background' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -920,7 +921,8 @@ var PROFILE_SPEC = [
   '  "vineyard": vineyards, exposure and soil in one line, or "",',
   '  "vintageNote": one or two sentences on this vintage in this region, or "" for a non-vintage wine,',
   '  "typical": true if the grape shares in "grapes" are typical shares from your knowledge and not stated for this wine.',
-  '  Only write facts you know with reasonable confidence, otherwise use "" or null. Do not use dashes as punctuation.'
+  '  Always fill "body", "sweet", "acid", "tannin" (except for wines without tannin), "aromas", "foods" and "style": if you do not know this exact wine, derive them from the grapes, region, vintage, taste notes and style given and from what is typical for such a wine. Never leave the profile empty.',
+  '  The facts "about", "classification", "alcohol", "ageing", "closure", "vineyard" and "vintageNote" only when you know them with reasonable confidence, otherwise "" or null. Do not use dashes as punctuation.'
 ].join('\n');
 
 /** Cleans the profile from the AI: numbers in range, known keys only. */
@@ -975,29 +977,62 @@ function actionAnalyze_(req) {
   return d;
 }
 
-/** Taste profile and background for wines that have none yet, a few at a time, all at the same time. */
+/** The request for the taste profile of one wine, with everything already known about it. */
+function profileRequest_(w) {
+  var list = function (v) { if (Array.isArray(v)) return v.join(', '); try { var a = JSON.parse(v); return Array.isArray(a) ? a.join(', ') : String(v || ''); } catch (e) { return String(v || ''); } };
+  var known = [['producer', w.producer], ['wine', w.name], ['vintage', w.vintage], ['type', w.type], ['region', w.region], ['grapes', w.grapes],
+    ['taste notes', w.taste], ['style tags', list(w.tasteTags)], ['dishes it pairs with', list(w.pairings)]]
+    .filter(function (k) { return String(k[1] || '').trim(); }).map(function (k) { return k[0] + ': ' + k[1]; }).join('\n');
+  var prompt = 'You are an experienced sommelier. Here is a wine from a private cellar with what the owner already knows about it:\n' + known + '\n\n' +
+    'Return ONLY a JSON object, no other text, with these keys:\n' +
+    '"grapes": grape varieties with shares, for example "Merlot 70%, Cabernet Franc 30%"; keep the shares given above, otherwise use typical shares and set "typical" in the profile to true,\n' +
+    PROFILE_SPEC;
+  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] };
+}
+
+/** Reads the answer; accepts the profile nested or at the top level. Null when it holds no profile. */
+function profileFrom_(res) {
+  var d;
+  try { d = parseJson_(textOf_(res), 'No profile'); } catch (e) { return null; }
+  var raw = d.profile && typeof d.profile === 'object' ? d.profile : d;
+  var p = normProfile_(raw);
+  if (!p || !(p.body || p.aromas.length || p.foods.length)) return null;
+  return { grapes: String(d.grapes || raw.grapes || ''), profile: p };
+}
+
+/** Asks for several profiles at the same time and tries the failed ones a second time. */
+function profilesFor_(wines) {
+  var res = wines.map(function () { return null; }), err = wines.map(function () { return ''; });
+  for (var round = 0; round < 2; round++) {
+    var todo = wines.map(function (w, i) { return i; }).filter(function (i) { return !res[i]; });
+    if (!todo.length || (round > 0 && elapsed_() > TIME_SOFT)) break;
+    var replies = callClaudeMany_(todo.map(function (i) { return profileRequest_(wines[i]); }));
+    todo.forEach(function (i, j) {
+      res[i] = profileFrom_(replies[j]);
+      err[i] = res[i] ? '' : (replies.errors[j] || 'The AI returned no usable profile');
+    });
+  }
+  return { res: res, err: err };
+}
+
+/** Taste profile for wines that have none yet, written to the sheet. With "wine" instead of "ids": only returns the profile for the form in Edit. */
 function actionProfiles_(req) {
+  if (req.wine) {
+    var one = profilesFor_([req.wine]);
+    if (!one.res[0]) throw new Error(one.err[0]);
+    return { grapes: one.res[0].grapes, profile: one.res[0].profile };
+  }
   var ids = (Array.isArray(req.ids) ? req.ids : []).map(String).slice(0, 6);
   if (!ids.length) return { wines: [] };
   var t = table_(SHEETS.wines);
   var rows = ids.map(function (id) { var i = findIndex_(t, id); return i < 0 ? null : toObj_(t.headers, t.rows[i]); }).filter(Boolean);
-  var ask = function (w) {
-    var known = ['producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste'].filter(function (k) { return String(w[k] || '').trim(); })
-      .map(function (k) { return k + ': ' + w[k]; }).join('\n');
-    var prompt = 'You are an experienced sommelier. For the wine below, return ONLY a JSON object, no other text, with these keys:\n' +
-      '"grapes": grape varieties with shares, for example "Merlot 70%, Cabernet Franc 30%"; keep the shares given below, otherwise use typical shares and set "typical" to true,\n' +
-      PROFILE_SPEC + '\n\nThe wine:\n' + known;
-    return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] };
-  };
-  var replies = callClaudeMany_(rows.map(ask));
-  var results = rows.map(function (w, i) {
-    try { var d = parseJson_(textOf_(replies[i]), 'No profile'); return { id: w.id, grapes: d.grapes, profile: normProfile_(d.profile) }; } catch (e) { return { id: w.id, profile: null }; }
-  });
+  var got = profilesFor_(rows);
   return withLock_(function () {
-    var t2 = table_(SHEETS.wines), out = [];
-    results.forEach(function (r) {
-      if (!r.profile) return;
-      var idx = findIndex_(t2, r.id);
+    var t2 = table_(SHEETS.wines), out = [], failed = [];
+    rows.forEach(function (w, i) {
+      var r = got.res[i];
+      if (!r) { failed.push({ id: w.id, error: got.err[i] }); return; }
+      var idx = findIndex_(t2, w.id);
       if (idx < 0) return;
       var obj = toObj_(t2.headers, t2.rows[idx]);
       var hasShares = /\d\s*%/.test(String(obj.grapes || ''));
@@ -1008,7 +1043,7 @@ function actionProfiles_(req) {
       writeRow_(t2, idx, obj);
       out.push(obj);
     });
-    return { wines: out, failed: results.filter(function (r) { return !r.profile; }).map(function (r) { return r.id; }) };
+    return { wines: out, failed: failed };
   });
 }
 
@@ -1211,34 +1246,82 @@ var INFO_ASK = {
   producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area, Farming.'
 };
 
-/** Background on a region, grape, style or producer, written once by the AI and kept in the hidden tab Info for everyone. */
-function actionInfo_(req) {
-  var kind = String(req.kind || ''), name = String(req.name || '').trim().slice(0, 120);
-  if (!INFO_ASK[kind] || !name) throw new Error('Nothing to look up');
-  var context = String(req.context || '').trim().slice(0, 200);
-  var key = kind + '|' + name.toLowerCase() + (kind === 'producer' && context ? '|' + context.toLowerCase() : '');
-  var hit = readAll_(SHEETS.info).filter(function (r) { return String(r.key) === key; })[0];
-  if (hit) { try { return { info: JSON.parse(hit.data), cached: true }; } catch (e) { /* written again below */ } }
+/** One key per region, grape, style or producer: "Ribera del Duero, Spain" and "Ribera del Duero" are the same region. */
+function infoKey_(kind, name, context) {
+  var first = function (v) { return String(v || '').split(',')[0].trim().toLowerCase().replace(/\s+/g, ' '); };
+  var n = kind === 'region' ? first(name) : String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return kind + '|' + n + (kind === 'producer' && context ? '|' + first(context) : '');
+}
+function infoRequest_(kind, name, context) {
   var prompt = 'You are an experienced sommelier and wine writer. Write a short, factual guide in English about ' + INFO_ASK[kind].replace('%s', name) +
     (context ? ' Context: ' + context + '.' : '') +
     ' Each section is two to four sentences. Facts are short values of a few words. Only write what you know with reasonable confidence; leave out a fact you do not know. Do not use dashes as punctuation.' +
     ' Return ONLY a JSON object, no other text: {"title": "name as it is usually written", "summary": "one or two sentences", "facts": [{"label": "", "value": ""}], "sections": [{"h": "heading", "t": "text"}]}.' +
     ' If you do not know it at all, return {"title": null}.';
-  var d = parseJson_(textOf_(callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] })), 'No background found');
-  if (!d.title) return { info: null };
+  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] };
+}
+function infoFrom_(kind, res) {
+  var d;
+  try { d = parseJson_(textOf_(res), 'No background found'); } catch (e) { return null; }
+  if (!d.title) return null;
   var txt = function (v, n) { return String(v || '').trim().slice(0, n); };
   var info = {
     kind: kind, title: txt(d.title, 120), summary: txt(d.summary, 500),
     facts: (Array.isArray(d.facts) ? d.facts : []).filter(function (f) { return f && f.label && f.value; }).slice(0, 6).map(function (f) { return { label: txt(f.label, 40), value: txt(f.value, 120) }; }),
     sections: (Array.isArray(d.sections) ? d.sections : []).filter(function (x) { return x && x.h && x.t; }).slice(0, 5).map(function (x) { return { h: txt(x.h, 60), t: txt(x.t, 900) }; })
   };
+  return info;
+}
+function storeInfos_(entries) {
+  if (!entries.length) return;
   withLock_(function () {
     var t = table_(SHEETS.info);
-    var kc = t.headers.indexOf('key'), idx = -1;
-    for (var i = 0; i < t.rows.length; i++) { if (String(t.rows[i][kc]) === key) { idx = i; break; } }
-    writeRow_(t, idx, { key: key, kind: kind, name: name, data: JSON.stringify(info), date: new Date().toISOString() });
+    var kc = t.headers.indexOf('key');
+    entries.forEach(function (e) {
+      var idx = -1;
+      for (var i = 0; i < t.rows.length; i++) { if (String(t.rows[i][kc]) === e.key) { idx = i; break; } }
+      writeRow_(t, idx, { key: e.key, kind: e.kind, name: e.name, data: JSON.stringify(e.info), date: new Date().toISOString() });
+    });
   });
+}
+function knownInfos_() {
+  var out = {};
+  readAll_(SHEETS.info).forEach(function (r) { try { out[String(r.key)] = JSON.parse(r.data); } catch (e) { /* written again when asked */ } });
+  return out;
+}
+
+/** Background on a region, grape, style or producer, written once by the AI and kept in the hidden tab Info for everyone. */
+function actionInfo_(req) {
+  var kind = String(req.kind || ''), name = String(req.name || '').trim().slice(0, 120);
+  if (!INFO_ASK[kind] || !name) throw new Error('Nothing to look up');
+  var context = String(req.context || '').trim().slice(0, 200);
+  var key = infoKey_(kind, name, context);
+  var hit = knownInfos_()[key];
+  if (hit) return { info: hit, cached: true };
+  var info = infoFrom_(kind, callClaude_(infoRequest_(kind, name, context)));
+  if (!info) return { info: null };
+  storeInfos_([{ key: key, kind: kind, name: name, info: info }]);
   return { info: info, cached: false };
+}
+
+/** Writes the background for several regions, grapes, styles and producers at the same time; known ones are only returned. */
+function actionInfoFill_(req) {
+  var items = (Array.isArray(req.items) ? req.items : []).filter(function (x) { return x && INFO_ASK[x.kind] && String(x.name || '').trim(); }).slice(0, 10);
+  var known = knownInfos_(), out = {}, seen = {}, todo = [];
+  items.forEach(function (x) {
+    var key = infoKey_(x.kind, x.name, x.context);
+    if (seen[key]) return;
+    seen[key] = true;
+    if (known[key]) out[key] = known[key];
+    else todo.push({ key: key, kind: x.kind, name: String(x.name).trim().slice(0, 120), context: String(x.context || '').trim().slice(0, 200) });
+  });
+  if (todo.length) {
+    var replies = callClaudeMany_(todo.map(function (x) { return infoRequest_(x.kind, x.name, x.context); }));
+    var made = [];
+    todo.forEach(function (x, i) { var info = infoFrom_(x.kind, replies[i]); if (info) { x.info = info; made.push(x); out[x.key] = info; } });
+    storeInfos_(made);
+  }
+  return { infos: out, written: todo.length };
 }
 
 // ---------------------------------------------------------------- AI sommelier
@@ -1623,32 +1706,60 @@ function claudeHeaders_() {
 }
 
 /** Several requests at the same time. Returns one result per body, or null where a request failed. */
+// busy or rate limited answers are tried again after a short wait
+var RETRY_CODES = [429, 500, 502, 503, 504, 529];
+function retryWait_(res, attempt) {
+  var h = {};
+  try { h = res.getHeaders() || {}; } catch (e) { h = {}; }
+  var after = Number(h['retry-after'] || h['Retry-After'] || 0);
+  return Math.min(15000, after > 0 ? after * 1000 : 3000 * (attempt + 1));
+}
+function apiError_(code, txt) {
+  var msg = txt;
+  try { msg = JSON.parse(txt).error.message; } catch (e) { /* keep raw */ }
+  if (/workspace/i.test(msg)) msg += ' Create a new key with Workspace set to Default (guide, step 3).';
+  else if (code === 401) msg += ' The key is wrong, expired or deleted. Create a new one in the Claude Console.';
+  else if (/credit|balance|billing/i.test(msg)) msg += ' Add credit in the Claude Console under Billing.';
+  else if (code === 429) msg = 'Too many AI requests at the same time. Wait a minute and try again.';
+  else if (code === 529 || code >= 500) msg = 'The AI service is busy right now. Try again in a few minutes.';
+  return 'Claude API ' + code + ': ' + msg;
+}
+
 function callClaudeMany_(bodies) {
   var headers = claudeHeaders_();
-  var state = bodies.map(function (b) { return { body: b, messages: b.messages.slice(), out: null, done: false }; });
-  for (var turn = 0; turn < 3; turn++) {
+  var state = bodies.map(function (b) { return { body: b, messages: b.messages.slice(), out: null, done: false, err: '', tries: 0 }; });
+  for (var turn = 0; turn < 6; turn++) {
     var open = state.filter(function (x) { return !x.done; });
     if (!open.length || (turn > 0 && elapsed_() > TIME_HARD)) break;
     var replies = UrlFetchApp.fetchAll(open.map(function (x) {
       return { url: 'https://api.anthropic.com/v1/messages', method: 'post', contentType: 'application/json', headers: headers,
         payload: JSON.stringify(Object.assign({}, x.body, { messages: x.messages })), muteHttpExceptions: true };
     }));
+    var wait = 0;
     open.forEach(function (x, i) {
-      var r = replies[i];
-      if (r.getResponseCode() !== 200) { x.done = true; x.out = null; return; }
+      var r = replies[i], code = r.getResponseCode();
+      if (code !== 200) {
+        x.err = apiError_(code, r.getContentText());
+        if (RETRY_CODES.indexOf(code) >= 0 && x.tries < 2) { x.tries++; wait = Math.max(wait, retryWait_(r, x.tries)); return; }
+        x.done = true; x.out = null; return;
+      }
+      x.err = '';
       x.out = JSON.parse(r.getContentText());
       noteUsage_(x.body.model, x.out.usage);
       if (x.out.stop_reason === 'pause_turn') x.messages.push({ role: 'assistant', content: x.out.content });
       else x.done = true;
     });
+    if (wait && elapsed_() + wait < TIME_HARD) Utilities.sleep(wait);
   }
-  return state.map(function (x) { return x.done ? x.out : null; });
+  var out = state.map(function (x) { return x.done ? x.out : null; });
+  out.errors = state.map(function (x) { return x.out && x.done ? '' : (x.err || 'No answer from the AI in time'); });
+  return out;
 }
 
 function callClaude_(body) {
   var headers = claudeHeaders_();
   var messages = body.messages.slice();
-  var out = null;
+  var out = null, tries = 0;
   for (var turn = 0; turn < 3; turn++) {
     var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
       method: 'post',
@@ -1660,12 +1771,8 @@ function callClaude_(body) {
     var code = res.getResponseCode();
     var txt = res.getContentText();
     if (code !== 200) {
-      var msg = txt;
-      try { msg = JSON.parse(txt).error.message; } catch (e) { /* keep raw */ }
-      if (/workspace/i.test(msg)) msg += ' Create a new key with Workspace set to Default (guide, step 3).';
-      else if (code === 401) msg += ' The key is wrong, expired or deleted. Create a new one in the Claude Console.';
-      else if (/credit|balance|billing/i.test(msg)) msg += ' Add credit in the Claude Console under Billing.';
-      throw new Error('Claude API ' + code + ': ' + msg);
+      if (RETRY_CODES.indexOf(code) >= 0 && tries < 2 && elapsed_() < TIME_HARD) { tries++; Utilities.sleep(retryWait_(res, tries)); turn--; continue; }
+      throw new Error(apiError_(code, txt));
     }
     out = JSON.parse(txt);
     noteUsage_(body.model, out.usage);

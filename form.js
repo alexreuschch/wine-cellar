@@ -701,6 +701,7 @@ async function saveWineForm() {
     const ret = acq && acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '';
     if (ret && str(acq.website).trim() !== str(acq.websiteInit).trim()) saveRetailerSite(ret, str(acq.website).trim());
     if (refetch && S.version >= 5) updateStreetPrices([saved.id], true);
+    fillInfos([saved]);
   } catch (e) {
     busy(false);
     toast('Not saved: ' + e.message);

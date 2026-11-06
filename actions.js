@@ -137,7 +137,7 @@ const ACTS = {
   'somm-send': () => { if (SOMM.mode === 'list') { listAnalyze(); return; } const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
   'wl-go': () => listAnalyze(),
   'about-more': el => { const id = (location.hash.split('/')[2] || ''); U.aboutOpen = U.aboutOpen === decodeURIComponent(id) ? null : decodeURIComponent(id); refreshView(); },
-  'profile-one': el => profileOne(el.dataset.id),
+  'tp-ai': () => editProfileAI(),
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
   'info-mine': () => { const m = infoMine(); closeInfo(); if (m.go) insightsGo(m.go[0], m.go[1]); },
