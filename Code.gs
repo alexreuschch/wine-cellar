@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 22;
+var API_VERSION = 24;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1334,7 +1334,7 @@ function rememberOffers_(pairs) {
 
 var INFO_ASK = {
   region: 'the wine region "%s". Sections: "The region" (location, size, history), "Climate and soils", "Wines and grapes" (main grapes and styles), "Where the best wines come from" (sub-regions, appellations, classification). Facts: Country, Climate, Vineyard area, Main grapes, Best known for.',
-  grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Where it grows" (home and other important regions), "Styles" (how it is made and blended), "With food". Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
+  grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Where it grows" (home and other important regions), "Styles" (how it is made and blended). Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
   style: 'the wine style "%s". Sections: "What it is", "Typical character", "How to serve it" (temperature, glass, decanting), "How long to keep it". Facts: Serving temperature, Glass, Decanting, Ageing potential.',
   producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area, Farming.'
 };
@@ -1345,13 +1345,22 @@ function infoKey_(kind, name, context) {
   var n = kind === 'region' ? first(name) : String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
   return kind + '|' + n + (kind === 'producer' && context ? '|' + first(context) : '');
 }
+/** A grape background from before the charts; it is written again once. */
+function infoOld_(kind, info) { return kind === 'grape' && !(info && info.v >= 3); }
+
 function infoRequest_(kind, name, context) {
   var prompt = 'You are an experienced sommelier and wine writer. Write a short, factual guide in English about ' + INFO_ASK[kind].replace('%s', name) +
     (context ? ' Context: ' + context + '.' : '') +
     ' Each section is two to four sentences. Facts are short values of a few words. Only write what you know with reasonable confidence; leave out a fact you do not know. Do not use dashes as punctuation.' +
-    ' Return ONLY a JSON object, no other text: {"title": "name as it is usually written", "summary": "one or two sentences", "facts": [{"label": "", "value": ""}], "sections": [{"h": "heading", "t": "text"}]}.' +
+    ' Return ONLY a JSON object, no other text: {"title": "name as it is usually written", "summary": "one or two sentences", "facts": [{"label": "", "value": ""}], "sections": [{"h": "heading", "t": "text"}]' +
+    (kind === 'grape' ? ', "originCountry": "two letter ISO code of the country it comes from", ' +
+      '"ageing": {"everyday": [from, to], "best": [from, to]} in years after the vintage, for simple wines and for the best wines of this grape, ' +
+      '"area": "vineyard area worldwide, for example about 115,000 hectares", ' +
+      '"usedFor": [{"type": "Red, White, Sparkling, Rosé, Dessert or Fortified", "pct": share of all wine made from this grape in percent}], ' +
+      '"planted": [{"country": "two letter ISO code", "pct": share of the world vineyard area of this grape in percent}] for the five largest countries, "aka": ["other names it is known by, up to five"]. Percentages are rounded estimates' : '') +
+    '}.' +
     ' If you do not know it at all, return {"title": null}.';
-  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1800, messages: [{ role: 'user', content: prompt }] };
+  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2200, messages: [{ role: 'user', content: prompt }] };
 }
 function infoFrom_(kind, res) {
   var d;
@@ -1363,6 +1372,22 @@ function infoFrom_(kind, res) {
     facts: (Array.isArray(d.facts) ? d.facts : []).filter(function (f) { return f && f.label && f.value; }).slice(0, 6).map(function (f) { return { label: txt(f.label, 40), value: txt(f.value, 120) }; }),
     sections: (Array.isArray(d.sections) ? d.sections : []).filter(function (x) { return x && x.h && x.t; }).slice(0, 5).map(function (x) { return { h: txt(x.h, 60), t: txt(x.t, 900) }; })
   };
+  if (kind === 'grape') {
+    var pct = function (v) { var n = Math.round(Number(v)); return n > 0 && n <= 100 ? n : null; };
+    var types = ['Red', 'White', 'Sparkling', 'Rosé', 'Dessert', 'Fortified'];
+    var span = function (a) { if (!Array.isArray(a) || a.length < 2) return null; var x = Math.max(0, Math.round(Number(a[0]))), y = Math.round(Number(a[1])); return isFinite(x) && isFinite(y) && y > x && y <= 100 ? [x, y] : null; };
+    var age = d.ageing || {};
+    info.v = 3;
+    info.ageing = { everyday: span(age.everyday), best: span(age.best) };
+    if (!info.ageing.everyday && !info.ageing.best) delete info.ageing;
+    info.area = txt(d.area, 60);
+    info.originCountry = /^[A-Za-z]{2}$/.test(String(d.originCountry || '')) ? String(d.originCountry).toUpperCase() : '';
+    info.usedFor = (Array.isArray(d.usedFor) ? d.usedFor : []).map(function (x) { var t = types.filter(function (k) { return k.toLowerCase() === String(x && x.type || '').toLowerCase().replace('rose', 'rosé'); })[0]; return t && pct(x.pct) ? { type: t, pct: pct(x.pct) } : null; })
+      .filter(Boolean).sort(function (a, b) { return b.pct - a.pct; }).slice(0, 6);
+    info.planted = (Array.isArray(d.planted) ? d.planted : []).map(function (x) { var c = String(x && x.country || '').toUpperCase(); return /^[A-Z]{2}$/.test(c) && pct(x.pct) ? { country: c, pct: pct(x.pct) } : null; })
+      .filter(Boolean).sort(function (a, b) { return b.pct - a.pct; }).slice(0, 5);
+    info.aka = (Array.isArray(d.aka) ? d.aka : []).map(function (a) { return txt(a, 40); }).filter(Boolean).slice(0, 5);
+  }
   return info;
 }
 function storeInfos_(entries) {
@@ -1390,7 +1415,7 @@ function actionInfo_(req) {
   var context = String(req.context || '').trim().slice(0, 200);
   var key = infoKey_(kind, name, context);
   var hit = knownInfos_()[key];
-  if (hit) return { info: hit, cached: true };
+  if (hit && !infoOld_(kind, hit)) return { info: hit, cached: true };
   var info = infoFrom_(kind, callClaude_(infoRequest_(kind, name, context)));
   if (!info) return { info: null };
   storeInfos_([{ key: key, kind: kind, name: name, info: info }]);
@@ -1405,7 +1430,7 @@ function actionInfoFill_(req) {
     var key = infoKey_(x.kind, x.name, x.context);
     if (seen[key]) return;
     seen[key] = true;
-    if (known[key]) out[key] = known[key];
+    if (known[key] && !infoOld_(x.kind, known[key])) out[key] = known[key];
     else todo.push({ key: key, kind: x.kind, name: String(x.name).trim().slice(0, 120), context: String(x.context || '').trim().slice(0, 200) });
   });
   if (todo.length) {

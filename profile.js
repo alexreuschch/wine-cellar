@@ -390,13 +390,16 @@ const INFO_ICON = { region: () => AB_ICON.vineyard, grape: () => AB_ICON.grape, 
 const infoFirst = v => lc(str(v).split(',')[0].trim()).replace(/\s+/g, ' ');
 const infoKey = (kind, name, context) => `${kind}|${kind === 'region' ? infoFirst(name) : lc(str(name).trim()).replace(/\s+/g, ' ')}${kind === 'producer' && context ? `|${infoFirst(context)}` : ''}`;
 function infoCache() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
+const countryName = c => { if (COUNTRY_NAMES[c]) return COUNTRY_NAMES[c]; try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch (e) { return c; } };
+/* a grape background from before the charts is written again once */
+const infoOld = (kind, d) => kind === 'grape' && !(d && d.v >= 3) && !(S.version && S.version < 24);
 function infoRemember(key, data) { try { const c = infoCache(); c[key] = data; localStorage.setItem('wc-info', JSON.stringify(c)); } catch (e) { /* kept for this session */ } }
 
 async function openInfo(kind, name, context) {
   Object.assign(INFO, { kind, name, context: context || '', data: null, busy: false, error: '' });
   const key = infoKey(kind, name, context);
   const hit = infoCache()[key];
-  if (hit) { INFO.data = hit; renderInfo(); return; }
+  if (hit && !infoOld(kind, hit)) { INFO.data = hit; renderInfo(); return; }
   INFO.busy = true;
   renderInfo();
   try {
@@ -425,6 +428,43 @@ function infoMine() {
   return { all, inStock, go };
 }
 
+/* the grape at a glance: other names, key facts with the origin flag, ageing as a timeline, what it is used for, where it is planted */
+function grapeFactsHtml(d) {
+  const age = d.ageing;
+  const facts = d.facts.filter(f => !(age && /ageing|aging/i.test(f.label)));
+  const tile = (f, i) => {
+    const flag = /^origin$/i.test(f.label) && d.originCountry ? `<span class="gi-fflag">${flagEmoji(d.originCountry)}</span> ` : '';
+    return `<div class="ab-fact${facts.length % 2 && i === facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${flag}${esc(f.value)}</b></div></div>`;
+  };
+  const aka = (d.aka || []).length ? `<div class="gi-sec"><h3>Also known as</h3><div class="gi-chips">${d.aka.map(a => `<span class="gi-chip">${esc(a)}</span>`).join('')}</div></div>` : '';
+  return `${aka}${facts.length ? `<div class="ab-facts">${facts.map(tile).join('')}</div>` : ''}${age ? grapeAgeHtml(d) : ''}`;
+}
+function grapeAgeHtml(d) {
+  const age = d.ageing, f = d.facts.find(x => /ageing|aging/i.test(x.label));
+  const top = Math.max(...[age.everyday, age.best].filter(Boolean).map(x => x[1]));
+  const end = Math.min(40, Math.max(10, top > 20 ? Math.ceil(top / 10) * 10 : Math.ceil(top / 5) * 5));
+  const pos = v => `${Math.min(100, v / end * 100)}%`;
+  const yrs = x => `${x[0]} to ${x[1] > end ? end + '+' : x[1]} years`;
+  const row = (label, x, cls) => x ? `<div class="gi-age-row"><span>${label}</span><span class="gi-age-tr"><i class="${cls}" style="left:${pos(x[0])};width:calc(${pos(Math.min(x[1], end))} - ${pos(x[0])})"></i></span><b>${yrs(x)}</b></div>` : '';
+  const ticks = []; for (let y = 0; y <= end; y += end > 20 ? 10 : 5) ticks.push(`<em style="left:${pos(y)}">${y === end && top > end ? y + '+' : y}</em>`);
+  return `<div class="gi-age"><div class="gi-age-h"><span>Ageing potential</span>${f ? `<b>${esc(f.value)}</b>` : ''}</div>
+    ${row('Everyday', age.everyday, 'e')}${row('Best wines', age.best, 'b')}
+    <div class="gi-age-row axis"><span></span><span class="gi-age-ax">${ticks.join('')}</span><b>years</b></div></div>`;
+}
+function grapeChartsHtml(d) {
+  const bar = (lead, name, pct, color) => `<div class="gi-bar">${lead}<span class="gi-name">${esc(name)}</span><span class="tr"><i style="width:${Math.max(3, pct)}%;background:${color}"></i></span><b>${pct}%</b></div>`;
+  const used = (d.usedFor || []).map(x => bar(`<span class="gi-dot" style="background:${TYPE_CHART[x.type] || 'var(--gold)'}"></span>`, x.type, x.pct, TYPE_CHART[x.type] || 'var(--gold)'));
+  const planted = (d.planted || []).map(x => bar(`<span class="gi-flag">${flagEmoji(x.country)}</span>`, countryName(x.country), x.pct, 'var(--gold)'));
+  return `${used.length ? `<div class="gi-sec"><h3>Mostly used for</h3>${used.join('')}</div>` : ''}
+    ${planted.length ? `<div class="gi-sec"><h3>Mostly planted</h3>${planted.join('')}<p class="tiny muted" style="margin:2px 0 0">Approximate share of the world's vineyards planted with this grape${d.area ? `, ${esc(d.area)} in total` : ''}.</p></div>` : ''}`;
+}
+function grapeMineHtml(mine) {
+  const rated = mine.all.filter(x => x.myRating !== null);
+  const avg = rated.length ? Math.round(rated.reduce((a, x) => a + x.myRating, 0) / rated.length) : null;
+  const btl = mine.inStock.reduce((a, x) => a + x.count, 0);
+  return `${mine.all.length ? `<div class="gi-sec"><h3>In your cellar</h3><div class="gi-mine"><div><b>${mine.all.length} wine${mine.all.length === 1 ? '' : 's'}</b><span class="small muted">${btl} bottle${btl === 1 ? '' : 's'} in stock${avg !== null ? ` · your rating ${avg}%` : ''}</span></div>${mine.go ? `<button class="btn ghost" data-act="info-mine">Show</button>` : ''}</div></div>` : ''}`;
+}
+
 function renderInfo() {
   let root = $('#info-root');
   if (!root) { root = document.createElement('div'); root.id = 'info-root'; document.body.appendChild(root); }
@@ -437,10 +477,10 @@ function renderInfo() {
     ? `<div class="info-wait"><p class="somm-wait">Looking up ${esc(INFO.name)}<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Written once by AI, then kept for all your wines.</p></div>`
     : INFO.error ? `<p class="small" style="margin:0;color:var(--red, #E06C6C)">${esc(INFO.error)}</p>`
     : d ? `${d.summary ? `<p class="info-summary">${esc(d.summary)}</p>` : ''}
-        ${d.facts.length ? `<div class="ab-facts">${d.facts.map((f, i) => `<div class="ab-fact${d.facts.length % 2 && i === d.facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div></div>`).join('')}</div>` : ''}
+        ${INFO.kind === 'grape' ? `${grapeFactsHtml(d)}${grapeChartsHtml(d)}` : d.facts.length ? `<div class="ab-facts">${d.facts.map((f, i) => `<div class="ab-fact${d.facts.length % 2 && i === d.facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div></div>`).join('')}</div>` : ''}
         ${d.sections.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${esc(x.t)}</p></div>`).join('')}
         <p class="tiny muted" style="margin:0">Written by AI from its knowledge, kept for all your wines.</p>` : '';
-  const yours = mine.all.length && mine.go
+  const yours = INFO.kind === 'grape' ? (d && !INFO.busy ? grapeMineHtml(mine) : '') : mine.all.length && mine.go
     ? `<button class="btn ghost block" data-act="info-mine">${ICON.glass}Your wines: ${mine.all.length}${mine.inStock.length !== mine.all.length ? `, ${mine.inStock.length} in stock` : ''}</button>` : '';
   root.innerHTML = `<div class="sheet-backdrop" data-act="info-close"></div>
   <div class="sheet info-sheet" role="dialog" aria-modal="true" aria-label="${esc(INFO.name)}">
@@ -465,7 +505,7 @@ function infoItems(w) {
 async function fillInfos(wines, progress) {
   if (S.version && S.version < 20) return;
   const have = infoCache(), seen = new Set(), todo = [];
-  wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (seen.has(k) || have[k]) return; seen.add(k); todo.push(x); }));
+  wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (seen.has(k) || (have[k] && !infoOld(x.kind, have[k]))) return; seen.add(k); todo.push(x); }));
   for (let i = 0; i < todo.length; i += 8) {
     if (progress) progress(i, todo.length);
     try {

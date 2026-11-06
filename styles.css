@@ -678,6 +678,37 @@ div.ab-row { grid-template-columns: 40px minmax(0, 1fr); }
 .info-head { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .info-head h2 { font-size: 20px; font-weight: 600; margin: 2px 0 0; line-height: 1.25; }
 .info-body { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; margin: 0 -4px; padding: 0 4px 6px; }
+.ab-fact .gi-fflag { display: inline; font-size: 15px; }
+.gi-age { display: grid; gap: 10px; padding: 12px 14px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.gi-age-h span { display: block; font-size: 12px; color: var(--muted); }
+.gi-age-h b { display: block; font-size: 14px; font-weight: 600; line-height: 1.35; }
+.gi-age-row { display: grid; grid-template-columns: 76px 1fr 92px; align-items: center; gap: 8px; font-size: 13px; }
+.gi-age-row > span:first-child { color: var(--muted); }
+.gi-age-row b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gi-age-tr { position: relative; height: 10px; border-radius: 5px; background: var(--line); }
+.gi-age-tr i { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
+.gi-age-tr i.e { background: color-mix(in srgb, var(--gold) 55%, transparent); }
+.gi-age-tr i.b { background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 70%, transparent), var(--gold)); }
+.gi-age-row.axis { margin-top: -4px; }
+.gi-age-row.axis b { font-weight: 400; color: var(--muted); font-size: 12px; }
+.gi-age-ax { position: relative; height: 14px; }
+.gi-age-ax em { position: absolute; transform: translateX(-50%); font-style: normal; font-size: 11px; color: var(--muted); }
+.gi-age-ax em:first-child { transform: none; }
+.gi-age-ax em:last-child { transform: translateX(-100%); }
+.gi-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.gi-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 16px; font-size: 14px; background: var(--surface); }
+.gi-sec { display: grid; gap: 8px; }
+.gi-sec h3 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0; }
+.gi-bar { display: grid; grid-template-columns: 22px minmax(0, 120px) 1fr 42px; align-items: center; gap: 8px; font-size: 14px; }
+.gi-bar .gi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gi-bar .tr { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.gi-bar .tr i { display: block; height: 100%; border-radius: 4px; }
+.gi-bar b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gi-dot { width: 12px; height: 12px; border-radius: 50%; justify-self: center; }
+.gi-flag { font-size: 18px; line-height: 1; justify-self: center; }
+.gi-mine { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.gi-mine b { display: block; font-size: 15px; }
+.gi-mine > div > span { display: block; margin-top: 2px; }
 .info-summary { font-size: 16px; line-height: 1.55; margin: 0; }
 .info-sec h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; color: var(--gold); }
 .info-sec p { font-size: 15px; line-height: 1.55; margin: 0; }

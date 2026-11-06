@@ -499,7 +499,6 @@ function viewWine(id) {
       ${p ? `${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div><p class="muted tiny" style="margin:0">${windowText(w)}</p>`
         : `<p class="muted small" style="margin:0">No drinking window set yet. <a href="${editHref}">Add one</a></p>`}
     </section>
-    ${aboutHtml(w)}
     <section>
       <div class="rating-head"><h2>My rating</h2>${w.myRating === null ? `<a class="small" href="${editHref}">Rate in Edit</a>` : `<span class="rating-val">${w.myRating}%</span>`}</div>
       ${w.myRating === null ? '' : segsHtml(w.myRating, 22, 'lg')}
@@ -512,6 +511,7 @@ function viewWine(id) {
     ${valueHtml(w)}
     ${offerHtml(w)}
     <section style="gap:4px">${secHead(ICON.cart, 'Purchases')}${purchasesHtml(w, false)}</section>
+    ${aboutHtml(w)}
     ${profileHtml(w, editHref)}
     <section style="gap:0">
       <h2 style="margin-bottom:4px">Bottles removed</h2>
