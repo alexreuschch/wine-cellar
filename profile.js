@@ -435,7 +435,7 @@ function infoMine() {
     : k === 'grape' ? (x => grapeShares(Object.assign({}, x, { count: 1 })).some(g => lc(g.name) === n))
     : k === 'producer' ? (x => lc(x.producer) === n)
     : (x => x.profile && lc(x.profile.style) === n);
-  const all = S.wines.filter(match);
+  const all = S.wines.filter(x => !isDisc(x) && match(x));
   const inStock = all.filter(x => x.count > 0);
   const go = k === 'grape' ? ['grape', INFO.name] : k === 'region' ? ['search', str(INFO.name).split(',')[0].trim()] : k === 'producer' ? ['search', INFO.name] : null;
   return { all, inStock, go };
@@ -520,7 +520,7 @@ function termMatch(w, x) {
   if (x.k === 'style') return hasPhrase([p.style, w.name, p.classification], x.t) && (!x.region || hasPhrase([w.region, p.sub], x.region));
   return hasPhrase([w.region, p.sub, p.classification], x.t);
 }
-const termCount = x => S.wines.filter(w => termMatch(w, x)).length;
+const termCount = x => S.wines.filter(w => !isDisc(w) && termMatch(w, x)).length;   // what the cellar shows when you tap it
 function termChip(text, x, grapes, inline) {
   const n = termCount(x);
   const cls = `gi-chip${inline ? ' inline' : ''}`;

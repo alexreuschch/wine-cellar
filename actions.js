@@ -35,6 +35,9 @@ const ACTS = {
   },
   'j-fav-off': () => { U.jFav = false; refreshView(); },
   'top-finished-off': () => { U.topFinished = false; refreshView(); },
+  'top-disc-off': () => { U.topDisc = false; refreshView(); },
+  'top-toggle-finished': () => { U.topFinished = !U.topFinished; refreshView(); },
+  'top-toggle-disc': () => { U.topDisc = !U.topDisc; refreshView(); },
   'loc-add': async () => {
     const i = $('#new-loc');
     const name = i.value.replace(/\s+/g, ' ').trim();
@@ -134,6 +137,7 @@ const ACTS = {
   'wish-offer': el => { const x = S.wishlist.find(w => w.id === el.dataset.id); if (x) consOffer(x, 'wish:' + x.id, x.id); },
   'wish-del': el => wishDelete(el.dataset.id),
   'wish-add': el => wishToCellar(el.dataset.id),
+  'somm-where': el => { SOMM.where = el.dataset.v; SOMM.whereAt = Date.now(); const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); const p = $('#somm-price'); if (p && SOMM.where === 'shop' && !sommPrice()) p.focus(); },
   'somm-send': () => { if (SOMM.mode === 'list') { listAnalyze(); return; } const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
   'wl-go': () => listAnalyze(),
   'about-more': el => { const id = (location.hash.split('/')[2] || ''); U.aboutOpen = U.aboutOpen === decodeURIComponent(id) ? null : decodeURIComponent(id); refreshView(); },
@@ -157,6 +161,10 @@ const ACTS = {
   pick: el => pickChoose(el.dataset.v),
   'wl-page-rm': el => { WL.pages.splice(Number(el.dataset.i), 1); sommRefresh(false); },
   'wl-clear': () => { if (SOMM.listening) sommStopVoice(); WL.pages = []; WL.result = null; WL.error = ''; SOMM.draft = ''; SOMM.voiced = false; render(); },
+  'wl-taste': el => listTaste(Number(el.dataset.i)),
+  'somm-taste': el => sommTaste(Number(el.dataset.i)),
+  'ds-venue': el => { if (RS && RS.kind === 'taste') { saveTasteInputs(); RS.venue = el.dataset.v; renderSheet(); } },
+  'ds-rate': el => { if (RS && RS.kind === 'taste') setTasteRating((RS.rating === null ? 80 : RS.rating) + Number(el.dataset.d)); },
   'wl-save': el => { const p = WL.result && WL.result.picks[Number(el.dataset.i)]; if (p) listSave(p); },
   'somm-example': el => sommAsk(el.dataset.v),
   'somm-mic': () => { if (SOMM.listening) { sommStopVoice(); sommRefresh(false); } else sommStartVoice(); },
@@ -380,6 +388,7 @@ const INPUTS = {
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
+  'somm-price': el => { SOMM.price = el.value; const l = el.closest('.where-price'); if (l) l.classList.toggle('need', sommWhere() === 'shop' && !sommPrice()); },
   'wl-min': el => { WL.min = el.value; },
   'tp-note': el => { const a = D.profile.aromas[Number(el.dataset.i)]; if (a) a.n = el.value; D.touched.add('profile'); },
   'tp-field': el => { D.profile[el.dataset.k] = el.value; D.touched.add('profile'); if (el.classList.contains('autosize')) autosize(el); },
@@ -432,6 +441,7 @@ const CHANGES = {
   },
   'show-finished': el => { U.showFinished = el.checked; refreshView(); },
   'top-finished': el => { U.topFinished = el.checked; refreshView(); },
+  'top-disc': el => { U.topDisc = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },
   'qty-in': el => setQty(el, true),
   'stock-loc': async el => {

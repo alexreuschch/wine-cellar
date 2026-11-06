@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 27;
+var API_VERSION = 29;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -19,11 +19,13 @@ var WINE_COLS = [
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom',
-  'stock', 'street', 'offer', 'profile'
+  'stock', 'street', 'offer', 'profile', 'origin'
 ];
-// The Removals tab is the journal: bottles going out (dir "out") and coming in (dir "in").
+// origin "discovery": a wine tasted out, for example in a restaurant, never in the cellar
+// The Removals tab is the journal: bottles going out (dir "out"), coming in (dir "in") and discoveries tasted out (dir "taste", no bottle).
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
-  'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer'];
+  'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer', 'venue', 'shopRef'];
+// venue of a discovery: "restaurant", "shop" or "other"; shopRef: the shop price it was compared with, as JSON {v, cur}
 var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name'];
@@ -41,7 +43,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '13';
+var SCHEMA_VERSION = '15';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -454,6 +456,7 @@ function setStock_(obj, stock) {
   var clean = merged.filter(function (e) { return e.n > 0; });
   obj.stock = JSON.stringify(clean);
   obj.count = clean.reduce(function (a, e) { return a + e.n; }, 0);
+  if (obj.count > 0 && obj.origin) obj.origin = '';                     // a discovery with bottles is a cellar wine
   if (clean.length) {
     obj.location = clean[0].loc;
     obj.shelf = clean[0].shelf === null ? '' : clean[0].shelf;
@@ -608,6 +611,7 @@ function actionAddBottles_(req) {
     var obj = toObj_(t.headers, t.rows[idx]);
     var qty = Math.max(1, Number(e.qty) || 1);
     e.loc = changeStock_(obj, placeOf_(e), qty);
+    if (obj.origin) obj.origin = '';                                      // bought after tasting it out: now in the cellar
     obj.updatedAt = new Date().toISOString();
     writeRow_(t, idx, obj);
     var entry = saveEntryRow_(Object.assign({}, e, { dir: 'in', qty: qty }));
@@ -632,7 +636,8 @@ function saveEntryRow_(e) {
   if (!obj.id) obj.id = (obj.dir === 'in' ? 'i' : 'r') + new Date().getTime().toString(36) + Math.floor(Math.random() * 1000);
   if (!obj.date) obj.date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   if (!obj.dir) obj.dir = 'out';
-  if (!obj.qty) obj.qty = 1;
+  if (!obj.qty && obj.dir !== 'taste') obj.qty = 1;
+  if (obj.dir === 'taste') obj.qty = 0;
   if (obj.retailer) ensureRetailer_(obj.retailer);
   writeRow_(t, idx, obj);
   return obj;
@@ -1511,11 +1516,12 @@ var CHECK_RULES = [
   'Rules:',
   '1. Identify the wine: producer, name and vintage. Put them in "wine". If you are unsure, say what you think it is.',
   '2. Judge how well it fits the taste of the owner, based on the wines they rated highly or low, their favorites and what they drink often. Give "fit" from 0 to 100.',
-  '3. In "answer" explain the style and why it fits or not. Do not discuss shop prices: the app checks them in local shops and shows them next to your answer. If the owner mentions a price, put it in "price" with its currency in "priceCur" (three letter ISO code) and say in "priceWhere" whether it is a "shop" or a "restaurant" price.',
+  '3. In "answer" explain the style and why it fits or not. Do not discuss shop prices: the app checks them in local shops and shows them next to your answer. If the owner mentions a price, put it in "price" with its currency in "priceCur" (three letter ISO code) and the app tells you below whether the owner is in a shop or a restaurant.',
   '4. Say whether the cellar already holds similar wines in enough bottles.',
   '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Fewer is fine.',
   '6. Answer in the language of the question; if there is no question, in English. Keep "answer" to three to five sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "priceWhere": ""}.'
+  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "typicalMarkup": [2, 3]}.',
+  '8. "typicalMarkup" is the usual range by which restaurants in the country of the owner multiply the shop price of a wine, for example [2.5, 3.5]. Give it always.'
 ].join('\n');
 
 /** One compact line per wine in stock, plus recent journal entries, as context for the sommelier. */
@@ -1554,6 +1560,13 @@ function cellarContext_() {
     '\n\nJOURNAL (recent bottles opened, given or sold):\n' + (journal.join('\n') || 'No entries yet.') };
 }
 
+/** The usual restaurant markup over shop prices, as [low, high], or null. */
+function markupRange_(a) {
+  if (!Array.isArray(a) || a.length < 2) return null;
+  var lo = Math.round(Number(a[0]) * 10) / 10, hi = Math.round(Number(a[1]) * 10) / 10;
+  return lo >= 1 && hi >= lo && hi <= 8 ? [lo, hi] : null;
+}
+
 function actionSommelier_(req) {
   var q = String(req.question || '').trim();
   var image = req.image ? String(req.image) : '';
@@ -1562,9 +1575,17 @@ function actionSommelier_(req) {
   if (!q) throw new Error('Ask a question first');
   var check = req.mode === 'check' || !!image;
   if (check) scopeFrom_(req.country);
+  var where = ['restaurant', 'shop', 'other'].indexOf(req.where) >= 0 ? req.where : '';
+  // the price typed in its own field wins over a price in the question
+  var given = where !== 'other' && Number(req.price) > 0 ? Math.round(Number(req.price) * 100) / 100 : null;
+  var givenCur = given && CURRENCIES.indexOf(String(req.priceCur)) >= 0 ? String(req.priceCur) : '';
+  if (given) q += '\n(' + (where === 'restaurant' ? 'Price on the menu' : 'Price on the shelf') + ': ' + (givenCur || '') + ' ' + given + ')';
   var ctx = cellarContext_();
   var system = check
-    ? CHECK_RULES + '\n\nThe owner is in ' + shopScope_().name + ', where prices are usually in ' + shopScope_().cur + '. The owner shows prices in ' + settings_().currency + '.\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
+    ? CHECK_RULES + '\n\nThe owner is in ' + shopScope_().name + ', where prices are usually in ' + shopScope_().cur + '. The owner shows prices in ' + settings_().currency + '.' +
+      (where === 'restaurant' ? ' The owner is in a restaurant, so a price they mention is a restaurant price.'
+        : where === 'shop' ? ' The owner is in a shop, so a price they mention is a shop price.'
+        : where === 'other' ? ' The owner is neither in a shop nor in a restaurant, for example at a friend or a tasting; a price they mention is what the wine costs in a shop.' : '') + '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
     : SOMMELIER_RULES + '\n\n' + ctx.text;
   var messages = [];
   (req.history || []).slice(-6).forEach(function (h) {
@@ -1588,13 +1609,16 @@ function actionSommelier_(req) {
     .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
   var fit = d.fit === null || d.fit === undefined || d.fit === '' || isNaN(Number(d.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(d.fit))));
   var out = { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
+  // what the app needs to keep the wine as a discovery, if the owner tastes it
+  if (check && d.wine && (d.producer || d.name)) out.info = { producer: String(d.producer || ''), name: String(d.name || ''), vintage: d.vintage ? String(d.vintage) : '', type: String(d.type || ''), region: String(d.region || ''), grapes: String(d.grapes || '') };
   if (check && out.wine) {
     // the price in local shops of the country the owner is in, reused for 14 days
     var sc = shopScope_();
     out.country = sc.code;
-    out.price = Number(d.price) > 0 ? Math.round(Number(d.price) * 100) / 100 : null;
-    out.priceCur = CURRENCIES.indexOf(String(d.priceCur)) >= 0 ? String(d.priceCur) : sc.cur;
-    out.priceWhere = String(d.priceWhere) === 'restaurant' ? 'restaurant' : out.price ? 'shop' : '';
+    out.price = where === 'other' ? null : given || (Number(d.price) > 0 ? Math.round(Number(d.price) * 100) / 100 : null);
+    out.priceCur = given && givenCur ? givenCur : CURRENCIES.indexOf(String(d.priceCur)) >= 0 ? String(d.priceCur) : sc.cur;
+    out.priceWhere = where || (String(d.priceWhere) === 'restaurant' ? 'restaurant' : out.price ? 'shop' : '');
+    out.typical = markupRange_(d.typicalMarkup);
     var key = offerKey_(out.wine);
     var mem = offerMemory_([key], true)[key];
     if (mem) out.offer = mem.offer;
@@ -1630,7 +1654,7 @@ var WINELIST_RULES = [
   'If the owner says what they eat, all three must go well with it. Use the cellar, the finished wines and the ratings of the owner to judge how well each wine fits their taste, as "fit" from 0 to 100, and prefer wines that fit.',
   '"page" is the number of the photo where the wine appears, starting at 1. Prices are numbers in the currency of the list. Estimates are fine, but never invent a wine that is not on the list.',
   'Write in English. "why" is one or two sentences, "food" is one short sentence about the pairing or empty, "note" is two to three sentences about the list as a whole. Do not use dashes as punctuation.',
-  'Return ONLY a JSON object, no other text: {"count": 47, "currency": "CHF", "avgMarkup": 2.8, "note": "text", "picks": [{"kind": "range|value|gem", "producer": "", "name": "", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "listPrice": 78, "page": 2, "shopPrice": 45, "markup": 1.7, "fit": 80, "why": "", "food": ""}]}.'
+  'Return ONLY a JSON object, no other text: {"restaurant": "the name of the restaurant if it is on the pages, otherwise empty", "typicalMarkup": [2.5, 3.5] as the usual range by which restaurants in this country multiply shop prices, "count": 47, "currency": "CHF", "avgMarkup": 2.8, "note": "text", "picks": [{"kind": "range|value|gem", "producer": "", "name": "", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "listPrice": 78, "page": 2, "shopPrice": 45, "markup": 1.7, "fit": 80, "why": "", "food": ""}]}.'
 ].join('\n');
 
 /** Photos of a restaurant wine list: the best wine in a price range, the best value and the hidden gem. */
@@ -1702,7 +1726,7 @@ function actionWineList_(req) {
     }
   });
   return { country: sc.code, count: Number(d.count) > 0 ? Math.round(Number(d.count)) : null, pages: pages.length,
-    avgMarkup: num(d.avgMarkup), note: String(d.note || ''), food: food, min: min, max: max, picks: picks, currency: listCur };
+    avgMarkup: num(d.avgMarkup), note: String(d.note || ''), food: food, min: min, max: max, picks: picks, currency: listCur, restaurant: String(d.restaurant || '').slice(0, 80), typical: markupRange_(d.typicalMarkup) };
 }
 
 // ---------------------------------------------------------------- AI consultant and wishlist
@@ -1716,11 +1740,11 @@ var CONSULTANT_RULES = [
   '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
   '3. Plan quantities sensibly. Compare the stock of each style with how fast the owner drinks it. Where the stock is large, only suggest small quantities of a clearly different style. Where stock is low compared to consumption, suggest more bottles.',
   '4. A suggestion may replace a wine in stock with few bottles left (1 to 3) when it has better ratings and a better price to quality ratio. Then give the id of that wine in "replaces" and the reason in "replaceWhy". Otherwise leave both empty.',
-  '5. Mix the labels: "Safe bet" (close to their favorites), "Discovery" (new grape or region that fits their taste), "Top value" (outstanding price to quality).',
+  '5. Mix the labels: "Safe bet" (close to their favorites), "New to you" (new grape or region that fits their taste), "Top value" (outstanding price to quality).',
   '6. "price" is your estimate of the typical shop price per bottle in the currency of the budget. "vintage" is a recommended recent vintage as a number, or null.',
   '7. Follow the focus and wishes of the owner if given.',
   '8. Write in English. Keep "summary" to two to four sentences about what the cellar needs and how much to buy, "why" and "value" to one sentence each. Do not use dashes as punctuation.',
-  '9. Return ONLY a JSON object, no other text: {"summary": "text", "picks": [{"producer": "", "name": "", "vintage": 2021, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "price": 0, "label": "Safe bet|Discovery|Top value", "why": "", "value": "", "qty": 3, "replaces": "", "replaceWhy": ""}]}.'
+  '9. Return ONLY a JSON object, no other text: {"summary": "text", "picks": [{"producer": "", "name": "", "vintage": 2021, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "price": 0, "label": "Safe bet|New to you|Top value", "why": "", "value": "", "qty": 3, "replaces": "", "replaceWhy": ""}]}.'
 ].join('\n');
 
 /** Finished wines with rating and price, as taste history for the consultant. */
@@ -1735,7 +1759,7 @@ function finishedContext_() {
     var n = parseStock_(w.stock).reduce(function (a, e) { return a + (Number(e.n) || 0); }, 0);
     return w.id && !n;
   }).map(function (w) {
-    return [[w.producer, w.name, w.vintage].filter(String).join(' '), w.type, w.region, w.grapes,
+    return [[w.producer, w.name, w.vintage].filter(String).join(' '), w.origin === 'discovery' ? 'discovery, tasted out, never in the cellar' : '', w.type, w.region, w.grapes,
       w.myRating !== '' && w.myRating !== null && w.myRating !== undefined ? 'my rating ' + w.myRating + '%' : '',
       buys[w.id] ? 'paid ' + buys[w.id].join(', ') : ''].filter(String).join(' | ');
   });
@@ -1766,7 +1790,7 @@ function actionConsultant_(req) {
   var d = parseJson_(textOf_(res), 'The consultant gave no answer. Please try again.');
   var stock = {};
   ctx.wines.forEach(function (w) { stock[String(w.id)] = w; });
-  var labels = ['Safe bet', 'Discovery', 'Top value'];
+  var labels = ['Safe bet', 'New to you', 'Top value'];
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && (p.name || p.producer); }).slice(0, 8).map(function (p) {
     var rep = String(p.replaces || '');
     if (!stock[rep]) rep = '';
@@ -1774,7 +1798,7 @@ function actionConsultant_(req) {
       producer: String(p.producer || ''), name: String(p.name || ''), vintage: Number(p.vintage) > 1900 ? Number(p.vintage) : '',
       type: String(p.type || ''), region: String(p.region || ''), grapes: String(p.grapes || ''),
       price: Number(p.price) > 0 ? Math.round(Number(p.price) * 100) / 100 : '', priceCur: cur,
-      label: labels.indexOf(String(p.label)) >= 0 ? String(p.label) : 'Discovery',
+      label: String(p.label) === 'Discovery' ? 'New to you' : labels.indexOf(String(p.label)) >= 0 ? String(p.label) : 'New to you',
       why: String(p.why || ''), value: String(p.value || ''), qty: Math.max(1, Math.min(24, Math.round(Number(p.qty) || 1))),
       replaces: rep, replaceWhy: rep ? String(p.replaceWhy || '') : ''
     };

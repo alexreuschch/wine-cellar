@@ -753,3 +753,31 @@ div.ab-row { grid-template-columns: 40px minmax(0, 1fr); }
 .wi-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .wi-row:last-child { border-bottom: 0; }
 .wi-row b { font-variant-numeric: tabular-nums; }
+
+/* discoveries: wines tasted out, never in the cellar */
+.badge.discovery { background: color-mix(in srgb, #2F94B8 22%, transparent); color: #7FC4DD; }
+.disc-tag { display: inline-flex; align-items: center; vertical-align: 2px; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; background: color-mix(in srgb, #2F94B8 22%, transparent); color: #7FC4DD; }
+h1 .disc-tag, .row-title .disc-tag { font-family: var(--sans); }
+h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
+
+/* shop or restaurant, a must before Will I like it? */
+.toggle.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.where-row { display: grid; gap: 8px; padding: 10px 8px 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 14px; }
+.where-row > span { color: var(--muted); }
+.where-row .toggle { background: var(--bg); }
+.where-row .toggle button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; }
+.where-row .toggle button svg { width: 15px; height: 15px; }
+.where-row .toggle button.on { background: var(--gold); color: #1A1416; font-weight: 600; }
+.where-row.need { border-color: var(--gold); }
+.where-price { display: grid; grid-template-columns: 1fr 110px auto; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.where-price small { font-size: 12px; opacity: .8; }
+.where-price input { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; text-align: right; min-width: 0; }
+.where-price em { font-style: normal; color: var(--text); font-weight: 500; }
+.where-price.need input { border-color: var(--gold); }
+.where-price.need > span { color: var(--gold); font-weight: 600; }
+.where-row.need > span { color: var(--gold); font-weight: 600; }
+.where-row.flash { animation: where-flash .9s ease 2; }
+@keyframes where-flash { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 45%, transparent); } }
+.price-check .row.where span { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
+.price-check .row.where svg { width: 15px; height: 15px; color: var(--gold); }
+.price-check .verdict { margin: 0; font-size: 16px; }

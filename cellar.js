@@ -9,8 +9,10 @@ const grapeNames = w => String(w.grapes || '').split(/[,;\/+&]/)
   .map(s => cap(s.replace(/\d+([.,]\d+)?\s*%?/g, '').replace(/\s+/g, ' ').trim()))
   .filter(s => s.length > 1);
 const foodNames = w => foodsOf(w).map(k => FOODS[k][0]);
-const cellarPool = () => S.wines.filter(w => U.showFinished || w.count > 0);
-const topPool = () => S.wines.filter(w => U.topFinished || w.count > 0);
+const cellarPool = () => S.wines.filter(w => !isDisc(w) && (U.showFinished || w.count > 0));
+const topPool = () => S.wines.filter(w => (isDisc(w) ? U.topDisc : U.topFinished || w.count > 0));
+const finishedWines = () => S.wines.filter(w => w.count === 0 && !isDisc(w));
+const discWines = () => S.wines.filter(isDisc);
 const ENTRY_LABEL = { Gift: 'Gift given', Received: 'Gift received', Added: 'Added' };
 const entryType = r => ENTRY_LABEL[r.type] || r.type || 'Other';
 const entryWine = r => { const w = wineById(r.wineId); return w ? `${wineTitle(w)} ${w.vintage}`.trim() : (r.wineName || 'Deleted wine'); };
@@ -49,14 +51,14 @@ const CTX = {
     },
     items: () => cellarPool(),
     text: w => matches(w, U.search),
-    extra: () => { const done = S.wines.filter(w => w.count === 0).length; return done ? switchHtml('show-finished', U.showFinished, `Include finished wines (${done})`) : ''; },
+    extra: () => { const done = finishedWines().length; return done ? switchHtml('show-finished', U.showFinished, `Include finished wines (${done})`) : ''; },
     badges: () => ''
   },
   journal: {
     noun: 'entries',
     facets: {
       person: { label: 'Person', plural: 'people', of: r => namesOf(r.people) },
-      type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added'] },
+      type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Discovery', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added'] },
       retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) },
       month: { hidden: true, label: 'Month', plural: 'months', sortHint: 'Newest first. ', of: r => (monthOf(r) ? [monthOf(r)] : []), sort: (a, b) => monthKey(b.name).localeCompare(monthKey(a.name)) }
     },
@@ -75,8 +77,8 @@ const CTX = {
     },
     items: () => topPool(),
     text: () => true,
-    extra: () => (S.wines.some(w => w.count === 0) ? switchHtml('top-finished', U.topFinished, 'Include finished wines') : ''),
-    badges: () => (U.topFinished ? offChip('top-finished-off', 'Incl. finished') : '')
+    extra: () => (finishedWines().length ? switchHtml('top-finished', U.topFinished, `Include finished wines (${finishedWines().length})`) : '') + (discWines().length ? switchHtml('top-disc', U.topDisc, `Include discoveries (${discWines().length})`) : ''),
+    badges: () => (U.topFinished ? offChip('top-finished-off', 'Incl. finished') : '') + (U.topDisc ? offChip('top-disc-off', 'Incl. discoveries') : '')
   }
 };
 
@@ -377,7 +379,7 @@ function sortCmp(a, b) {
 const sortSelectHtml = () => `<label class="sort-sel"><span class="sr-only">Sort by</span>${ICON.sort}<select data-change="sort">${Object.keys(SORTS).map(k => `<option value="${k}"${k === SORT ? ' selected' : ''}>${SORTS[k]}</option>`).join('')}</select></label>`;
 
 function cellarList() {
-  const list = S.wines.filter(w => matches(w, U.search) && passes('cellar', w)).sort(sortCmp);
+  const list = S.wines.filter(w => !isDisc(w) && matches(w, U.search) && passes('cellar', w)).sort(sortCmp);
   const stock = list.filter(w => w.count > 0), done = list.filter(w => w.count === 0);
   const filtered = U.search || activeCount('cellar');
   let html = stock.length ? stock.map(wineRow).join('') : `<p class="muted small">${filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;

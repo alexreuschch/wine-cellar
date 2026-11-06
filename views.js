@@ -193,7 +193,7 @@ function viewInsights() {
   out.push(insSection('Value over time', '', `${hist.length ? valueChart(hist) : ''}
     <p class="small muted" style="margin:${hist.length ? '4px' : '0'} 0 0">${hist.length < 2 ? 'The app stores the value of your cellar once a month, so this curve grows month by month.' : 'Stored once a month, in your current currency.'}</p>
     <p class="small muted" style="margin:12px 0 0">Bottles in stock at the end of each month</p>${columns(bottlesByMonth(), 'var(--gold)')}`));
-  out.push(`<section class="ins-sec discover-card"><div class="sec-head"><h2>Discover new wines</h2></div>
+  out.push(`<section class="ins-sec discover-card"><div class="sec-head"><h2>New wines for your cellar</h2></div>
     <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
     <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a>
     ${S.wishlist.length ? `<a class="small" href="#/discover" style="text-align:center">Wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</a>` : ''}</section>`);
@@ -259,11 +259,20 @@ function viewTop() {
   const lead = `<header class="top"><h1 class="title">Top rated</h1><div class="top-actions">${btn}</div></header>
     ${filters}
     <div class="toggle"><button class="${U.topMode === 'mine' ? 'on' : ''}" data-act="top-mode" data-v="mine">My rating</button><button class="${U.topMode === 'ext' ? 'on' : ''}" data-act="top-mode" data-v="ext">External</button></div>
-    ${U.topFinished ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:2px">${FIN}<span style="margin-left:4px">marks a finished wine with no bottles left</span></p>` : ''}`;
+    ${U.topFinished ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:2px">${FIN}<span style="margin-left:4px">marks a finished wine with no bottles left</span></p>` : ''}
+    ${U.topDisc ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:6px">${DISC}<span>a wine you tasted out, never in your cellar</span></p>` : ''}`;
   return `<main class="screen has-nav">${lead}<div id="top-list">${topBody()}</div></main>${nav('top')}`;
 }
 
+/* like Show finished wines in the cellar: links below the list to add finished wines and discoveries */
+function topMoreHtml() {
+  const fin = finishedWines().length, disc = discWines().length;
+  return `${fin ? `<button class="btn ghost" data-act="top-toggle-finished">${U.topFinished ? 'Hide' : 'Show'} finished wines (${fin})</button>` : ''}${disc ? `<button class="btn ghost" data-act="top-toggle-disc">${U.topDisc ? 'Hide' : 'Show'} discoveries (${disc})</button>` : ''}`;
+}
 function topBody() {
+  return topList() + topMoreHtml();
+}
+function topList() {
   const pool = topPool().filter(w => passes('top', w));
   const filtered = activeCount('top') > 0;
   if (U.topMode === 'mine') {
@@ -286,8 +295,9 @@ function topBody() {
 function topRow(w, i, visual, score, sub) {
   const s = streetOf(w);
   const subLine = [sub, s !== null ? `Street ${money(s)}` : ''].filter(Boolean).join(' · ');
-  return `<a class="journal-row${w.count === 0 ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
-    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}${w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
+  const disc = isDisc(w);
+  return `<a class="journal-row${w.count === 0 && !disc ? ' finished' : ''}" href="#/wine/${encodeURIComponent(w.id)}" style="align-items:center"><span class="rank">${i + 1}</span>${thumbHtml(w, true)}
+    <div class="row-text" style="gap:5px"><div class="between"><span class="row-title">${flagOf(w)}${esc(wineTitle(w))} ${esc(w.vintage)}${disc ? DISC : w.count === 0 ? FIN : ''}</span>${w.count > 0 ? `<span class="muted small" style="flex:none">${w.count} btl</span>` : ''}</div>${visual}${subLine ? `<span class="muted tiny ellipsis">${esc(subLine)}</span>` : ''}</div>
     <div class="score">${score}</div></a>`;
 }
 
@@ -305,6 +315,11 @@ function peopleLine(r) {
 function entryMeta(r, withLoc = true) {
   const parts = [];
   if (r.qty > 1) parts.push(`${r.qty} bottles`);
+  if (r.type === 'Discovery' && r.price !== null) {
+    // what you paid, where, and against the shop price at the time
+    const shop = r.shopRef ? convTo(r.shopRef.v, r.shopRef.cur, r.priceCur) : null, f = shop ? r.price / shop : null;
+    parts.push(`paid ${priceText(r.price, r.priceCur)}${r.venue === 'restaurant' ? ' at a restaurant' : r.venue === 'shop' ? ' in a shop' : ''}${f ? r.venue === 'shop' ? `, ${f >= 1 ? `${Math.round((f - 1) * 100)}% above` : `${Math.round((1 - f) * 100)}% below`} the shop price` : `, ${fmtNum(f, 1)}× the shop price` : ''}`);
+  }
   if (r.type === 'Purchase' && r.retailer) parts.push(esc(r.retailer));
   if ((r.type === 'Purchase' || r.type === 'Sale') && r.price !== null) {
     const p = `${priceText(r.price, r.priceCur)}${r.qty > 1 ? ' each' : ''}`;
@@ -338,7 +353,7 @@ function journalEntries() {
 
 function entryBody(r) {
   const ppl = peopleLine(r), meta = entryMeta(r);
-  return `${r.occasion ? `<span class="small">${esc(r.occasion)}</span>` : ''}${ppl ? `<span class="small muted">${ppl}</span>` : ''}${meta ? `<span class="small muted">${meta}</span>` : ''}${r.food ? `<span class="tiny" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small muted ellipsis">${esc(r.note)}</span>` : ''}`;
+  return `${r.occasion ? `<span class="small">${r.type === 'Discovery' ? 'At ' : ''}${esc(r.occasion)}</span>` : ''}${ppl ? `<span class="small muted">${ppl}</span>` : ''}${meta ? `<span class="small muted">${meta}</span>` : ''}${r.food ? `<span class="tiny" style="color:var(--food)">${esc(r.food)}</span>` : ''}${r.note ? `<span class="small muted ellipsis">${esc(r.note)}</span>` : ''}`;
 }
 
 function journalList() {
@@ -402,6 +417,17 @@ function stockHtml(w) {
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
     ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}</section>`;
+}
+
+/* where and when you tasted it out, with your rating going to the wine; for a discovery also how to bring it into the cellar */
+function discoveryHtml(w) {
+  const list = S.removals.filter(r => r.wineId === w.id && r.dir === 'taste').sort((a, b) => b.date.localeCompare(a.date));
+  if (!list.length && !isDisc(w)) return '';
+  const busy = DISC_BUSY.has(w.id) ? `<div class="banner"><span class="spinner"></span>Filling in details, drinking window, taste profile and background…</div>` : '';
+  const rows = list.map(r => `<button class="hist as-btn" data-act="edit-entry" data-id="${esc(r.id)}" aria-label="Edit discovery from ${esc(fmtDate(r.date))}"><span class="hist-head"><span class="tiny muted">${esc(fmtDate(r.date))}</span>${typeBadge(r.type)}</span>${entryBody(r)}</button>`).join('');
+  return `<section style="gap:6px"><div class="sec-head"><h2>${isDisc(w) ? 'Discovered' : 'Discoveries'}</h2>${isDisc(w) ? `<button class="link-btn" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button>` : ''}</div>
+    ${busy}${rows}
+    ${isDisc(w) ? '<p class="muted tiny" style="margin:4px 0 0">A wine you tasted out, not in your cellar. Add bottles if you buy it, then it moves to the cellar.</p>' : ''}</section>`;
 }
 
 function valueHtml(w) {
@@ -491,10 +517,10 @@ function viewWine(id) {
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type].filter(Boolean).join(' · ');
   return `<main class="screen detail">
-    <div class="detail-top"><a class="back" href="#/cellar">${ICON.back}Cellar</a><a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
+    <div class="detail-top">${isDisc(w) ? `<a class="back" href="#/top">${ICON.back}Top rated</a>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
-    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
-    ${stockHtml(w)}
+    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
+    ${isDisc(w) ? discoveryHtml(w) : stockHtml(w)}
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
       ${p ? `${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div><p class="muted tiny" style="margin:0">${windowText(w)}</p>`
@@ -511,15 +537,16 @@ function viewWine(id) {
     </section>
     ${valueHtml(w)}
     ${offerHtml(w)}
-    <section style="gap:4px">${secHead(ICON.cart, 'Purchases')}${purchasesHtml(w, false)}</section>
+    ${isDisc(w) && !inEntries(w).length ? '' : `<section style="gap:4px">${secHead(ICON.cart, 'Purchases')}${purchasesHtml(w, false)}</section>`}
+    ${isDisc(w) ? '' : discoveryHtml(w)}
     ${aboutHtml(w)}
     ${profileHtml(w, editHref)}
-    <section style="gap:0">
+    ${isDisc(w) && !hist.length ? '' : `<section style="gap:0">
       <h2 style="margin-bottom:4px">Bottles removed</h2>
       ${hist.length ? hist.map(r => `<button class="hist as-btn" data-act="edit-entry" data-id="${esc(r.id)}" aria-label="Edit entry from ${esc(fmtDate(r.date))}"><span class="hist-head"><span class="tiny muted">${esc(fmtDate(r.date))}</span>${typeBadge(r.type)}</span>
         ${r.occasion ? `<span style="font-size:14px;font-weight:600">${esc(r.occasion)}</span>` : ''}${entryBody(Object.assign({}, r, { occasion: '' }))}</button>`).join('') + '<p class="muted tiny" style="margin:8px 0 0">Tap an entry to edit it.</p>'
         : '<p class="muted small" style="margin:0">No bottles removed yet.</p>'}
-    </section>
+    </section>`}
   </main>`;
 }
 

@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.21.5';
+const APP_VERSION = '2.23.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -80,6 +80,7 @@ const HEART_PATH = 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 1
 const HEART_ON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${HEART_PATH}"/></svg>`;
 const HEART_SM = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-left:3px;vertical-align:-1px"><path d="${HEART_PATH}"/></svg>`;
 const FIN = `<span class="fin" title="Finished" aria-label="Finished">${ICON.bottle}</span>`;
+const DISC = '<span class="disc-tag">Discovery</span>';
 const GIFT_MARK = `<span class="gift-mark" title="Gift received" aria-label="Gift received">${ICON.gift}</span>`;
 const STAR_PATH = 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z';
 
@@ -91,6 +92,8 @@ const str = v => (v === null || v === undefined ? '' : String(v));
 const numOrNull = v => (v === '' || v === null || v === undefined || isNaN(Number(v)) ? null : Number(v));
 const splitList = v => (Array.isArray(v) ? v : String(v || '').split(',')).map(s => String(s).trim()).filter(Boolean);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* a discovery: a wine tasted out, for example in a restaurant, never in the cellar */
+const isDisc = w => !!w && w.origin === 'discovery';
 const newId = (p = 'w') => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const sysInfo = k => SYSTEMS.find(s => s.key === k) || { key: k, max: 100 };
@@ -116,7 +119,7 @@ const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
-  winFilter: 'All', topMode: 'mine', topSys: null, topFinished: false, addRatingOpen: false,
+  winFilter: 'All', topMode: 'mine', topSys: null, topFinished: false, topDisc: false, addRatingOpen: false,
   jSearch: '', jFav: false, locMove: null
 };
 let D = null;   // add or edit draft
@@ -226,6 +229,7 @@ function normWine(w) {
     labelFileId: str(w.labelFileId),
     thumb: str(w.thumb),
     profile: typeof parseProfile === 'function' ? parseProfile(w.profile) : null,
+    origin: str(w.origin) === 'discovery' ? 'discovery' : '',
     createdAt: str(w.createdAt),
     updatedAt: str(w.updatedAt)
   };
@@ -316,8 +320,10 @@ function normRemoval(r) {
   return {
     id: str(r.id), wineId: str(r.wineId), date: str(r.date).slice(0, 10), type: str(r.type) || 'Other',
     occasion: str(r.occasion), people: str(r.people), hearts: str(r.hearts), food: str(r.food), note: str(r.note), wineName: str(r.wineName),
-    dir: str(r.dir) === 'in' ? 'in' : 'out', qty: Math.max(1, Math.round(Number(r.qty) || 1)), loc: str(r.loc),
-    price: numOrNull(r.price), priceCur: str(r.priceCur) || cur(), retailer: str(r.retailer)
+    dir: ['in', 'taste'].includes(str(r.dir)) ? str(r.dir) : 'out', qty: str(r.dir) === 'taste' ? 0 : Math.max(1, Math.round(Number(r.qty) || 1)), loc: str(r.loc),
+    price: numOrNull(r.price), priceCur: str(r.priceCur) || cur(), retailer: str(r.retailer),
+    venue: ['restaurant', 'shop', 'other'].includes(str(r.venue)) ? str(r.venue) : '',
+    shopRef: (() => { const x = parseJSON(r.shopRef, null); return x && Number(x.v) > 0 ? { v: Number(x.v), cur: str(x.cur) || cur() } : null; })()
   };
 }
 
@@ -494,6 +500,7 @@ const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gif
   : t === 'Sale' ? `<span class="badge sale">${ICON.cash}Sale</span>`
   : t === 'Purchase' ? `<span class="badge purchase">${ICON.cart}Purchase</span>`
   : t === 'Added' ? '<span class="badge">Added</span>'
+  : t === 'Discovery' ? `<span class="badge discovery">${ICON.spark}Discovery</span>`
   : `<span class="badge${t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`);
 
 function nav(active) {

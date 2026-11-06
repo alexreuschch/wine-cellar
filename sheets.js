@@ -52,6 +52,7 @@ function placeHint() {
 function openEditEntry(id, record) {
   const r = S.removals.find(x => x.id === id);
   if (!r) return;
+  if (r.dir === 'taste') { openDiscoveryEdit(r); return; }
   const hearts = namesOf(r.hearts).map(lc);
   const site = r.retailer ? str((S.retailers.find(x => lc(x.name) === lc(r.retailer)) || {}).website) : '';
   RS = {
@@ -76,6 +77,7 @@ const qtyMax = () => {
 function renderSheet() {
   const root = $('#sheet-root');
   if (!RS) { root.innerHTML = ''; return; }
+  if (RS.kind === 'taste') { root.innerHTML = tasteSheetHtml(); setupTasteRating(); return; }
   const w = wineById(RS.wineId);
   const r = RS.id ? S.removals.find(x => x.id === RS.id) : null;
   const name = w ? `${wineTitle(w)} ${w.vintage}`.trim() : ((r && r.wineName) || 'Deleted wine');
@@ -257,6 +259,7 @@ function localStock(w, place, delta) {
 }
 
 async function saveSheet(withDetails) {
+  if (RS && RS.kind === 'taste') { saveDiscovery(); return; }
   const st = RS;
   const w = wineById(st.wineId);
   if (st.mode === 'add' && !st.loc) { toast(st.kind === 'out' ? 'Choose where the bottle comes from.' : 'Choose where the bottles are stored.'); return; }
@@ -336,7 +339,7 @@ async function saveRetailerSite(name, website) {
 function startDelete() {
   const r = S.removals.find(x => x.id === RS.id);
   const w = r && wineById(r.wineId);
-  if (!r || !w || RS.mode === 'record') { deleteEntryOnly(); return; }
+  if (!r || !w || RS.mode === 'record' || r.dir === 'taste') { deleteEntryOnly(); return; }
   if (r.dir === 'out') {
     const loc = S.locations.find(l => lc(l) === lc(r.loc)) || '';
     const e = loc ? w.stock.filter(x => lc(x.loc) === lc(loc)).sort((x, y) => y.n - x.n)[0] : null;
@@ -458,4 +461,162 @@ function refreshView() {
   if (r.p === 'top' && document.activeElement && document.activeElement.dataset && document.activeElement.dataset.input === 'rng') return;
   render();
   window.scrollTo(0, y);
+}
+
+/* ------------------------------------------------------------ discoveries: a wine tasted out, rated and kept with its background */
+
+const DISC_BUSY = new Set();
+/* the same wine already in the cellar, the journal or the discoveries: same producer, name and vintage */
+const sameWineKey = x => `${normName(`${str(x.producer)} ${str(x.name)}`)}|${str(x.vintage).trim()}`;
+const findSameWine = x => S.wines.find(w => sameWineKey(w) === sameWineKey(x)) || null;
+
+/** From Will I like it? or the wine list: rate the wine you are tasting and keep it as a discovery. */
+function openDiscovery(info, ctx = {}) {
+  if (!info || !(str(info.producer).trim() || str(info.name).trim())) { toast('The wine could not be identified. Add it with the plus button in the cellar.'); return; }
+  const same = findSameWine(info);
+  RS = {
+    kind: 'taste', mode: 'add', wineId: same ? same.id : null, info, rating: same ? same.myRating : null, ratingInit: same ? same.myRating : null,
+    date: todayISO(), occasion: str(ctx.place), food: str(ctx.food), note: '', price: ctx.price ? String(ctx.price) : '', priceCur: ctx.priceCur || cur(),
+    venue: str(ctx.venue), shopRef: ctx.shopRef || null, offer: ctx.offer || null,
+    pp: newPicker('people', '')
+  };
+  renderSheet();
+}
+function openDiscoveryEdit(r) {
+  const w = wineById(r.wineId);
+  RS = {
+    kind: 'taste', mode: 'edit', id: r.id, wineId: r.wineId, info: null, rating: w ? w.myRating : null, ratingInit: w ? w.myRating : null,
+    date: r.date || todayISO(), occasion: r.occasion, food: r.food, note: r.note, price: r.price === null ? '' : String(r.price), priceCur: r.priceCur || cur(),
+    venue: r.venue, shopRef: r.shopRef, offer: null,
+    pp: newPicker('people', r.people)
+  };
+  renderSheet();
+}
+
+function tasteSheetHtml() {
+  const w = wineById(RS.wineId), x = RS.info || {};
+  const name = w ? `${wineTitle(w)} ${w.vintage}`.trim() : [x.producer, x.name, x.vintage].filter(Boolean).join(' ');
+  const sub = w ? (isDisc(w) ? 'Already one of your discoveries' : w.count > 0 ? `In your cellar · ${w.count} btl` : 'Already in your journal') : [x.region, x.type].filter(Boolean).join(' · ');
+  const picker = `<div class="field"><span>With</span>
+      <div id="people-chips" class="chips">${peopleChipsHtml()}</div>
+      <input id="people-input" data-input="people" aria-label="With" placeholder="Type a name" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(RS.pp.typing)}">
+      <div id="people-sugg">${peopleSuggHtml()}</div></div>`;
+  const buttons = RS.mode === 'edit'
+    ? `<div class="grid2"><button class="btn danger" data-act="rs-delete">Delete entry</button><button class="btn primary" data-act="rs-save">Save</button></div>`
+    : `<div class="grid2"><button class="btn" data-act="sheet-close">Cancel</button><button class="btn primary" data-act="rs-save">Save discovery</button></div>`;
+  return `<div class="sheet-backdrop" data-act="sheet-close"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="grab"></div>
+    <div style="display:flex;gap:12px;align-items:center">${w ? thumbHtml(w) : `<div class="thumb thumb-ph">${ICON.spark}</div>`}<div style="flex:1;min-width:0"><h2 id="sheet-title" style="font-size:18px;font-weight:600">${RS.mode === 'edit' ? 'Edit discovery' : 'Your discovery'}</h2><p class="muted small ellipsis" style="margin:2px 0 0">${esc(name)}${sub ? ` · ${esc(sub)}` : ''}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
+    <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${RS.rating === null ? ' none' : ''}" id="ds-val">${RS.rating === null ? 'Not rated' : RS.rating + '%'}</span></div>
+      <div class="rating-bar" id="ds-bar">${segsHtml(RS.rating, 30, 'lg')}</div>
+      <div class="scale"><span>0</span><span>50</span><span>100</span></div>
+      <div class="rating-ctl"><button data-act="ds-rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="ds-rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div></div>
+    <div class="field"><span>Where were you?</span><div class="toggle three">${['restaurant', 'shop', 'other'].map(v => `<button class="${RS.venue === v ? 'on' : ''}" data-act="ds-venue" data-v="${v}">${{ restaurant: 'Restaurant', shop: 'Shop', other: 'Elsewhere' }[v]}</button>`).join('')}</div></div>
+    <div class="grid2"><label class="field">Date<input type="date" name="date" data-input="rs" value="${esc(RS.date)}"></label>
+      <label class="field">Price paid ${esc(RS.priceCur)}<input name="price" data-input="rs" inputmode="decimal" placeholder="Optional" value="${esc(RS.price)}"></label></div>
+    <label class="field">Place<input name="occasion" data-input="rs" placeholder="${RS.venue === 'shop' ? 'Name of the shop' : RS.venue === 'restaurant' ? 'Name of the restaurant' : 'Winery, tasting or at friends'}" value="${esc(RS.occasion)}"></label>
+    ${picker}
+    <label class="field">Food<input name="food" data-input="rs" placeholder="Duck breast with cherry sauce" value="${esc(RS.food)}"></label>
+    <label class="field">Note<textarea name="note" data-input="rs" rows="2" placeholder="How it tasted, anything to remember">${esc(RS.note)}</textarea></label>
+    ${RS.mode === 'add' ? `<p class="muted tiny" style="margin:0">${w ? 'Your rating goes to this wine and the tasting to your journal.' : 'Kept as a discovery, not in your cellar. Details, drinking window, taste profile and background are filled in with AI, about 3 cents.'}</p>` : ''}
+    ${buttons}
+  </div>`;
+}
+function setTasteRating(v) {
+  if (!RS || RS.kind !== 'taste') return;
+  RS.rating = v === null ? null : clamp(Math.round(v), 0, 100);
+  const val = $('#ds-val'), bar = $('#ds-bar');
+  if (val) { val.textContent = RS.rating === null ? 'Not rated' : RS.rating + '%'; val.classList.toggle('none', RS.rating === null); }
+  if (bar) bar.innerHTML = segsHtml(RS.rating, 30, 'lg');
+}
+function setupTasteRating() {
+  const bar = $('#ds-bar');
+  if (!bar) return;
+  let start = null, drag = false;
+  const setX = x => { const r = bar.getBoundingClientRect(); setTasteRating(clamp((x - r.left) / r.width, 0, 1) * 100); };
+  bar.addEventListener('pointerdown', e => { start = { x: e.clientX, y: e.clientY }; drag = false; });
+  bar.addEventListener('pointermove', e => {
+    if (!start) return;
+    const dx = Math.abs(e.clientX - start.x), dy = Math.abs(e.clientY - start.y);
+    if (!drag && dx > 6 && dx > dy) { drag = true; try { bar.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } }
+    if (drag) setX(e.clientX);
+  });
+  bar.addEventListener('pointerup', e => { if (start && !drag) setX(e.clientX); start = null; drag = false; });
+  bar.addEventListener('pointercancel', () => { start = null; drag = false; });
+}
+
+async function saveDiscovery() {
+  const st = RS;
+  if (st.pp.typing.trim()) addPerson(st.pp.typing);
+  if (!st.venue) { toast('Choose Restaurant, Shop or Elsewhere.'); return; }
+  if (str(st.price).trim() && parseMoney(st.price) === null) { toast('Prices need a number, for example 85.50.'); return; }
+  const price = str(st.price).trim() ? parseMoney(st.price) : '';
+  const fields = {
+    type: 'Discovery', dir: 'taste', qty: 0, date: st.date || todayISO(), occasion: str(st.occasion).trim(), people: st.pp.people.map(p => p.name).join(', '), hearts: '',
+    food: str(st.food).trim(), note: str(st.note).trim(), price, priceCur: price === '' ? '' : st.priceCur, loc: '', retailer: '',
+    venue: st.venue || '', shopRef: st.shopRef ? JSON.stringify(st.shopRef) : ''
+  };
+  closeSheet();
+  let w = wineById(st.wineId);
+  const isNew = !w;
+  if (isNew) {
+    const x = st.info;
+    // the shop price found while checking it becomes its street price, without another lookup
+    const street = st.shopRef ? JSON.stringify({ v: st.shopRef.v, cur: st.shopRef.cur, date: todayISO(), src: st.offer ? st.offer.shop : 'Sommelier', conf: st.offer ? 'high' : 'medium' }) : '';
+    w = normWine({ id: newId('w'), producer: x.producer, name: x.name, vintage: x.vintage, type: x.type, region: x.region, grapes: x.grapes, origin: 'discovery', stock: '[]', myRating: st.rating, street, offer: st.offer ? JSON.stringify(st.offer) : '' });
+  }
+  const entry = Object.assign({ id: st.id || newId('t'), wineId: w.id, wineName: fullName(w) }, fields);
+  const rated = st.rating !== st.ratingInit;
+  const prev = { rating: w.myRating, entries: S.removals.slice() };
+  if (isNew) S.wines.push(w);
+  if (rated) w.myRating = st.rating;
+  S.removals = S.removals.filter(r => r.id !== entry.id).concat([normRemoval(entry)]);
+  persist();
+  if (st.mode === 'add') go('#/wine/' + encodeURIComponent(w.id)); else refreshView();
+  try {
+    if (isNew) {
+      const d = await api('saveWine', { wine: serialWine(w), entries: [entry] });
+      upsertWine(normWine(d.wine));
+      (d.entries || []).forEach(e => { S.removals = S.removals.filter(r => r.id !== e.id).concat([normRemoval(e)]); });
+    } else {
+      if (rated) upsertWine(normWine(await api('update', { id: w.id, fields: { myRating: st.rating === null ? '' : st.rating } })));
+      const saved = normRemoval(await api('saveEntry', { entry }));
+      S.removals = S.removals.filter(r => r.id !== saved.id).concat([saved]);
+    }
+    persist();
+    refreshView();
+  } catch (e) {
+    if (isNew) S.wines = S.wines.filter(x => x.id !== w.id); else w.myRating = prev.rating;
+    S.removals = prev.entries;
+    persist();
+    if (isNew && location.hash.includes(w.id)) history.back(); else refreshView();
+    toast('Not saved: ' + e.message);
+    return;
+  }
+  if (st.mode === 'add' && (isNew || missingParts(wineById(w.id)).length)) completeDiscovery(w.id);
+}
+
+/** Details, drinking window, taste profile and background, as Update wine info with AI does in Edit. */
+async function completeDiscovery(id) {
+  DISC_BUSY.add(id);
+  refreshView();
+  let msg = '';
+  try {
+    const d = await api('complete', { ids: [id] });
+    (d.wines || []).forEach(r => upsertWine(normWine(r)));
+    persist();
+    if ((d.failed || []).length) msg = `Details could not be completed: ${aiErr(d.failed[0].error || 'no answer')} Use Update wine info with AI in Edit.`;
+    const w = wineById(id);
+    if (w) await fillInfos([w]);
+  } catch (e) { msg = /Unknown action/i.test(e.message) ? 'This needs the new Code.gs.' : `Details could not be completed: ${aiErr(e.message)}`; }
+  DISC_BUSY.delete(id);
+  refreshView();
+  toast(msg || 'Discovery complete: details, taste profile and background are filled in.');
+}
+
+/* keep what was typed before the sheet is drawn again */
+function saveTasteInputs() {
+  document.querySelectorAll('.sheet [data-input=rs]').forEach(el => { RS[el.name] = el.value; });
+  const p = $('#people-input'); if (p) RS.pp.typing = p.value;
 }
