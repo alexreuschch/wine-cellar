@@ -58,26 +58,39 @@ function convTo(v, from, to) {
   const r = rates();
   return r[from] && r[to] ? Number(v) / r[from] * r[to] : null;
 }
-/* the price you saw next to the price in local shops */
+/* a price shown in the currency of the trip, with your own currency behind it */
+function tripPrice(v, from, tripCur) {
+  const c = from !== tripCur ? convTo(v, from, tripCur) : null;
+  return c !== null ? dualPrice(Math.round(c * 100) / 100, tripCur, c >= 1000 ? 0 : 2) : dualPrice(v, from);
+}
+/* shop with flag and country; for a shop abroad also its own price */
+function shopLineHtml(o, tripCur, abroad) {
+  const land = o.country ? (SHOP_COUNTRIES[o.country] || o.country) : '';
+  const own = o.cur !== tripCur ? ` · ${o.cur} ${fmtNum(o.v, 2)}` : '';
+  return `<div class="wl-shop">${flagOfCode(o.country)}<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)}${abroad && land ? `, ${esc(land)}` : ''}${esc(own)}${o.vintage ? `, vintage ${esc(o.vintage)}` : ''}</a>${ICON.link}</div>`;
+}
+/* the price you saw next to the price in local shops, or a reference from abroad */
 function priceCheckHtml(a) {
   if (!a.wine || !a.country) return '';
-  const o = a.offer, where = SHOP_COUNTRIES[a.country] || a.country;
+  const where = SHOP_COUNTRIES[a.country] || a.country, tripCur = countryCur(a.country);
+  const o = a.offer || a.worldOffer, abroad = !a.offer && !!a.worldOffer;
   const rows = [];
   if (a.price) rows.push(`<div class="row"><span>${a.priceWhere === 'restaurant' ? 'Your price, restaurant' : 'Your price'}</span><b>${esc(dualPrice(a.price, a.priceCur))}</b></div>`);
-  if (o) rows.push(`<div class="row"><span>Cheapest shop in ${esc(where)}</span><b>${esc(dualPrice(o.v, o.cur))}</b></div>`);
+  if (o) rows.push(`<div class="row"><span>${abroad ? 'Reference price abroad' : `Cheapest shop in ${esc(where)}`}</span><b>${esc(tripPrice(o.v, o.cur, tripCur))}</b></div>`);
   let verdict = '';
   if (o && a.price) {
     const shop = convTo(o.v, o.cur, a.priceCur);
     if (shop) {
-      const f = a.price / shop;
+      const f = a.price / shop, ref = abroad ? 'the reference price abroad' : 'the cheapest shop';
       verdict = a.priceWhere === 'restaurant'
-        ? `<p class="small" style="margin:0">Markup <b class="${f <= 2.2 ? 'up' : f > 3 ? 'down' : ''}">${fmtNum(f, 1)}×</b> over the shop price. Restaurants usually ask 2 to 3 times.</p>`
-        : `<p class="small" style="margin:0"><b class="${f <= 1.05 ? 'up' : f > 1.2 ? 'down' : ''}">${f >= 1 ? `${Math.round((f - 1) * 100)}% above` : `${Math.round((1 - f) * 100)}% below`}</b> the cheapest shop.</p>`;
+        ? `<p class="small" style="margin:0">Markup <b class="${f <= 2.2 ? 'up' : f > 3 ? 'down' : ''}">${fmtNum(f, 1)}×</b> over ${ref}. Restaurants usually ask 2 to 3 times.</p>`
+        : `<p class="small" style="margin:0"><b class="${f <= 1.05 ? 'up' : f > 1.2 ? 'down' : ''}">${f >= 1 ? `${Math.round((f - 1) * 100)}% above` : `${Math.round((1 - f) * 100)}% below`}</b> ${ref}.</p>`;
     }
   }
-  const shopLine = o ? `<div class="wl-shop">${flagOfCode(o.country)}<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)}${o.vintage ? `, vintage ${esc(o.vintage)}` : ''}</a>${ICON.link}</div>` : '';
-  if (!rows.length) return `<div class="price-check"><p class="tiny muted" style="margin:0">No online shop in ${esc(where)} sells this wine right now.</p></div>`;
-  return `<div class="price-check">${rows.join('')}${verdict}${shopLine}${o ? '' : `<p class="tiny muted" style="margin:0">No online shop in ${esc(where)} sells this wine right now.</p>`}</div>`;
+  const none = `No online shop in ${esc(where)} sells this wine right now`;
+  const note = abroad ? `<p class="tiny muted" style="margin:0">${none}. The reference comes from a shop abroad, converted to ${esc(tripCur)}.</p>`
+    : !o ? `<p class="tiny muted" style="margin:0">${none}, and no shop abroad was found either.</p>` : '';
+  return `<div class="price-check">${rows.join('')}${verdict}${o ? shopLineHtml(o, tripCur, abroad) : ''}${note}</div>`;
 }
 
 function sommAnswerHtml(t) {
@@ -200,16 +213,17 @@ function listPickHtml(p, i, cur0) {
   // prices in the currency of the wine list, with your currency below
   const price = v => (v ? `${cur0} ${fmtNum(v, v % 1 ? 2 : 0)}` : '');
   const mine = v => { const c = v && cur0 !== cur() ? convTo(v, cur0, cur()) : null; return c ? `<small>≈ ${esc(money(c, 0))}</small>` : ''; };
-  const o = p.offer;
+  const o = p.offer || p.worldOffer, abroad = !p.offer && !!p.worldOffer;
   return `<div class="cons-card wl-card">
     <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${cls}">${esc(label)}</span>${p.page ? `<span class="small muted">page ${p.page}</span>` : ''}</div>
     <div><p class="cons-title">${esc(wishTitle(p))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(p) ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</p></div>
     <div class="wl-prices">
       <div><span>On the list</span><b>${esc(price(p.listPrice) || 'N/A')}</b>${mine(p.listPrice)}</div>
-      <div><span>${o ? 'In shops' : 'Shop, estimate'}</span><b>${esc(price(p.shopPrice) || 'N/A')}</b>${mine(p.shopPrice)}</div>
+      <div><span>${abroad ? 'Shop abroad' : o ? 'In shops' : 'Shop, estimate'}</span><b>${esc(price(p.shopPrice) || 'N/A')}</b>${mine(p.shopPrice)}</div>
       <div><span>Markup</span><b class="${p.markup && avg ? (p.markup < avg ? 'up' : p.markup > avg * 1.1 ? 'down' : '') : ''}">${p.markup ? `${fmtNum(p.markup, 1)}×` : 'N/A'}</b>${avg ? `<small>list ${fmtNum(avg, 1)}×</small>` : ''}</div>
     </div>
-    ${o ? `<div class="wl-shop">${flagOfCode(o.country)}<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)}${o.cur !== cur0 ? `, ${esc(o.cur)} ${esc(fmtNum(o.v, 2))}` : ''}${o.vintage && o.vintage !== String(p.vintage) ? `, vintage ${esc(o.vintage)}` : ''}</a>${ICON.link}</div>` : `<p class="tiny muted" style="margin:0">No online shop in ${esc(SHOP_COUNTRIES[WL.result.country] || 'this country')} found, the shop price is an estimate.</p>`}
+    ${o ? shopLineHtml(o, cur0, abroad) : ''}
+    ${abroad ? `<p class="tiny muted" style="margin:0">No online shop in ${esc(SHOP_COUNTRIES[WL.result.country] || 'this country')} sells this wine. Reference price from abroad, converted to ${esc(cur0)}.</p>` : !o ? `<p class="tiny muted" style="margin:0">No online shop found, in ${esc(SHOP_COUNTRIES[WL.result.country] || 'this country')} or abroad. The shop price is an AI estimate.</p>` : ''}
     ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
     ${p.food ? `<p class="small cons-value" style="margin:0">${ICON.glass}<span>${esc(p.food)}</span></p>` : ''}
     ${p.fit !== null && p.fit !== undefined ? `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${p.fit}%</b></div>${segsHtml(p.fit, 12)}</div>` : ''}

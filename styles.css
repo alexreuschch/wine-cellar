@@ -605,4 +605,6 @@ div.ins-leg { cursor: default; }
 .price-check .row span:first-child { color: var(--muted); }
 .price-check .row b { text-align: right; font-variant-numeric: tabular-nums; }
 .wl-shop { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); min-width: 0; }
-.wl-shop a { color: var(--gold); text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-shop { align-items: flex-start; }
+.wl-shop a { color: var(--gold); text-decoration: none; min-width: 0; }
+.wl-shop svg { flex: none; margin-top: 2px; }

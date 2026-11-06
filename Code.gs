@@ -1052,6 +1052,24 @@ function findOffer_(wine, region, fresh) {
   return offer;
 }
 
+/** When no shop in the country sells a wine: one shop anywhere in the world as a price reference. */
+function worldOfferRequest_(wine, region) {
+  var prompt = 'Find an online shop anywhere in the world that currently sells this wine, as a price reference per 0.75 l bottle: ' + wine + (region ? ' (' + region + ')' : '') + '. ' +
+    'Prefer shops in the country where the wine is made or in large wine markets, and the vintage given; if no shop sells it, take the closest vintage of the same wine and report it. ' +
+    'Ignore auctions, marketplaces of private sellers and offers that are sold out. The link must be the product page of this wine at that shop, taken from your search results. ' +
+    'Return ONLY a JSON object, no other text: {"shop": "shop name", "country": "two letter ISO code of the country where the shop is based", "price": number per bottle, "currency": "three letter ISO code", "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
+    'If you find no offer, return {"shop": null}.';
+  return { model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL, max_tokens: 3000, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }], messages: [{ role: 'user', content: prompt }] };
+}
+function worldOfferFrom_(res) {
+  var o = offerFrom_(res);
+  if (!o) return null;
+  o.for = 'WW'; o.area = 'Worldwide'; o.shipping = null; o.freeFrom = null;
+  if (!o.country) o.country = '';
+  return o;
+}
+function worldKey_(wine) { return 'WW|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim(); }
+
 // ---------------------------------------------------------------- offer memory (hidden tab Offers)
 
 var OFFER_DAYS = 14;     // found offers are reused for two weeks
@@ -1210,6 +1228,16 @@ function actionSommelier_(req) {
       rememberOffers_([[key, out.offer]]);
     }
     out.offer = out.offer || null;
+    if (!out.offer) {
+      var wk = worldKey_(out.wine);
+      var wm = offerMemory_([wk], true)[wk];
+      if (wm) out.worldOffer = wm.offer;
+      else {
+        try { out.worldOffer = worldOfferFrom_(callClaude_(worldOfferRequest_(out.wine, String(d.region || '')))); } catch (e) { out.worldOffer = null; }
+        rememberOffers_([[wk, out.worldOffer]]);
+      }
+      out.worldOffer = out.worldOffer || null;
+    }
   }
   return out;
 }
@@ -1276,11 +1304,21 @@ function actionWineList_(req) {
     var replies = callClaudeMany_(search.map(function (p) { return offerRequest_(label(p), p.region, 2); }));
     rememberOffers_(search.map(function (p, i) { var o = offerFrom_(replies[i]); found[offerKey_(label(p))] = o; return [offerKey_(label(p)), o]; }));
   }
+  picks.forEach(function (p) { var k = offerKey_(label(p)); p.offer = (mem[k] ? mem[k].offer : found[k]) || null; });
+  var missing = picks.filter(function (p) { return !p.offer; });
+  if (missing.length) {
+    var wmem = offerMemory_(missing.map(function (p) { return worldKey_(label(p)); }), true);
+    var wsearch = missing.filter(function (p) { return !wmem[worldKey_(label(p))]; });
+    var wfound = {};
+    if (wsearch.length && elapsed_() < TIME_HARD) {
+      var wreplies = callClaudeMany_(wsearch.map(function (p) { return worldOfferRequest_(label(p), p.region); }));
+      rememberOffers_(wsearch.map(function (p, i) { var o = worldOfferFrom_(wreplies[i]); wfound[worldKey_(label(p))] = o; return [worldKey_(label(p)), o]; }));
+    }
+    missing.forEach(function (p) { var k = worldKey_(label(p)); p.worldOffer = (wmem[k] ? wmem[k].offer : wfound[k]) || null; });
+  }
   picks.forEach(function (p) {
-    var k = offerKey_(label(p));
-    var o = mem[k] ? mem[k].offer : found[k];
+    var o = p.offer || p.worldOffer;
     p.estPrice = p.shopPrice;
-    p.offer = o || null;
     var fx = fxRates_().rates || {};
     if (o && p.listPrice && (o.cur === listCur || (fx[o.cur] && fx[listCur]))) {
       var inList = convert_(o.v, o.cur, listCur);
