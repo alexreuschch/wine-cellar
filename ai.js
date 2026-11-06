@@ -133,7 +133,7 @@ function sommAnswerHtml(t) {
   const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${hasFit ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
   const i = sommThread().indexOf(t);
-  const taste = check && t.a.wine && i >= 0 ? `<button class="btn ghost block" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button>` : '';
+  const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.info}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div>` : '';
   return `<div class="somm-a">${fit}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
@@ -248,7 +248,7 @@ function listPickHtml(p, i, cur0) {
   const o = p.offer || p.worldOffer, abroad = !p.offer && !!p.worldOffer;
   return `<div class="cons-card wl-card">
     <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${cls}">${esc(label)}</span>${p.page ? `<span class="small muted">page ${p.page}</span>` : ''}</div>
-    <div><p class="cons-title">${esc(wishTitle(p))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(p) ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</p></div>
+    <button class="prev-open" data-act="wl-preview" data-i="${i}"><span><span class="cons-title">${esc(wishTitle(p))}</span><span class="small muted">${countryOf(p) ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</span></span>${ICON.chevron}</button>
     <div class="wl-prices">
       <div><span>On the list</span><b>${esc(price(p.listPrice) || 'N/A')}</b>${mine(p.listPrice)}</div>
       <div><span>${abroad ? 'Shop abroad' : o ? 'In shops' : 'Shop, estimate'}</span><b>${esc(price(p.shopPrice) || 'N/A')}</b>${mine(p.shopPrice)}</div>
@@ -259,7 +259,7 @@ function listPickHtml(p, i, cur0) {
     ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
     ${p.food ? `<p class="small cons-value" style="margin:0">${ICON.glass}<span>${esc(p.food)}</span></p>` : ''}
     ${p.fit !== null && p.fit !== undefined ? `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${p.fit}%</b></div>${segsHtml(p.fit, 12)}</div>` : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="wl-taste" data-i="${i}">${ICON.spark}I'm tasting this</button><button class="link-btn" data-act="wl-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
+    <div class="cons-actions"><button class="link-btn" data-act="wl-preview" data-i="${i}">${ICON.info}More about this wine</button><button class="link-btn" data-act="wl-taste" data-i="${i}">${ICON.spark}I'm tasting this</button><button class="link-btn" data-act="wl-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
   </div>`;
 }
 
@@ -293,6 +293,8 @@ function listHtml() {
 
 async function listAnalyze() {
   if (WL.busy || !WL.pages.length) { if (!WL.pages.length) toast('Take a photo of at least one page first.'); return; }
+  // pages kept from an earlier session are only previews: a new analysis needs the photos again
+  if (WL.pages.some(pg => !pg.b64)) { WL.pages = WL.pages.filter(pg => pg.b64); toast('Take the photos of the wine list again for a new analysis.'); sommRefresh(false); return; }
   if (SOMM.listening) sommStopVoice();
   const ta = $('#somm-text');
   const food = str(ta ? ta.value : SOMM.draft).trim();
@@ -308,6 +310,7 @@ async function listAnalyze() {
     WL.error = /Unknown action/i.test(e.message) ? 'The wine list needs the new Code.gs. Update the script, then try again.' : aiErr(e.message);
   }
   WL.busy = false;
+  sommSave();
   sommRefresh(false);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -385,7 +388,30 @@ async function sommAsk(text, photo) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
   }
   SOMM.busy = false;
+  sommSave();
   sommRefresh(true);
+}
+
+/* the conversations, the wine checks and the last wine list stay after closing the app, until you tap New question, New wine or New wine list.
+   Photos are kept as small previews only; the full pages of a wine list are needed again only for a new analysis. */
+function sommSave() {
+  const turns = m => (SOMM.threads[m] || []).filter(t => t.a || t.error).slice(-20).map(t => ({ q: t.q, a: t.a, error: t.error, photo: t.photo || '', mode: t.mode }));
+  const data = { threads: { cellar: turns('cellar'), check: turns('check') }, mode: SOMM.mode, where: SOMM.where, whereAt: SOMM.whereAt,
+    wl: { result: WL.result, min: WL.min, max: WL.max, pages: WL.result ? WL.pages.map(p => ({ thumb: p.thumb })) : [] } };
+  try { localStorage.setItem('wc-somm', JSON.stringify(data)); }
+  catch (e) {
+    // full: keep the answers without the photo previews
+    try { data.threads.check.forEach(t => { t.photo = ''; }); data.wl.pages = []; localStorage.setItem('wc-somm', JSON.stringify(data)); } catch (e2) { /* kept for this session */ }
+  }
+}
+function sommLoad() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem('wc-somm') || 'null'); } catch (e) { d = null; }
+  if (!d) return;
+  ['cellar', 'check'].forEach(m => { if (d.threads && Array.isArray(d.threads[m])) SOMM.threads[m] = d.threads[m]; });
+  if (['cellar', 'check', 'list'].includes(d.mode)) SOMM.mode = d.mode;
+  if (d.where) { SOMM.where = d.where; SOMM.whereAt = Number(d.whereAt) || 0; }
+  if (d.wl) { WL.result = d.wl.result || null; WL.min = str(d.wl.min); WL.max = str(d.wl.max); WL.pages = Array.isArray(d.wl.pages) ? d.wl.pages : []; }
 }
 
 function sommStartVoice() {
@@ -582,7 +608,7 @@ function wishCardHtml(x) {
     <div><p class="cons-title">${esc(wishTitle(x))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(x) ? flagOf(x) : ''}${esc([x.region, x.type].filter(Boolean).join(' · '))}${x.qty ? ` · buy ${x.qty}` : ''}</p></div>
     ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
     ${x.offer ? offerLineHtml(x.offer, x.qty || 6) : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
+    <div class="cons-actions"><button class="link-btn" data-act="wish-preview" data-id="${esc(x.id)}">${ICON.info}More about this wine</button><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
       <button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
       <button class="icon-btn" data-act="wish-del" data-id="${esc(x.id)}" aria-label="Remove from wishlist">${ICON.trash}</button></div>
   </div>`;
@@ -695,8 +721,17 @@ function wishToCellar(id) {
   if (TYPES.includes(x.type)) { D.fields.type = x.type; D.touched.add('type'); }
   if (x.offer) { D.fields.price = priceInput(x.offer.v, x.offer.cur); D.acq.website = ''; }
   if (x.qty) D.stock[0].n = x.qty;
+  // what was loaded with More about this wine is taken over, so the AI is not asked twice
+  const pv = previewOf(x);
+  if (pv) {
+    ['region', 'grapes', 'taste'].forEach(k => { if (!D.fields[k] && pv[k]) D.fields[k] = pv[k]; });
+    if ((pv.tasteTags || []).length) D.fields.tasteTags = pv.tasteTags.join(', ');
+    if ((pv.pairings || []).length) D.fields.pairings = pv.pairings.join(', ');
+    ['drinkFrom', 'drinkUntil', 'peakFrom', 'peakUntil'].forEach(k => { if (pv[k]) D.fields[k] = String(pv[k]); });
+    if (pv.profile) D.profile = parseProfile(JSON.stringify(pv.profile)) || D.profile;
+  }
   go('#/add');
-  setTimeout(() => { if (D && D.fromWish === x.id) runAnalysis(); }, 50);
+  if (!pv) setTimeout(() => { if (D && D.fromWish === x.id) runAnalysis(); }, 50);
 }
 
 /* the wine you are tasting, from Will I like it? or the wine list, kept as a discovery */
@@ -713,3 +748,122 @@ function listTaste(i) {
   openDiscovery({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes },
     { venue: 'restaurant', place: res.restaurant || '', price: p.listPrice || '', priceCur: res.currency || cur(), food: res.food || '', shopRef: p.shopPrice ? { v: p.shopPrice, cur: res.currency || cur() } : null, offer: p.offer || null });
 }
+
+/* ---------------------------------------------------------------- more about a suggested wine, loaded only when you tap it */
+
+const PREV = { open: false, base: null, note: '', src: null, busy: false, error: '', details: null };
+const prevKey = x => lc([x.producer, x.name, x.vintage].map(v => str(v).trim()).join('|'));
+function prevCache() { try { return JSON.parse(localStorage.getItem('wc-preview') || '{}'); } catch (e) { return {}; } }
+const PREV_MEM = {};
+const previewOf = x => (x ? PREV_MEM[prevKey(x)] || prevCache()[prevKey(x)] || null : null);
+function prevRemember(x, d) {
+  PREV_MEM[prevKey(x)] = d;
+  try { const c = prevCache(); c[prevKey(x)] = d; const keys = Object.keys(c); if (keys.length > 60) delete c[keys[0]]; localStorage.setItem('wc-preview', JSON.stringify(c)); } catch (e) { /* kept for this session */ }
+}
+/* the suggested wine as a wine of the app, with what was loaded about it */
+function previewWine(base, d) {
+  const x = Object.assign({}, base, d || {});
+  return normWine({ id: 'preview', producer: x.producer, name: x.name, vintage: x.vintage, type: x.type, region: x.region, grapes: x.grapes, taste: x.taste,
+    tasteTags: (x.tasteTags || []).join(', '), pairings: (x.pairings || []).join(', '), drinkFrom: x.drinkFrom, drinkUntil: x.drinkUntil, peakFrom: x.peakFrom, peakUntil: x.peakUntil,
+    profile: x.profile ? JSON.stringify(x.profile) : '', stock: '[]' });
+}
+
+/** src: { kind: 'list' | 'check' | 'wish', i or id } tells which buttons the preview offers. */
+async function openPreview(base, note, src) {
+  if (!base || !(str(base.producer).trim() || str(base.name).trim())) { toast('The wine could not be identified.'); return; }
+  Object.assign(PREV, { open: true, base, note: note || '', src, busy: false, error: '', details: previewOf(base) });
+  U.aboutOpen = null;
+  renderPreview();
+  if (PREV.details) return;
+  if (S.version && S.version < 30) { PREV.error = 'More about a suggested wine needs the new Code.gs.'; renderPreview(); return; }
+  PREV.busy = true; renderPreview();
+  const key = prevKey(base);
+  try {
+    const d = await api('preview', { wine: { producer: base.producer, name: base.name, vintage: base.vintage, type: base.type, region: base.region, grapes: base.grapes } });
+    prevRemember(base, d.details);
+    if (PREV.open && prevKey(PREV.base) === key) PREV.details = d.details;
+  } catch (e) {
+    if (PREV.open && prevKey(PREV.base) === key) PREV.error = /Unknown action/i.test(e.message) ? 'More about a suggested wine needs the new Code.gs.' : `Could not load more: ${aiErr(e.message)}`;
+  }
+  if (PREV.open && prevKey(PREV.base) === key) { PREV.busy = false; renderPreview(); }
+}
+function closePreview() { PREV.open = false; renderPreview(); }
+
+function renderPreview() {
+  let root = $('#prev-root');
+  if (!root) { root = document.createElement('div'); root.id = 'prev-root'; const info = $('#info-root'); document.body.insertBefore(root, info || null); }
+  if (!PREV.open) { root.innerHTML = ''; return; }
+  const w = previewWine(PREV.base, PREV.details), d = PREV.details;
+  const c = countryOf(w);
+  const p = windowParts(w), s = statusOf(w);
+  const section = (title, body) => `<section style="gap:12px"><h2>${title}</h2>${body}</section>`;
+  const body = PREV.busy
+    ? `<div class="info-wait"><p class="somm-wait">Loading taste profile and drinking window<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Only for the wines you open, about 1 to 2 cents. Kept on your phone.</p></div>`
+    : PREV.error ? `<p class="small" style="margin:0;color:var(--danger)">${esc(PREV.error)}</p>`
+    : d ? `${p ? section('Drinking window', `<span class="small" style="color:${STATUS[s].c};font-weight:500;margin-top:-6px">${statusLine(w)}</span>${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>`) : ''}
+        <section style="gap:16px"><h2>Profile</h2>${grapeRingHtml(w)}${axesHtml(w)}${aromasHtml(w)}
+          ${w.taste ? `<div class="kv"><span>Taste</span><p style="line-height:1.5">${esc(w.taste)}</p></div>` : ''}
+          ${w.tasteTags.length ? `<div class="kv"><span>Style</span><p class="style-line">${w.tasteTags.map(t => esc(cap(t))).join(' · ')}</p></div>` : ''}
+          ${foodTilesHtml(w)}</section>
+        ${aboutHtml(w)}
+        <p class="tiny muted" style="margin:0">Written by AI from its knowledge. Tap region, style or producer for the background.</p>` : '';
+  const k = PREV.src && PREV.src.kind;
+  const wished = S.wishlist.some(x => wishKey(x) === wishKey(PREV.base));
+  const buttons = `<div class="grid2">${k === 'wish' ? `<button class="btn" data-act="prev-cellar">${ICON.plus}Add to cellar</button>` : `<button class="btn" data-act="prev-wish"${wished ? ' disabled' : ''}>${wished ? `${ICON.check}On your wishlist` : `${ICON.plus}Save to wishlist`}</button>`}<button class="btn primary" data-act="prev-taste">${ICON.spark}I'm tasting this</button></div>`;
+  root.innerHTML = `<div class="sheet-backdrop" data-act="prev-close"></div>
+  <div class="sheet prev-sheet" role="dialog" aria-modal="true" aria-label="${esc(wineTitle(w))}">
+    <div class="between" style="align-items:flex-start;gap:12px">
+      <div class="info-head"><span class="ab-ic">${c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : ICON.glass}</span><div><span class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em">${esc([w.type, w.vintage].filter(Boolean).join(' · ') || 'Wine')}</span><h2>${esc(wineTitle(w))}</h2><p class="small muted" style="margin:2px 0 0">${esc([w.producer !== wineTitle(w) ? w.producer : '', w.region].filter(Boolean).join(' · '))}</p></div></div>
+      <button class="icon-btn" data-act="prev-close" aria-label="Close">${ICON.x}</button>
+    </div>
+    ${PREV.note ? `<p class="small" style="margin:0">${PREV.note}</p>` : ''}
+    <div class="info-body prev-body">${body}</div>
+    ${buttons}
+  </div>`;
+}
+
+/* where a preview comes from: a pick of the wine list, the wine of Will I like it?, or the wishlist */
+function listPreview(i) {
+  const res = WL.result, p = res && res.picks[i];
+  if (!p) return;
+  openPreview({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes }, esc(p.why || ''), { kind: 'list', i });
+}
+function sommPreview(i) {
+  const t = sommThread()[i];
+  if (!t || !t.a) return;
+  const a = t.a, x = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: (str(a.wine).match(/\b(19|20)\d{2}\b/) || [''])[0], type: '', region: a.region || '', grapes: '' };
+  openPreview(x, a.fit ? `Fits your taste: <b>${a.fit}%</b>` : '', { kind: 'check', i });
+}
+function wishPreview(id) {
+  const x = S.wishlist.find(w => w.id === id);
+  if (!x) return;
+  openPreview({ producer: x.producer, name: x.name, vintage: x.vintage, type: x.type, region: x.region, grapes: x.grapes }, esc(x.why || ''), { kind: 'wish', id });
+}
+function previewTaste() {
+  const src = PREV.src || {}, base = PREV.base;
+  closePreview();
+  if (src.kind === 'list') listTaste(src.i);
+  else if (src.kind === 'check') sommTaste(src.i);
+  else openDiscovery(base, {});
+}
+async function previewWish() {
+  const src = PREV.src || {};
+  if (src.kind === 'list') { const p = WL.result && WL.result.picks[src.i]; if (p) await listSave(p); }
+  else if (src.kind === 'check') await checkSave(src.i);
+  renderPreview();
+}
+/* Will I like it? to the wishlist, with the shop price found */
+async function checkSave(i) {
+  const t = sommThread()[i];
+  if (!t || !t.a) return;
+  const a = t.a, x0 = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: '', type: '', region: a.region || '', grapes: '' };
+  const o = a.offer || a.worldOffer;
+  const x = normWish({ id: newId('x'), producer: x0.producer, name: x0.name, vintage: x0.vintage, type: x0.type, region: x0.region, grapes: x0.grapes,
+    price: o ? o.v : '', priceCur: o ? o.cur : cur(), label: 'Will I like it?', why: a.fit ? `Fits your taste ${a.fit}%. ${a.answer || ''}`.trim() : str(a.answer), createdAt: new Date().toISOString() });
+  S.wishlist.push(x);
+  persist();
+  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '' }) }); toast('Saved to your wishlist'); }
+  catch (e) { S.wishlist = S.wishlist.filter(w => w.id !== x.id); persist(); toast('Not saved: ' + e.message); }
+}
+
+sommLoad();

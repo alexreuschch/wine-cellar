@@ -564,7 +564,11 @@ async function saveDiscovery() {
     const x = st.info;
     // the shop price found while checking it becomes its street price, without another lookup
     const street = st.shopRef ? JSON.stringify({ v: st.shopRef.v, cur: st.shopRef.cur, date: todayISO(), src: st.offer ? st.offer.shop : 'Sommelier', conf: st.offer ? 'high' : 'medium' }) : '';
-    w = normWine({ id: newId('w'), producer: x.producer, name: x.name, vintage: x.vintage, type: x.type, region: x.region, grapes: x.grapes, origin: 'discovery', stock: '[]', myRating: st.rating, street, offer: st.offer ? JSON.stringify(st.offer) : '' });
+    // what was loaded with More about this wine is kept, so the AI is not asked twice
+    const pv = previewOf(x) || {};
+    w = normWine({ id: newId('w'), producer: x.producer, name: x.name, vintage: x.vintage, type: x.type || pv.type, region: x.region || pv.region, grapes: x.grapes || pv.grapes, origin: 'discovery', stock: '[]', myRating: st.rating, street, offer: st.offer ? JSON.stringify(st.offer) : '',
+      taste: pv.taste || '', tasteTags: (pv.tasteTags || []).join(', '), pairings: (pv.pairings || []).join(', '), drinkFrom: pv.drinkFrom, drinkUntil: pv.drinkUntil, peakFrom: pv.peakFrom, peakUntil: pv.peakUntil,
+      profile: pv.profile ? JSON.stringify(pv.profile) : '' });
   }
   const entry = Object.assign({ id: st.id || newId('t'), wineId: w.id, wineName: fullName(w) }, fields);
   const rated = st.rating !== st.ratingInit;
@@ -594,7 +598,11 @@ async function saveDiscovery() {
     toast('Not saved: ' + e.message);
     return;
   }
-  if (st.mode === 'add' && (isNew || missingParts(wineById(w.id)).length)) completeDiscovery(w.id);
+  if (st.mode === 'add' && (isNew || missingParts(wineById(w.id)).length)) {
+    const nw = wineById(w.id);
+    if (nw && hasProfile(nw) && !missingParts(nw).length) fillInfos([nw]);       // loaded before: only the background is missing
+    else completeDiscovery(w.id);
+  }
 }
 
 /** Details, drinking window, taste profile and background, as Update wine info with AI does in Edit. */

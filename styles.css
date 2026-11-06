@@ -781,3 +781,9 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .price-check .row.where span { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
 .price-check .row.where svg { width: 15px; height: 15px; color: var(--gold); }
 .price-check .verdict { margin: 0; font-size: 16px; }
+
+/* a suggested wine: tap for more, loaded only then */
+.prev-open { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.prev-open > span { display: grid; gap: 2px; min-width: 0; }
+.prev-open svg { flex: none; color: var(--muted); }
+.prev-sheet .info-body section h2 { font-size: 17px; }

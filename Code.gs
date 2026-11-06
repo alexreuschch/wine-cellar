@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 29;
+var API_VERSION = 30;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -71,6 +71,7 @@ var ACTIONS = {
   info: actionInfo_,
   infoFill: actionInfoFill_,
   complete: actionComplete_,
+  preview: actionPreview_,
   infoKeys: actionInfoKeys_,
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
@@ -273,7 +274,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background' };
+var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -1078,6 +1079,31 @@ function actionProfiles_(req) {
 }
 
 /** Completes the AI details of a few wines at the same time: only empty fields are filled, nothing the owner entered is changed. */
+/**
+ * More about a wine that is not in the cellar, from the wine list, Will I like it? or the wishlist:
+ * details, drinking window and taste profile. Nothing is saved; the app keeps the answer.
+ */
+function actionPreview_(req) {
+  var w = req.wine || {};
+  var h = {};
+  ['producer', 'name', 'vintage', 'type', 'region', 'grapes'].forEach(function (k) { if (String(w[k] || '').trim()) h[k] = String(w[k]).slice(0, 200); });
+  if (!h.producer && !h.name) throw new Error('Which wine? Producer or name is missing.');
+  var reply = null, d = null, err = '';
+  for (var round = 0; round < 2 && !d; round++) {
+    if (round > 0 && elapsed_() > TIME_SOFT) break;
+    reply = callClaudeMany_([analyzeRequest_(null, h)]);
+    try { d = parseJson_(textOf_(reply[0]), 'No answer'); } catch (e) { err = (reply.errors && reply.errors[0]) || 'The AI returned no usable details'; }
+  }
+  if (!d) throw new Error(err);
+  var prof = profileFrom_(reply[0]);
+  var list = function (v) { return Array.isArray(v) ? v.map(String).slice(0, 12) : []; };
+  var out = { region: String(d.region || h.region || ''), grapes: String(d.grapes || h.grapes || ''), type: String(d.type || h.type || ''), taste: String(d.taste || '').slice(0, 1200),
+    tasteTags: list(d.tasteTags), pairings: list(d.pairings), profile: prof ? prof.profile : null };
+  if (Number(d.drinkFrom) && Number(d.drinkUntil)) ['drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil'].forEach(function (k) { if (Number(d[k])) out[k] = Number(d[k]); });
+  if (out.profile && /\d\s*%/.test(String(h.grapes || ''))) out.profile.typical = false;
+  return { details: out };
+}
+
 function actionComplete_(req) {
   var ids = (Array.isArray(req.ids) ? req.ids : []).map(String).slice(0, 4);
   if (!ids.length) return { wines: [], failed: [] };
