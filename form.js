@@ -544,7 +544,8 @@ async function runAnalysis() {
     applyAnalysis(draft, res || {});
     // no vintage on the label: ask for it, then fill in again for that vintage
     if (draft.noVintage && !draft.vintageAsked && D === draft) { draft.vintageAsked = true; vintageAsk(); }
-    if (draft.mode === 'edit' && D === draft) fillInfos([{ region: draft.fields.region, grapes: draft.fields.grapes, producer: draft.fields.producer, profile: draft.profile, count: 1 }]);
+    // the background on region, grapes, style and producer is brought up to date as well
+    if (draft.mode === 'edit' && D === draft) fillInfos([{ region: draft.fields.region, grapes: draft.fields.grapes, producer: draft.fields.producer, profile: draft.profile, count: 1 }]).then(n => { if (n) toast(`Background updated for ${n} ${n === 1 ? 'entry' : 'entries'}: region, grapes, style or producer.`); });
   } catch (e) {
     draft.ai = 'error';
     draft.aiMsg = e.message.replace(/Claude API/g, 'AI service').replace(/Claude Console/g, 'API console').replace(/\.?$/, '.');

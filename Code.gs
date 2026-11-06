@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 26;
+var API_VERSION = 27;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1356,7 +1356,7 @@ var INFO_MORE = {
     '"usedFor": [{"type": "Red, White, Sparkling, Rosé, Dessert or Fortified", "pct": share of all wine made from this grape in percent}], ' +
     '"planted": [{"country": "two letter ISO code", "pct": share of the world vineyard area of this grape in percent}] for the five largest countries, "aka": ["other names it is known by, up to five"]. Percentages are rounded estimates',
   region: ', "grapes": ["the main grape varieties, most important first, up to six, as they are usually written"], "lat": latitude of the center of the region, "lon": longitude of the center, "km": its approximate size from end to end in kilometers, ' +
-    '"terms": [{"t": "the words exactly as written in the sections", "k": "grape, area, village or style"}] for every grape variety, sub region, appellation, village and wine style named in the sections, except the region itself',
+    '"terms": [{"t": "the words exactly as written in the sections", "k": "grape, area, village or style"}] for the grape varieties, sub regions, appellations, villages and wine styles named in the sections, up to 25, except the region itself',
   style: ', "serve": [lowest, highest] serving temperature in degrees Celsius, "ageing": {"everyday": [from, to], "best": [from, to]} in years after the vintage, for simple wines and for the best wines of this style',
   producer: ', "website": "the official website of the producer, only if you know it, otherwise empty"'
 };
@@ -1369,12 +1369,13 @@ function infoRequest_(kind, name, context) {
     (INFO_MORE[kind] || '') +
     '}.' +
     ' If you do not know it at all, return {"title": null}.';
-  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2200, messages: [{ role: 'user', content: prompt }] };
+  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 4000, messages: [{ role: 'user', content: prompt }] };
 }
 function infoFrom_(kind, res) {
   var d;
+  if (!res || res.stop_reason === 'max_tokens') return null;          // cut off: a part of the JSON is no background
   try { d = parseJson_(textOf_(res), 'No background found'); } catch (e) { return null; }
-  if (!d.title) return null;
+  if (!d || !d.title || typeof d.title !== 'string') return null;
   var txt = function (v, n) { return String(v || '').trim().slice(0, n); };
   var info = {
     kind: kind, title: txt(d.title, 120), summary: txt(d.summary, 500),
@@ -1454,8 +1455,9 @@ function actionInfo_(req) {
   var key = infoKey_(kind, name, context);
   var hit = knownInfos_()[key];
   if (hit && !infoOld_(kind, hit)) return { info: hit, cached: true };
-  var info = infoFrom_(kind, callClaude_(infoRequest_(kind, name, context)));
-  if (!info) return { info: null };
+  var info = null;
+  for (var n = 0; n < 2 && !info; n++) info = infoFrom_(kind, callClaude_(infoRequest_(kind, name, context)));
+  if (!info) return hit ? { info: hit, cached: true, stale: true } : { info: null };   // keep the older background rather than none
   checkSites_([info]);
   storeInfos_([{ key: key, kind: kind, name: name, info: info }]);
   return { info: info, cached: false };
@@ -1475,7 +1477,14 @@ function actionInfoFill_(req) {
   if (todo.length) {
     var replies = callClaudeMany_(todo.map(function (x) { return infoRequest_(x.kind, x.name, x.context); }));
     var made = [];
-    todo.forEach(function (x, i) { var info = infoFrom_(x.kind, replies[i]); if (info) { x.info = info; made.push(x); out[x.key] = info; } });
+    var again = todo.filter(function (x, i) { return !infoFrom_(x.kind, replies[i]); });
+    var second = again.length && elapsed_() < TIME_SOFT ? callClaudeMany_(again.map(function (x) { return infoRequest_(x.kind, x.name, x.context); })) : [];
+    todo.forEach(function (x, i) {
+      var info = infoFrom_(x.kind, replies[i]), j = again.indexOf(x);
+      if (!info && j >= 0) info = infoFrom_(x.kind, second[j]);
+      if (info) { x.info = info; made.push(x); out[x.key] = info; }
+      else if (known[x.key]) out[x.key] = known[x.key];                 // an older background is better than none
+    });
     checkSites_(made.map(function (x) { return x.info; }));
     storeInfos_(made);
   }

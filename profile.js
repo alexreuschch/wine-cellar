@@ -406,10 +406,11 @@ async function openInfo(kind, name, context) {
   try {
     const d = await api('info', { kind, name, context: context || '' });
     if (INFO.kind !== kind || INFO.name !== name) return;
-    INFO.data = d.info;
-    if (d.info) infoRemember(key, d.info); else INFO.error = `No background found on ${name}.`;
+    INFO.data = d.info || hit || null;                             // an older background is better than none
+    if (d.info) infoRemember(key, d.info); else if (!hit) INFO.error = `No background found on ${name}. Try again later.`;
   } catch (e) {
-    INFO.error = /Unknown action/i.test(e.message) ? 'The background needs the new Code.gs.' : aiErr(e.message);
+    if (hit) INFO.data = hit;
+    else INFO.error = /Unknown action/i.test(e.message) ? 'The background needs the new Code.gs.' : aiErr(e.message);
   }
   INFO.busy = false;
   renderInfo();
@@ -662,14 +663,16 @@ function infoItems(w) {
   return out;
 }
 async function fillInfos(wines, progress) {
-  if (S.version && S.version < 20) return;
+  if (S.version && S.version < 20) return 0;
   const have = infoCache(), seen = new Set(), todo = [];
+  let done = 0;
   wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (seen.has(k) || (have[k] && !infoOld(x.kind, have[k]))) return; seen.add(k); todo.push(x); }));
   for (let i = 0; i < todo.length; i += 8) {
     if (progress) progress(i, todo.length);
     try {
       const d = await api('infoFill', { items: todo.slice(i, i + 8) });
-      Object.keys(d.infos || {}).forEach(k => infoRemember(k, d.infos[k]));
-    } catch (e) { if (/Unknown action/i.test(e.message)) return; }
+      Object.keys(d.infos || {}).forEach(k => { if (!infoOld(d.infos[k].kind, d.infos[k])) done++; infoRemember(k, d.infos[k]); });
+    } catch (e) { if (/Unknown action/i.test(e.message)) return done; }
   }
+  return done;
 }
