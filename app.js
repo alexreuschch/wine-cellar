@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.18.1';
+const APP_VERSION = '2.19.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -159,9 +159,14 @@ function parseOffer(w) {
 }
 
 /* countries where shops are searched; the currency only changes how prices are shown */
-const SHOP_COUNTRIES = { CH: 'Switzerland', LI: 'Liechtenstein', DE: 'Germany', AT: 'Austria', FR: 'France', IT: 'Italy', NL: 'Netherlands', BE: 'Belgium', LU: 'Luxembourg', ES: 'Spain', PT: 'Portugal', IE: 'Ireland', GB: 'United Kingdom', US: 'United States' };
+const SHOP_COUNTRIES = Object.fromEntries(Object.entries(GEO_COUNTRIES).map(([k, v]) => [k, v[0]]));
+const countryCur = code => (GEO_COUNTRIES[code] || [])[1] || 'CHF';
 const CUR_COUNTRY = { CHF: 'CH', EUR: 'DE', GBP: 'GB', USD: 'US' };
-const shopCountry = () => (S.settings && SHOP_COUNTRIES[S.settings.country] ? S.settings.country : CUR_COUNTRY[cur()]);
+const countryOfCur = c => CUR_COUNTRY[c] || Object.keys(GEO_COUNTRIES).find(k => GEO_COUNTRIES[k][1] === c) || 'CH';
+const shopCountry = () => (S.settings && SHOP_COUNTRIES[S.settings.country] ? S.settings.country : countryOfCur(cur()));
+/* the country where the sommelier checks prices on a trip; stays until it is changed by hand */
+const travelCountry = () => { let c = ''; try { c = localStorage.getItem('wc-travel') || ''; } catch (e) { c = ''; } return SHOP_COUNTRIES[c] ? c : shopCountry(); };
+const setTravelCountry = c => { try { localStorage.setItem('wc-travel', c); } catch (e) { /* kept for this session only */ } };
 const shopCountryName = () => SHOP_COUNTRIES[shopCountry()];
 const flagOfCode = code => (/^[A-Z]{2}$/.test(str(code)) ? `<span class="flag" title="${esc(SHOP_COUNTRIES[code] || code)}">${String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))}</span>` : '');
 /* shop name with the flag of the country where the shop is based, and one line of details */
@@ -226,7 +231,7 @@ function normWine(w) {
 }
 
 /* money: every price keeps its own currency and is converted for display */
-const CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
+const CURRENCIES = [...new Set(['CHF', 'EUR', 'USD', 'GBP', ...Object.keys(GEO_CURRENCIES)])];
 const cur = () => (S.settings && CURRENCIES.includes(S.settings.currency) ? S.settings.currency : 'CHF');
 const rates = () => (S.fx && S.fx.rates) || { CHF: 1 };
 function conv(v, from) {
@@ -238,6 +243,15 @@ function conv(v, from) {
 }
 const fmtNum = (v, d = 2) => Number(v).toLocaleString('de-CH', { minimumFractionDigits: d, maximumFractionDigits: d });
 const money = (v, d = 2) => `${cur()} ${fmtNum(v, d)}`;
+/* a price in its own currency, with the amount in your currency behind it */
+function dualPrice(v, from, d) {
+  if (v === null || v === undefined || v === '') return '';
+  const dd = d === undefined ? (Number(v) % 1 ? 2 : 0) : d;
+  const own = `${from} ${fmtNum(v, dd)}`;
+  if (!from || from === cur()) return own;
+  const c = conv(v, from);
+  return c === null ? own : `${own} ≈ ${money(c, 0)}`;
+}
 function priceText(v, from, d = 2) {
   if (v === null || v === undefined || v === '') return 'N/A';
   const c = conv(v, from);

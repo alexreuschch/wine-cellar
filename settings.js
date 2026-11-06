@@ -247,10 +247,10 @@ function viewSettings(first) {
     ${first ? '' : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}
     <h1 class="title">${first ? 'Connect your cellar' : 'Settings'}</h1>
     ${first ? '' : `<section class="box"><span class="box-title">General</span>
-      <label class="field">Currency<select data-change="currency">${CURRENCIES.map(v => `<option value="${v}"${v === cur() ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+      <div class="field">Currency<button class="pick-btn" data-act="pick-open" data-k="currency"><span class="ellipsis">${esc(cur())} · ${esc(GEO_CURRENCIES[cur()] || cur())}</span>${ICON.chevron}</button></div>
       <p class="muted tiny" style="margin:0">${fxNote()} Switch it, for example, to show your cellar to a friend from abroad.</p>
-      <label class="field">Country for shopping<select data-change="country">${Object.keys(SHOP_COUNTRIES).map(k => `<option value="${k}"${k === shopCountry() ? ' selected' : ''}>${SHOP_COUNTRIES[k]}</option>`).join('')}</select></label>
-      <p class="muted tiny" style="margin:0">Street prices, best offers and the AI consultant search shops for this country${['CH', 'LI', 'GB', 'US'].includes(shopCountry()) ? '' : ', including shops in other EU countries that deliver there, with shipping costs'}. Offers you already have stay until you tap Update best offer.</p></section>
+      <div class="field">Country for shopping<button class="pick-btn" data-act="pick-open" data-k="country"><span class="ellipsis">${flagOfCode(shopCountry())}${esc(shopCountryName())}</span>${ICON.chevron}</button></div>
+      <p class="muted tiny" style="margin:0">Street prices, best offers and the AI consultant search shops for this country${GEO_EU.includes(shopCountry()) ? ', including shops in other EU countries that deliver there, with shipping costs' : ''}. Offers you already have stay until you tap Update best offer. On a trip, the sommelier has its own country for Will I like it? and Wine list.</p></section>
       <section class="box"><span class="box-title">Street prices</span>
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
@@ -271,4 +271,61 @@ function viewSettings(first) {
       <button class="btn danger block" data-act="disconnect">Disconnect this device</button>`}
     <p class="muted tiny center">Wine Cellar ${APP_VERSION}${S.version ? ` · script ${S.version}` : ''}</p>
   </main>${first ? '' : nav(null)}`;
+}
+
+/* ------------------------------------------------------------ picker for countries and currencies, with search */
+
+const PICK = { kind: null, q: '' };
+const PICK_TITLE = { currency: 'Currency', country: 'Country for shopping', travel: 'Where are you?' };
+function openPicker(kind) {
+  PICK.kind = kind;
+  PICK.q = '';
+  renderPicker();
+  const q = $('#pick-q');
+  if (q) setTimeout(() => q.focus(), 60);
+}
+function closePicker() { PICK.kind = null; renderPicker(); }
+const pickCurrent = () => (PICK.kind === 'currency' ? cur() : PICK.kind === 'travel' ? travelCountry() : shopCountry());
+function pickListHtml() {
+  const q = lc(PICK.q.trim());
+  const now = pickCurrent();
+  let items = PICK.kind === 'currency'
+    ? CURRENCIES.map(c => ({ v: c, label: `${c} · ${GEO_CURRENCIES[c] || c}`, icon: '' }))
+    : Object.keys(GEO_COUNTRIES).map(k => ({ v: k, label: GEO_COUNTRIES[k][0], sub: GEO_COUNTRIES[k][1], icon: flagOfCode(k) }));
+  if (PICK.kind === 'currency') items.sort((a, b) => a.v.localeCompare(b.v));
+  if (q) items = items.filter(x => lc(x.label).includes(q) || lc(x.v) === q || lc(x.sub || '') === q);
+  else items = items.filter(x => x.v === now).concat(items.filter(x => x.v !== now));
+  if (!items.length) return '<p class="muted small" style="margin:8px 0">Nothing found.</p>';
+  return items.map(x => `<button class="pick-row${x.v === now ? ' on' : ''}" data-act="pick" data-v="${esc(x.v)}">${x.icon}<span class="ellipsis">${esc(x.label)}</span>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}${x.v === now ? ICON.check : ''}</button>`).join('');
+}
+function renderPicker() {
+  const root = $('#pick-root');
+  if (!root) return;
+  if (!PICK.kind) { root.innerHTML = ''; return; }
+  const hint = PICK.kind === 'travel' ? '<p class="muted small" style="margin:0">Will I like it? and Wine list check prices in shops of this country, in its currency. It stays until you change it.</p>' : '';
+  root.innerHTML = `<div class="sheet-backdrop" data-act="pick-close"></div>
+  <div class="sheet pick-sheet" role="dialog" aria-modal="true" aria-label="${esc(PICK_TITLE[PICK.kind])}">
+    <div class="between"><h2 style="font-size:18px;font-weight:600">${esc(PICK_TITLE[PICK.kind])}</h2><button class="icon-btn" data-act="pick-close" aria-label="Close">${ICON.x}</button></div>
+    ${hint}
+    <label class="search compact">${ICON.search}<input id="pick-q" type="search" data-input="pick-q" placeholder="${PICK.kind === 'currency' ? 'Search currency' : 'Search country'}" autocomplete="off" aria-label="Search"></label>
+    <div id="pick-list" class="pick-list">${pickListHtml()}</div>
+  </div>`;
+}
+async function pickChoose(v) {
+  const kind = PICK.kind;
+  closePicker();
+  if (kind === 'travel') { setTravelCountry(v); toast(`Prices are now checked in ${SHOP_COUNTRIES[v]}, in ${countryCur(v)}.`); refreshView(); return; }
+  if (kind === 'currency') {
+    S.settings = Object.assign({}, S.settings, { currency: v });
+    persist();
+    refreshView();
+    try { await api('setSettings', { settings: { currency: v } }); toast('Currency saved. All prices are shown in ' + v + '.'); sync(true); }
+    catch (e) { toast('Saved on this device only: ' + e.message); }
+    return;
+  }
+  S.settings = Object.assign({}, S.settings, { country: v });
+  persist();
+  refreshView();
+  try { await api('setSettings', { settings: { country: v } }); toast(`Shops are now searched for ${SHOP_COUNTRIES[v]}.`); }
+  catch (e) { toast('Saved on this device only: ' + e.message); }
 }

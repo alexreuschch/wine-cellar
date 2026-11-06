@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 16;
+var API_VERSION = 17;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX' };
 
 var WINE_COLS = [
@@ -30,7 +30,14 @@ var PEOPLE_COLS = ['name'];
 var OFFER_COLS = ['key', 'offer', 'date'];
 var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
 var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt'];
-var CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'];
+// all countries with their currency [name, currency], and the EU members
+var GEO_COUNTRIES = {"AD":["Andorra","EUR"],"AE":["United Arab Emirates","AED"],"AF":["Afghanistan","AFN"],"AG":["Antigua & Barbuda","XCD"],"AI":["Anguilla","XCD"],"AL":["Albania","ALL"],"AM":["Armenia","AMD"],"AO":["Angola","AOA"],"AR":["Argentina","ARS"],"AS":["American Samoa","USD"],"AT":["Austria","EUR"],"AU":["Australia","AUD"],"AW":["Aruba","AWG"],"AX":["Åland Islands","EUR"],"AZ":["Azerbaijan","AZN"],"BA":["Bosnia and Herzegovina","BAM"],"BB":["Barbados","BBD"],"BD":["Bangladesh","BDT"],"BE":["Belgium","EUR"],"BF":["Burkina Faso","XOF"],"BG":["Bulgaria","BGN"],"BH":["Bahrain","BHD"],"BI":["Burundi","BIF"],"BJ":["Benin","XOF"],"BL":["St. Barthélemy","EUR"],"BM":["Bermuda","BMD"],"BN":["Brunei","BND"],"BO":["Bolivia","BOB"],"BQ":["Caribbean Netherlands","USD"],"BR":["Brazil","BRL"],"BS":["Bahamas","BSD"],"BT":["Bhutan","INR"],"BW":["Botswana","BWP"],"BY":["Belarus","BYN"],"BZ":["Belize","BZD"],"CA":["Canada","CAD"],"CC":["Cocos (Keeling) Islands","AUD"],"CD":["DR Congo","CDF"],"CF":["Central African Republic","XAF"],"CG":["Congo","XAF"],"CH":["Switzerland","CHF"],"CI":["Côte d'Ivoire","XOF"],"CK":["Cook Islands","NZD"],"CL":["Chile","CLP"],"CM":["Cameroon","XAF"],"CN":["China","CNY"],"CO":["Colombia","COP"],"CR":["Costa Rica","CRC"],"CU":["Cuba","CUP"],"CV":["Cape Verde","CVE"],"CW":["Curaçao","XCG"],"CX":["Christmas Island","AUD"],"CY":["Cyprus","EUR"],"CZ":["Czechia","CZK"],"DE":["Germany","EUR"],"DJ":["Djibouti","DJF"],"DK":["Denmark","DKK"],"DM":["Dominica","XCD"],"DO":["Dominican Republic","DOP"],"DZ":["Algeria","DZD"],"EC":["Ecuador","USD"],"EE":["Estonia","EUR"],"EG":["Egypt","EGP"],"EH":["Western Sahara","MAD"],"ER":["Eritrea","ERN"],"ES":["Spain","EUR"],"ET":["Ethiopia","ETB"],"FI":["Finland","EUR"],"FJ":["Fiji","FJD"],"FK":["Falkland Islands","FKP"],"FM":["Micronesia","USD"],"FO":["Faroe Islands","DKK"],"FR":["France","EUR"],"GA":["Gabon","XAF"],"GB":["United Kingdom","GBP"],"GD":["Grenada","XCD"],"GE":["Georgia","GEL"],"GF":["French Guiana","EUR"],"GG":["Guernsey","GBP"],"GH":["Ghana","GHS"],"GI":["Gibraltar","GIP"],"GL":["Greenland","DKK"],"GM":["Gambia","GMD"],"GN":["Guinea","GNF"],"GP":["Guadeloupe","EUR"],"GQ":["Equatorial Guinea","XAF"],"GR":["Greece","EUR"],"GT":["Guatemala","GTQ"],"GU":["Guam","USD"],"GW":["Guinea-Bissau","XOF"],"GY":["Guyana","GYD"],"HK":["Hong Kong","HKD"],"HN":["Honduras","HNL"],"HR":["Croatia","EUR"],"HT":["Haiti","HTG"],"HU":["Hungary","HUF"],"ID":["Indonesia","IDR"],"IE":["Ireland","EUR"],"IL":["Israel","ILS"],"IM":["Isle of Man","GBP"],"IN":["India","INR"],"IQ":["Iraq","IQD"],"IR":["Iran","IRR"],"IS":["Iceland","ISK"],"IT":["Italy","EUR"],"JE":["Jersey","GBP"],"JM":["Jamaica","JMD"],"JO":["Jordan","JOD"],"JP":["Japan","JPY"],"KE":["Kenya","KES"],"KG":["Kyrgyzstan","KGS"],"KH":["Cambodia","KHR"],"KI":["Kiribati","AUD"],"KM":["Comoros","KMF"],"KN":["St. Kitts & Nevis","XCD"],"KP":["North Korea","KPW"],"KR":["South Korea","KRW"],"KW":["Kuwait","KWD"],"KY":["Cayman Islands","KYD"],"KZ":["Kazakhstan","KZT"],"LA":["Laos","LAK"],"LB":["Lebanon","LBP"],"LC":["St. Lucia","XCD"],"LI":["Liechtenstein","CHF"],"LK":["Sri Lanka","LKR"],"LR":["Liberia","LRD"],"LS":["Lesotho","ZAR"],"LT":["Lithuania","EUR"],"LU":["Luxembourg","EUR"],"LV":["Latvia","EUR"],"LY":["Libya","LYD"],"MA":["Morocco","MAD"],"MC":["Monaco","EUR"],"MD":["Moldova","MDL"],"ME":["Montenegro","EUR"],"MF":["St. Martin","EUR"],"MG":["Madagascar","MGA"],"MH":["Marshall Islands","USD"],"MK":["North Macedonia","MKD"],"ML":["Mali","XOF"],"MM":["Myanmar","MMK"],"MN":["Mongolia","MNT"],"MO":["Macao","MOP"],"MP":["Northern Mariana Islands","USD"],"MQ":["Martinique","EUR"],"MR":["Mauritania","MRU"],"MS":["Montserrat","XCD"],"MT":["Malta","EUR"],"MU":["Mauritius","MUR"],"MV":["Maldives","MVR"],"MW":["Malawi","MWK"],"MX":["Mexico","MXN"],"MY":["Malaysia","MYR"],"MZ":["Mozambique","MZN"],"NA":["Namibia","ZAR"],"NC":["New Caledonia","XPF"],"NE":["Niger","XOF"],"NF":["Norfolk Island","AUD"],"NG":["Nigeria","NGN"],"NI":["Nicaragua","NIO"],"NL":["Netherlands","EUR"],"NO":["Norway","NOK"],"NP":["Nepal","NPR"],"NR":["Nauru","AUD"],"NU":["Niue","NZD"],"NZ":["New Zealand","NZD"],"OM":["Oman","OMR"],"PA":["Panama","PAB"],"PE":["Peru","PEN"],"PF":["French Polynesia","XPF"],"PG":["Papua New Guinea","PGK"],"PH":["Philippines","PHP"],"PK":["Pakistan","PKR"],"PL":["Poland","PLN"],"PM":["St. Pierre & Miquelon","EUR"],"PN":["Pitcairn Islands","NZD"],"PR":["Puerto Rico","USD"],"PS":["Palestine","ILS"],"PT":["Portugal","EUR"],"PW":["Palau","USD"],"PY":["Paraguay","PYG"],"QA":["Qatar","QAR"],"RE":["Réunion","EUR"],"RO":["Romania","RON"],"RS":["Serbia","RSD"],"RU":["Russia","RUB"],"RW":["Rwanda","RWF"],"SA":["Saudi Arabia","SAR"],"SB":["Solomon Islands","SBD"],"SC":["Seychelles","SCR"],"SD":["Sudan","SDG"],"SE":["Sweden","SEK"],"SG":["Singapore","SGD"],"SH":["St. Helena","SHP"],"SI":["Slovenia","EUR"],"SJ":["Svalbard & Jan Mayen","NOK"],"SK":["Slovakia","EUR"],"SL":["Sierra Leone","SLE"],"SM":["San Marino","EUR"],"SN":["Senegal","XOF"],"SO":["Somalia","SOS"],"SR":["Suriname","SRD"],"SS":["South Sudan","SSP"],"ST":["São Tomé & Príncipe","STN"],"SV":["El Salvador","USD"],"SX":["Sint Maarten","XCG"],"SY":["Syria","SYP"],"SZ":["Eswatini","SZL"],"TC":["Turks & Caicos Islands","USD"],"TD":["Chad","XAF"],"TG":["Togo","XOF"],"TH":["Thailand","THB"],"TJ":["Tajikistan","TJS"],"TK":["Tokelau","NZD"],"TL":["Timor-Leste","USD"],"TM":["Turkmenistan","TMT"],"TN":["Tunisia","TND"],"TO":["Tonga","TOP"],"TR":["Türkiye","TRY"],"TT":["Trinidad & Tobago","TTD"],"TV":["Tuvalu","AUD"],"TW":["Taiwan","TWD"],"TZ":["Tanzania","TZS"],"UA":["Ukraine","UAH"],"UG":["Uganda","UGX"],"US":["United States","USD"],"UY":["Uruguay","UYU"],"UZ":["Uzbekistan","UZS"],"VA":["Vatican City","EUR"],"VC":["St. Vincent & Grenadines","XCD"],"VE":["Venezuela","VES"],"VG":["British Virgin Islands","USD"],"VI":["U.S. Virgin Islands","USD"],"VN":["Vietnam","VND"],"VU":["Vanuatu","VUV"],"WF":["Wallis & Futuna","XPF"],"WS":["Samoa","WST"],"XK":["Kosovo","EUR"],"YE":["Yemen","YER"],"YT":["Mayotte","EUR"],"ZA":["South Africa","ZAR"],"ZM":["Zambia","ZMW"],"ZW":["Zimbabwe","USD"]};
+var GEO_EU = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"];
+var CURRENCIES = (function () {
+  var seen = { CHF: true, EUR: true, USD: true, GBP: true }, out = ['CHF', 'EUR', 'USD', 'GBP'];
+  Object.keys(GEO_COUNTRIES).forEach(function (k) { var c = GEO_COUNTRIES[k][1]; if (!seen[c]) { seen[c] = true; out.push(c); } });
+  return out;
+})();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
 var SCHEMA_VERSION = '11';
@@ -232,6 +239,7 @@ function elapsed_() { return Date.now() - T0_; }
 
 function doPost(e) {
   T0_ = Date.now();
+  SCOPE_ = '';
   var req;
   try {
     req = JSON.parse(e.postData.contents);
@@ -330,21 +338,27 @@ function json_(obj) {
 // ---------------------------------------------------------------- settings and exchange rates
 
 // countries where shops are searched; the currency setting only changes how prices are shown
-var COUNTRIES = {
-  CH: { name: 'Switzerland', cur: 'CHF' }, LI: { name: 'Liechtenstein', cur: 'CHF' },
-  DE: { name: 'Germany', cur: 'EUR', eu: true }, AT: { name: 'Austria', cur: 'EUR', eu: true }, FR: { name: 'France', cur: 'EUR', eu: true },
-  IT: { name: 'Italy', cur: 'EUR', eu: true }, NL: { name: 'Netherlands', cur: 'EUR', eu: true }, BE: { name: 'Belgium', cur: 'EUR', eu: true },
-  LU: { name: 'Luxembourg', cur: 'EUR', eu: true }, ES: { name: 'Spain', cur: 'EUR', eu: true }, PT: { name: 'Portugal', cur: 'EUR', eu: true },
-  IE: { name: 'Ireland', cur: 'EUR', eu: true }, GB: { name: 'United Kingdom', cur: 'GBP' }, US: { name: 'United States', cur: 'USD' }
-};
+var COUNTRIES = (function () {
+  var out = {};
+  Object.keys(GEO_COUNTRIES).forEach(function (k) { out[k] = { name: GEO_COUNTRIES[k][0], cur: GEO_COUNTRIES[k][1], eu: GEO_EU.indexOf(k) >= 0 }; });
+  return out;
+})();
 var CUR_COUNTRY = { CHF: 'CH', EUR: 'DE', GBP: 'GB', USD: 'US' };
+function countryOfCur_(c) {
+  if (CUR_COUNTRY[c]) return CUR_COUNTRY[c];
+  var k = Object.keys(COUNTRIES).filter(function (x) { return COUNTRIES[x].cur === c; })[0];
+  return k || 'CH';
+}
+// a country for this one request, for example the travel country of the sommelier
+var SCOPE_ = '';
+function scopeFrom_(code) { SCOPE_ = COUNTRIES[String(code || '')] ? String(code) : ''; }
 
 function settings_() {
   var p = props_();
   var c = p.getProperty('CURRENCY');
   var currency = CURRENCIES.indexOf(c) >= 0 ? c : 'CHF';
   var k = p.getProperty('COUNTRY');
-  return { currency: currency, country: COUNTRIES[k] ? k : CUR_COUNTRY[currency] };
+  return { currency: currency, country: COUNTRIES[k] ? k : countryOfCur_(currency) };
 }
 
 function actionSetSettings_(req) {
@@ -365,7 +379,8 @@ function fxRates_() {
   var p = props_();
   var cached = p.getProperty('FX_JSON');
   var c = cached ? JSON.parse(cached) : null;
-  if (c && Date.now() - c.t < 12 * 3600 * 1000) return c;
+  // older caches hold only four currencies and are replaced right away
+  if (c && Date.now() - c.t < 12 * 3600 * 1000 && Object.keys(c.rates || {}).length > 10) return c;
   var rates = null, source = '';
   try { rates = fxFromSheet_(); source = 'Google Finance'; } catch (e) { rates = null; }
   if (!rates) {
@@ -384,26 +399,28 @@ function fxFromSheet_() {
   var sh = ss.getSheetByName(SHEETS.fx);
   if (!sh) { sh = ss.insertSheet(SHEETS.fx); sh.hideSheet(); }
   var others = CURRENCIES.filter(function (x) { return x !== 'CHF'; });
-  sh.getRange(1, 1, others.length, 2).setValues(others.map(function (x) { return [x, '=GOOGLEFINANCE("CURRENCY:CHF' + x + '")']; }));
+  if (sh.getLastRow() !== others.length || String(sh.getRange(others.length, 1).getValue()) !== others[others.length - 1]) {
+    sh.clear();
+    sh.getRange(1, 1, others.length, 2).setValues(others.map(function (x) { return [x, '=IFERROR(GOOGLEFINANCE("CURRENCY:CHF' + x + '"),"")']; }));
+  }
   SpreadsheetApp.flush();
   var vals = sh.getRange(1, 2, others.length, 1).getValues();
   var rates = { CHF: 1 };
   for (var i = 0; i < others.length; i++) {
     var v = Number(vals[i][0]);
-    if (!(v > 0)) return null;
-    rates[others[i]] = v;
+    if (v > 0) rates[others[i]] = v;
   }
-  return rates;
+  // the main currencies must be there, rare ones may be missing
+  return rates.EUR && rates.USD && rates.GBP ? rates : null;
 }
 
 function fxFromWeb_() {
-  var others = CURRENCIES.filter(function (x) { return x !== 'CHF'; });
-  var r = UrlFetchApp.fetch('https://api.frankfurter.app/latest?from=CHF&to=' + others.join(','), { muteHttpExceptions: true });
+  var r = UrlFetchApp.fetch('https://api.frankfurter.app/latest?from=CHF', { muteHttpExceptions: true });
   if (r.getResponseCode() !== 200) return null;
   var d = JSON.parse(r.getContentText());
   var rates = { CHF: 1 };
-  others.forEach(function (x) { rates[x] = Number(d.rates[x]); });
-  return rates;
+  Object.keys(d.rates || {}).forEach(function (x) { if (Number(d.rates[x]) > 0) rates[x] = Number(d.rates[x]); });
+  return rates.EUR ? rates : null;
 }
 
 // ---------------------------------------------------------------- stock helpers
@@ -921,7 +938,7 @@ function actionStreetPrice_(req) {
   var prompt = 'Find the current typical retail price for one 0.75 l bottle of this wine for a buyer in ' + sc.name + ': ' + wine +
     (w.region ? ' (' + w.region + ')' : '') + '. Search the web for current offers from ' + sc.where + '. ' +
     'Use the median of the offers you find for exactly this vintage. If there is no offer for this vintage, use the closest vintage and set confidence to "low". ' +
-    'Give the price in ' + cur + '. Return ONLY a JSON object, no other text: {"price": number per bottle, "currency": one of "CHF", "EUR", "USD", "GBP", "source": "shop or website name", "confidence": "high" or "medium" or "low"}. ' +
+    'Give the price in ' + cur + '. Return ONLY a JSON object, no other text: {"price": number per bottle, "currency": "three letter ISO code", "source": "shop or website name", "confidence": "high" or "medium" or "low"}. ' +
     'If you find no price at all, return {"price": null}.';
   var res = callClaude_({
     model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
@@ -950,12 +967,13 @@ function actionStreetPrice_(req) {
  */
 /** Where to search for shops, from the country setting. Inside the EU, shops of other EU countries that deliver count too. */
 function shopScope_() {
-  var code = settings_().country;
+  var code = SCOPE_ || settings_().country;
   var c = COUNTRIES[code];
+  var the = ['US', 'GB', 'NL', 'AE', 'PH', 'CZ', 'DO', 'BS', 'MV', 'CF', 'GM'].indexOf(code) >= 0 ? 'the ' : '';
   var where = code === 'CH' ? 'online shops based in Switzerland (shops in Liechtenstein count too)'
     : code === 'LI' ? 'online shops based in Liechtenstein or Switzerland'
     : c.eu ? 'online shops based in ' + c.name + ', or in another EU country if they deliver to ' + c.name + ' (there is no customs duty within the EU)'
-    : 'online shops based in ' + (code === 'US' ? 'the United States' : 'the ' + c.name);
+    : 'online shops and wine stores based in ' + the + c.name;
   return { code: code, name: c.name, cur: c.cur, eu: !!c.eu, where: where };
 }
 
@@ -992,9 +1010,9 @@ function offerRequest_(wine, region, uses) {
   var prompt = 'Find the online shop that currently sells this wine at the lowest price per 0.75 l bottle, for a buyer in ' + sc.name + ': ' + wine +
     (region ? ' (' + region + ')' : '') + '. Search the web for offers of this wine from ' + sc.where + '. Prefer the vintage given; if no shop sells it, take the closest vintage of the same wine that is available and report it. ' +
     'Compare the shops by price including the shipping cost to ' + sc.name + ', for an order of about 6 bottles, where the shop states it. ' +
-    'Only consider shops with prices in CHF, EUR, GBP or USD. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
+    'Prices are usually in ' + sc.cur + '. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
     'The link must be the product page of this wine at that shop, taken from your search results. Never use a home page, a category page or a search page. ' +
-    'Return ONLY a JSON object, no other text: {"shop": "shop name", "country": "two letter ISO code of the country where the shop is based", "price": number per bottle, "currency": "CHF, EUR, GBP or USD", "shipping": number for shipping one order to ' + sc.name + ' in the same currency or null if unknown, "freeFrom": order value from which shipping is free, in the same currency, or null, "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
+    'Return ONLY a JSON object, no other text: {"shop": "shop name", "country": "two letter ISO code of the country where the shop is based", "price": number per bottle, "currency": "three letter ISO code", "shipping": number for shipping one order to ' + sc.name + ' in the same currency or null if unknown, "freeFrom": order value from which shipping is free, in the same currency, or null, "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
     'If you find no offer, return {"shop": null}.';
   return {
     model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
@@ -1040,7 +1058,7 @@ var OFFER_DAYS = 14;     // found offers are reused for two weeks
 var NO_OFFER_DAYS = 7;   // wines without a shop are not searched again for the consultant for a week
 
 function offerKey_(wine) {
-  return settings_().country + '|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim();
+  return (SCOPE_ || settings_().country) + '|' + String(wine).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 /** Remembered results by key. Without allowMissing, only real offers are returned. */
@@ -1100,11 +1118,11 @@ var CHECK_RULES = [
   'Rules:',
   '1. Identify the wine: producer, name and vintage. Put them in "wine". If you are unsure, say what you think it is.',
   '2. Judge how well it fits the taste of the owner, based on the wines they rated highly or low, their favorites and what they drink often. Give "fit" from 0 to 100.',
-  '3. In "answer" explain the style, why it fits or not, and whether the price is good value: the price the owner mentions, or else the typical shop price in their currency. In a restaurant, wine list prices are usually two to three times the shop price.',
+  '3. In "answer" explain the style and why it fits or not. Do not discuss shop prices: the app checks them in local shops and shows them next to your answer. If the owner mentions a price, put it in "price" with its currency in "priceCur" (three letter ISO code) and say in "priceWhere" whether it is a "shop" or a "restaurant" price.',
   '4. Say whether the cellar already holds similar wines in enough bottles.',
   '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Fewer is fine.',
   '6. Answer in the language of the question; if there is no question, in English. Keep "answer" to three to five sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}]}.'
+  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "priceWhere": ""}.'
 ].join('\n');
 
 /** One compact line per wine in stock, plus recent journal entries, as context for the sommelier. */
@@ -1150,9 +1168,10 @@ function actionSommelier_(req) {
   if (!q && image) q = 'Will I like this wine?';
   if (!q) throw new Error('Ask a question first');
   var check = req.mode === 'check' || !!image;
+  if (check) scopeFrom_(req.country);
   var ctx = cellarContext_();
   var system = check
-    ? CHECK_RULES + '\n\nThe owner uses ' + settings_().currency + '.\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
+    ? CHECK_RULES + '\n\nThe owner is in ' + shopScope_().name + ', where prices are usually in ' + shopScope_().cur + '. The owner shows prices in ' + settings_().currency + '.\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
     : SOMMELIER_RULES + '\n\n' + ctx.text;
   var messages = [];
   (req.history || []).slice(-6).forEach(function (h) {
@@ -1175,7 +1194,24 @@ function actionSommelier_(req) {
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)
     .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
   var fit = d.fit === null || d.fit === undefined || d.fit === '' || isNaN(Number(d.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(d.fit))));
-  return { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
+  var out = { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
+  if (check && out.wine) {
+    // the price in local shops of the country the owner is in, reused for 14 days
+    var sc = shopScope_();
+    out.country = sc.code;
+    out.price = Number(d.price) > 0 ? Math.round(Number(d.price) * 100) / 100 : null;
+    out.priceCur = CURRENCIES.indexOf(String(d.priceCur)) >= 0 ? String(d.priceCur) : sc.cur;
+    out.priceWhere = String(d.priceWhere) === 'restaurant' ? 'restaurant' : out.price ? 'shop' : '';
+    var key = offerKey_(out.wine);
+    var mem = offerMemory_([key], true)[key];
+    if (mem) out.offer = mem.offer;
+    else {
+      try { out.offer = offerFrom_(callClaude_(offerRequest_(out.wine, String(d.region || ''), 2))); } catch (e) { out.offer = null; }
+      rememberOffers_([[key, out.offer]]);
+    }
+    out.offer = out.offer || null;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- wine list in a restaurant
@@ -1202,8 +1238,10 @@ function actionWineList_(req) {
   pages.forEach(function (b) { if (b.length > 1500000) throw new Error('A photo is too large'); });
   var min = Number(req.min) > 0 ? Number(req.min) : 0, max = Number(req.max) > 0 ? Number(req.max) : 0;
   var food = String(req.food || '').trim().slice(0, 500);
+  scopeFrom_(req.country);
+  var sc = shopScope_();
   var ctx = cellarContext_();
-  var system = WINELIST_RULES + '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.');
+  var system = 'The restaurant is in ' + sc.name + ', so the list is probably in ' + sc.cur + '.\n' + WINELIST_RULES + '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.');
   var ask = 'These are ' + pages.length + ' ' + (pages.length === 1 ? 'page' : 'pages') + ' of the wine list. ' +
     (min || max ? 'My price range per bottle, in the currency of the list: ' + (min || 0) + ' to ' + (max || 'any') + '. ' : 'I have not set a price range. ') +
     (food ? 'We eat: ' + food : 'I have not said what we eat.');
@@ -1227,8 +1265,31 @@ function actionWineList_(req) {
     })
     .sort(function (a, b) { return kinds.indexOf(a.kind) - kinds.indexOf(b.kind); });
   if (!picks.length) throw new Error('No wines found on these photos. Take sharper photos of the pages and try again.');
-  return { count: Number(d.count) > 0 ? Math.round(Number(d.count)) : null, pages: pages.length, currency: String(d.currency || ''),
-    avgMarkup: num(d.avgMarkup), note: String(d.note || ''), food: food, min: min, max: max, picks: picks.slice(0, 3) };
+  picks = picks.slice(0, 3);
+  var listCur = CURRENCIES.indexOf(String(d.currency)) >= 0 ? String(d.currency) : sc.cur;
+  // the real price in local shops for the three picks, all at the same time, reused for 14 days
+  var label = function (p) { return [p.producer, p.name, p.vintage].filter(String).join(' '); };
+  var mem = offerMemory_(picks.map(function (p) { return offerKey_(label(p)); }), true);
+  var search = picks.filter(function (p) { return !mem[offerKey_(label(p))]; });
+  var found = {};
+  if (search.length && elapsed_() < TIME_HARD) {
+    var replies = callClaudeMany_(search.map(function (p) { return offerRequest_(label(p), p.region, 2); }));
+    rememberOffers_(search.map(function (p, i) { var o = offerFrom_(replies[i]); found[offerKey_(label(p))] = o; return [offerKey_(label(p)), o]; }));
+  }
+  picks.forEach(function (p) {
+    var k = offerKey_(label(p));
+    var o = mem[k] ? mem[k].offer : found[k];
+    p.estPrice = p.shopPrice;
+    p.offer = o || null;
+    var fx = fxRates_().rates || {};
+    if (o && p.listPrice && (o.cur === listCur || (fx[o.cur] && fx[listCur]))) {
+      var inList = convert_(o.v, o.cur, listCur);
+      p.shopPrice = Math.round(inList * 100) / 100;
+      p.markup = Math.round(p.listPrice / inList * 10) / 10;
+    }
+  });
+  return { country: sc.code, count: Number(d.count) > 0 ? Math.round(Number(d.count)) : null, pages: pages.length,
+    avgMarkup: num(d.avgMarkup), note: String(d.note || ''), food: food, min: min, max: max, picks: picks, currency: listCur };
 }
 
 // ---------------------------------------------------------------- AI consultant and wishlist

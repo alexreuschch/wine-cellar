@@ -583,3 +583,26 @@ div.ins-leg { cursor: default; }
 .wl-prices small { font-size: 11px; color: var(--faint); }
 .wl-fit { display: flex; flex-direction: column; gap: 6px; }
 .wl-fit b { font-size: 15px; }
+
+/* picker for countries and currencies */
+.pick-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; height: 46px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font: inherit; font-size: 15px; text-align: left; }
+.pick-btn svg { color: var(--muted); transform: rotate(90deg); flex: none; }
+.pick-sheet { height: 86vh; }
+.pick-list { display: flex; flex-direction: column; overflow-y: auto; margin: 0 -8px; }
+.pick-row { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 8px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: 15px; text-align: left; }
+.pick-row span.ellipsis { flex: 1; min-width: 0; }
+.pick-row small { color: var(--muted); font-size: 12px; }
+.pick-row.on { color: var(--gold); }
+.pick-row svg { color: var(--gold); flex: none; }
+.pick-row .flag { font-size: 20px; }
+/* sommelier: the country where prices are checked */
+.travel-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-size: 14px; text-align: left; }
+.travel-row > span { flex: 1; min-width: 0; }
+.travel-row b { font-weight: 600; }
+.travel-row small { color: var(--gold); font-size: 13px; }
+.price-check { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.price-check .row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.price-check .row span:first-child { color: var(--muted); }
+.price-check .row b { text-align: right; font-variant-numeric: tabular-nums; }
+.wl-shop { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); min-width: 0; }
+.wl-shop a { color: var(--gold); text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

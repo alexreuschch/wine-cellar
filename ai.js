@@ -41,13 +41,43 @@ function checkGuideHtml() {
     <h3>How it works</h3>
     <ul>
       <li><b>Photograph the label</b> or type the name, producer and vintage.</li>
-      <li><b>Add the price</b> you see, for example “CHF 39 in the shop” or “CHF 85 on the wine list”, and the price is judged too.</li>
+      <li><b>Add the price</b> you see, for example “39 in the shop” or “85 on the wine list”. It is compared with the cheapest online shop in the country set above, in its currency and in yours.</li>
       <li><b>Ask a follow-up</b>, for example “what would I eat with it?” or “is the 2019 better?”.</li>
     </ul>
     <h3>What you get</h3>
-    <p>How well the wine fits your taste in percent, based on your ratings, favorites and journal. Its style, whether the price is good value, and which wines in your cellar are similar, so you see if you already have something like it.</p>
-    <p class="tiny muted">Answers come from AI and are estimates. Each check costs a few cents.</p>
+    <p>How well the wine fits your taste in percent, based on your ratings, favorites and journal. The price in local shops next to your price, its style, and which wines in your cellar are similar, so you see if you already have something like it.</p>
+    <p class="tiny muted">Answers come from AI. Each check costs about 5 cents, a little less when the wine was checked in the last 14 days.</p>
   </div>`;
+}
+
+const travelRowHtml = () => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>Prices for ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
+/* converts between any two currencies with the stored rates, or null */
+function convTo(v, from, to) {
+  if (v === null || v === undefined || !(Number(v) > 0)) return null;
+  if (from === to) return Number(v);
+  const r = rates();
+  return r[from] && r[to] ? Number(v) / r[from] * r[to] : null;
+}
+/* the price you saw next to the price in local shops */
+function priceCheckHtml(a) {
+  if (!a.wine || !a.country) return '';
+  const o = a.offer, where = SHOP_COUNTRIES[a.country] || a.country;
+  const rows = [];
+  if (a.price) rows.push(`<div class="row"><span>${a.priceWhere === 'restaurant' ? 'Your price, restaurant' : 'Your price'}</span><b>${esc(dualPrice(a.price, a.priceCur))}</b></div>`);
+  if (o) rows.push(`<div class="row"><span>Cheapest shop in ${esc(where)}</span><b>${esc(dualPrice(o.v, o.cur))}</b></div>`);
+  let verdict = '';
+  if (o && a.price) {
+    const shop = convTo(o.v, o.cur, a.priceCur);
+    if (shop) {
+      const f = a.price / shop;
+      verdict = a.priceWhere === 'restaurant'
+        ? `<p class="small" style="margin:0">Markup <b class="${f <= 2.2 ? 'up' : f > 3 ? 'down' : ''}">${fmtNum(f, 1)}×</b> over the shop price. Restaurants usually ask 2 to 3 times.</p>`
+        : `<p class="small" style="margin:0"><b class="${f <= 1.05 ? 'up' : f > 1.2 ? 'down' : ''}">${f >= 1 ? `${Math.round((f - 1) * 100)}% above` : `${Math.round((1 - f) * 100)}% below`}</b> the cheapest shop.</p>`;
+    }
+  }
+  const shopLine = o ? `<div class="wl-shop">${flagOfCode(o.country)}<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)}${o.vintage ? `, vintage ${esc(o.vintage)}` : ''}</a>${ICON.link}</div>` : '';
+  if (!rows.length) return `<div class="price-check"><p class="tiny muted" style="margin:0">No online shop in ${esc(where)} sells this wine right now.</p></div>`;
+  return `<div class="price-check">${rows.join('')}${verdict}${shopLine}${o ? '' : `<p class="tiny muted" style="margin:0">No online shop in ${esc(where)} sells this wine right now.</p>`}</div>`;
 }
 
 function sommAnswerHtml(t) {
@@ -68,7 +98,7 @@ function sommAnswerHtml(t) {
   const hasFit = t.a.fit !== null && t.a.fit !== undefined;
   const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${hasFit ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
-  return `<div class="somm-a">${fit}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
+  return `<div class="somm-a">${fit}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
 
@@ -104,7 +134,7 @@ const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop 
 function viewSommelier() {
   const r = route();
   if (r.id === 'check' || r.id === 'cellar' || r.id === 'list') SOMM.mode = r.id;
-  const old = S.version && S.version < (SOMM.mode === 'list' ? 16 : 14);
+  const old = S.version && S.version < (SOMM.mode === 'cellar' ? 14 : 17);
   const check = SOMM.mode === 'check', list = SOMM.mode === 'list';
   const modeBtn = (m, ic, label) => `<button class="${SOMM.mode === m ? 'on' : ''}" data-act="somm-mode" data-v="${m}">${ic}${label}</button>`;
   return `<main class="screen somm">
@@ -112,6 +142,7 @@ function viewSommelier() {
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
     <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>
     <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
+    ${check || list ? travelRowHtml() : ''}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
   </main>
@@ -157,8 +188,8 @@ function listGuideHtml() {
       <li><b>Say what you eat</b> in the field at the bottom, by typing or with the microphone. Check the text before you start.</li>
     </ul>
     <h3>What you get</h3>
-    <p>Three wines from the list: the best one in your price range, the best value for money, and the hidden gem that is priced too low compared with the rest of the list. Each with the price on the list, the estimated shop price, the markup of the restaurant and how well it fits your taste.</p>
-    <p class="tiny muted">Shop prices and quality are AI estimates without a web search. One analysis costs about 5 to 10 cents. The photos are not stored.</p>
+    <p>Three wines from the list: the best one in your price range, the best value for money, and the hidden gem that is priced too low compared with the rest of the list. Each with the price on the list, the price in local shops, the markup of the restaurant and how well it fits your taste. Prices are shown in the currency of the list and in yours.</p>
+    <p class="tiny muted">The shop prices of the three picks are checked in online shops of the country set above. One analysis costs about 10 to 20 cents. The photos are not stored.</p>
   </div>`;
 }
 
@@ -166,16 +197,19 @@ function listPickHtml(p, i, cur0) {
   const [label, cls] = WL_KIND[p.kind] || ['Pick', 'disc'];
   const saved = S.wishlist.some(x => wishKey(x) === wishKey(p));
   const avg = WL.result.avgMarkup;
-  // prices stay in the currency of the wine list
+  // prices in the currency of the wine list, with your currency below
   const price = v => (v ? `${cur0} ${fmtNum(v, v % 1 ? 2 : 0)}` : '');
+  const mine = v => { const c = v && cur0 !== cur() ? convTo(v, cur0, cur()) : null; return c ? `<small>≈ ${esc(money(c, 0))}</small>` : ''; };
+  const o = p.offer;
   return `<div class="cons-card wl-card">
     <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${cls}">${esc(label)}</span>${p.page ? `<span class="small muted">page ${p.page}</span>` : ''}</div>
     <div><p class="cons-title">${esc(wishTitle(p))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(p) ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</p></div>
     <div class="wl-prices">
-      <div><span>On the list</span><b>${esc(price(p.listPrice) || 'N/A')}</b></div>
-      <div><span>Shop about</span><b>${esc(price(p.shopPrice) || 'N/A')}</b></div>
+      <div><span>On the list</span><b>${esc(price(p.listPrice) || 'N/A')}</b>${mine(p.listPrice)}</div>
+      <div><span>${o ? 'In shops' : 'Shop, estimate'}</span><b>${esc(price(p.shopPrice) || 'N/A')}</b>${mine(p.shopPrice)}</div>
       <div><span>Markup</span><b class="${p.markup && avg ? (p.markup < avg ? 'up' : p.markup > avg * 1.1 ? 'down' : '') : ''}">${p.markup ? `${fmtNum(p.markup, 1)}×` : 'N/A'}</b>${avg ? `<small>list ${fmtNum(avg, 1)}×</small>` : ''}</div>
     </div>
+    ${o ? `<div class="wl-shop">${flagOfCode(o.country)}<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)}${o.cur !== cur0 ? `, ${esc(o.cur)} ${esc(fmtNum(o.v, 2))}` : ''}${o.vintage && o.vintage !== String(p.vintage) ? `, vintage ${esc(o.vintage)}` : ''}</a>${ICON.link}</div>` : `<p class="tiny muted" style="margin:0">No online shop in ${esc(SHOP_COUNTRIES[WL.result.country] || 'this country')} found, the shop price is an estimate.</p>`}
     ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
     ${p.food ? `<p class="small cons-value" style="margin:0">${ICON.glass}<span>${esc(p.food)}</span></p>` : ''}
     ${p.fit !== null && p.fit !== undefined ? `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${p.fit}%</b></div>${segsHtml(p.fit, 12)}</div>` : ''}
@@ -189,13 +223,13 @@ function listHtml() {
   const pages = WL.pages.map((pg, i) => `<div class="wl-page"><img src="${esc(pg.thumb)}" alt="Page ${i + 1}"><span>${i + 1}</span><button class="icon-btn" data-act="wl-page-rm" data-i="${i}" aria-label="Remove page ${i + 1}"${WL.busy ? ' disabled' : ''}>${ICON.x}</button></div>`).join('');
   const full = WL.pages.length >= 10;
   const result = WL.busy
-    ? `<div class="somm-a"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'} and comparing the wines<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes about half a minute. Keep the app open.</p></div>`
+    ? `<div class="somm-a"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'}, comparing the wines and checking shop prices<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes up to a minute. Keep the app open.</p></div>`
     : WL.error ? `<div class="somm-a error"><p>${esc(WL.error)}</p></div>`
     : res ? `<div class="wl-result">
         <p class="small muted" style="margin:0">${res.count ? `${res.count} wines read from ${res.pages} ${res.pages === 1 ? 'page' : 'pages'}` : `${res.pages} ${res.pages === 1 ? 'page' : 'pages'} read`}${res.avgMarkup ? ` · average markup about ${fmtNum(res.avgMarkup, 1)}×` : ''}${res.food ? ` · food: ${esc(res.food)}` : ''}</p>
         ${res.picks.map((p, i) => listPickHtml(p, i, cur0)).join('')}
         ${res.note ? `<p class="small" style="margin:0">${esc(res.note)}</p>` : ''}
-        <p class="tiny muted" style="margin:0">Shop prices and quality are AI estimates. Change the range or the food below and analyze again, or start a new wine list.</p></div>` : '';
+        <p class="tiny muted" style="margin:0">Quality and the average markup are AI estimates. Change the range or the food below and analyze again, or start a new wine list.</p></div>` : '';
   const setup = `<section class="wl-setup">
       <div class="sec-head"><h2>Pages</h2><span class="small muted">${WL.pages.length} of 10</span></div>
       ${WL.pages.length ? `<div class="wl-pages">${pages}</div>` : '<p class="small muted" style="margin:0">Photograph the pages of the wine list you want to compare, one after the other.</p>'}
@@ -221,7 +255,7 @@ async function listAnalyze() {
   sommRefresh(false);
   window.scrollTo({ top: 0, behavior: 'smooth' });
   try {
-    WL.result = await api('winelist', { pages: WL.pages.map(pg => pg.b64), min: Number(String(WL.min).replace(',', '.')) || 0, max: Number(String(WL.max).replace(',', '.')) || 0, food });
+    WL.result = await api('winelist', { country: travelCountry(), pages: WL.pages.map(pg => pg.b64), min: Number(String(WL.min).replace(',', '.')) || 0, max: Number(String(WL.max).replace(',', '.')) || 0, food });
   } catch (e) {
     WL.error = /Unknown action/i.test(e.message) ? 'The wine list needs the new Code.gs. Update the script, then try again.' : aiErr(e.message);
   }
@@ -282,7 +316,7 @@ async function sommAsk(text, photo) {
   SOMM.tips = false;
   sommRefresh(true);
   try {
-    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode });
+    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '' });
   } catch (e) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
   }
