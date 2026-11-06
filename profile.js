@@ -156,10 +156,6 @@ function aboutHtml(w) {
     rows.push(abRow(c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : AB_ICON.vineyard, w.region, p ? p.sub : '', likeHint('region', w, regionKey), ['region', w.region]));
   }
   if (p && p.style) rows.push(abRow(AB_ICON.style, p.style, p.styleDesc, likeHint('style', w, x => (x.profile && x.profile.style ? lc(x.profile.style) : '')), ['style', p.style, w.region]));
-  if (w.grapes) {
-    const g = mainGrape(w);
-    rows.push(abRow(AB_ICON.grape, w.grapes, p && p.typical ? 'Typical blend, not stated for this wine' : '', g ? likeHint('grape', w, x => lc(mainGrape(x))) : null, g ? ['grape', g] : null));
-  }
   if (w.producer) rows.push(abRow(AB_ICON.producer, w.producer, p ? p.producerLine : '', likeHint('producer', w, x => lc(x.producer)), ['producer', w.producer, w.region]));
   if (!rows.length) return '';
   const more = p && (p.about || p.classification || p.alcohol || p.ageing || p.closure || p.vineyard || p.vintageNote);
@@ -301,42 +297,14 @@ function profilesBoxHtml() {
 
 /* ---------------------------------------------------------------- edit */
 
-/* Edit: the AI fills the taste profile from everything entered in the form; saved with Save wine */
-async function editProfileAI() {
-  if (!D || D.profileBusy) return;
-  const f = D.fields;
-  if (!str(f.name).trim() && !str(f.producer).trim()) { toast('Enter at least a producer or a wine name first.'); return; }
-  const draft = D;
-  draft.profileBusy = true;
-  renderProfileEditor();
-  try {
-    const d = await api('profiles', { wine: { producer: f.producer, name: f.name, vintage: f.vintage, type: f.type, region: f.region, grapes: f.grapes, taste: f.taste, tasteTags: splitList(f.tasteTags), pairings: splitList(f.pairings) } });
-    draft.profile = parseProfile(d.profile) || draft.profile;
-    draft.touched.add('profile');
-    if (d.grapes && !draft.touched.has('grapes') && !/\d\s*%/.test(str(f.grapes))) {
-      f.grapes = d.grapes;
-      const g = $('[name=grapes]');
-      if (g && D === draft) g.value = d.grapes;
-    }
-    if (D === draft) { const ab = $('#ab-editor'); if (ab) { ab.innerHTML = aboutEditorHtml(); ab.querySelectorAll('.autosize').forEach(autosize); } }
-    toast('Taste profile filled in. Check it and tap Save wine.');
-    fillInfos([{ region: f.region, grapes: d.grapes || f.grapes, producer: f.producer, profile: draft.profile, count: 1 }]);
-  } catch (e) {
-    toast(/Unknown action/i.test(e.message) ? 'Taste profiles need the new Code.gs.' : 'No taste profile: ' + aiErr(e.message));
-  }
-  draft.profileBusy = false;
-  if (D === draft) renderProfileEditor();
-}
 
 function profileEditorHtml() {
   const p = D.profile;
-  const ai = `<button class="btn ghost block" data-act="tp-ai"${D.profileBusy ? ' disabled' : ''}>${ICON.spark}${D.profileBusy ? 'The AI is filling in the profile…' : hasProfile({ profile: p }) ? 'Fill in again with AI' : 'Add taste profile with AI'}</button><p class="muted tiny" style="margin:-4px 0 0">Uses everything entered above, about 2 cents.</p>`;
   const axis = ([k, l, r]) => `<div class="tpe-row"><span>${l}</span><div class="tpe-dots">${[1, 2, 3, 4, 5].map(v => `<button class="${p[k] === v ? 'on' : ''}" data-act="tp-set" data-k="${k}" data-v="${v}" aria-label="${l} to ${r}: ${v} of 5"></button>`).join('')}</div><span>${r}</span></div>`;
   const aromaChips = Object.keys(AROMAS).map(g => { const i = p.aromas.findIndex(a => a.g === g); return `<button class="tpe-chip${i >= 0 ? ' on' : ''}" data-act="tp-aroma" data-v="${g}" style="--ac:${AROMAS[g][1]}">${AROMAS[g][2]}${esc(AROMAS[g][0])}</button>`; }).join('');
   const notes = p.aromas.map((a, i) => `<label class="field">${esc(AROMAS[a.g][0])}<input data-input="tp-note" data-i="${i}" value="${esc(a.n)}" placeholder="For example cherry, raspberry"></label>`).join('');
   const foods = Object.keys(FOODS).map(f => `<button class="tp-food${p.foods.includes(f) ? ' on' : ''}" data-act="tp-food" data-v="${f}">${FOODS[f][1]}<span>${esc(FOODS[f][0])}</span></button>`).join('');
   return `<span class="box-title">Taste profile</span>
-    ${ai}
     <p class="muted tiny" style="margin:-4px 0 0">Tap a dot to set it, tap it again to clear.</p>
     <div class="tpe-axes">${AXES.map(axis).join('')}</div>
     <span class="box-title" style="margin-top:6px">Main aromas</span>

@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 20;
+var API_VERSION = 21;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -971,9 +971,18 @@ function actionAnalyze_(req) {
   var content = [];
   if (req.image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: req.image } });
   content.push({ type: 'text', text: prompt });
-  var text = textOf_(callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: content }] }));
-  var d = parseJson_(text, 'The AI returned no wine data');
-  d.profile = normProfile_(d.profile);
+  var res = callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: content }] });
+  var d = parseJson_(textOf_(res), 'The AI returned no wine data');
+  var prof = profileFrom_(res);
+  if (!prof) {
+    // no usable taste profile in the answer: ask for it once more with everything known now
+    var w = {};
+    ['producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings'].forEach(function (k) { w[k] = hints[k] !== undefined && hints[k] !== '' ? hints[k] : d[k]; });
+    var again = profilesFor_([w]);
+    prof = again.res[0];
+  }
+  d.profile = prof ? prof.profile : null;
+  if (prof && prof.grapes && !d.grapes) d.grapes = prof.grapes;
   return d;
 }
 

@@ -682,3 +682,9 @@ div.ab-row { grid-template-columns: 40px minmax(0, 1fr); }
 .info-sec h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; color: var(--gold); }
 .info-sec p { font-size: 15px; line-height: 1.55; margin: 0; }
 .info-wait { display: flex; flex-direction: column; gap: 6px; padding: 18px 0; }
+
+/* vintage question after reading a label */
+.vint-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.vint-row input { width: 100%; min-width: 0; box-sizing: border-box; height: 50px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 22px; text-align: center; letter-spacing: .08em; }
+.vint-row .btn { height: 50px; padding: 0 20px; }
+.vint-years { display: flex; flex-wrap: wrap; gap: 8px; }

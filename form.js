@@ -174,8 +174,8 @@ function formBody() {
     </div>
     <div class="box" id="tp-editor">${profileEditorHtml()}</div>
     <div class="box" id="ab-editor">${aboutEditorHtml()}</div>
-    <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update details with AI</button>
-    <p class="muted tiny" style="margin:-10px 0 0">Uses what you entered, for example the vintage, and fills in the rest. Fields you changed here stay as they are.</p>
+    <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update wine info with AI</button>
+    <p class="muted tiny" style="margin:-10px 0 0">Fills in details, drinking window, taste profile and background from what you entered, for example the vintage. Fields you changed here stay as they are. About 3 cents.</p>
     <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
       <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
@@ -525,7 +525,7 @@ async function finishCrop(quad) {
   }
 }
 
-const HINT_KEYS = ['producer', 'name', 'vintage', 'type', 'region', 'grapes'];
+const HINT_KEYS = ['producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings'];
 
 async function runAnalysis() {
   const draft = D;
@@ -542,6 +542,9 @@ async function runAnalysis() {
     draft.ai = 'ok';
     draft.noVintage = !str(draft.fields.vintage).trim() && (res.vintage === null || res.vintage === undefined || res.vintage === '');
     applyAnalysis(draft, res || {});
+    // no vintage on the label: ask for it, then fill in again for that vintage
+    if (draft.noVintage && !draft.vintageAsked && D === draft) { draft.vintageAsked = true; vintageAsk(); }
+    if (draft.mode === 'edit' && D === draft) fillInfos([{ region: draft.fields.region, grapes: draft.fields.grapes, producer: draft.fields.producer, profile: draft.profile, count: 1 }]);
   } catch (e) {
     draft.ai = 'error';
     draft.aiMsg = e.message.replace(/Claude API/g, 'AI service').replace(/Claude Console/g, 'API console').replace(/\.?$/, '.');
@@ -594,7 +597,7 @@ function updateBanner() {
   b.hidden = false;
   b.className = 'banner' + (D.ai === 'error' ? ' error' : '');
   b.innerHTML = D.ai === 'busy' ? '<span class="spinner"></span>Searching and completing details…'
-    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage found on the label. Enter it below, then tap Update details with AI to get the right drinking window.' : 'Details completed. Review and correct.')
+    : D.ai === 'ok' ? ICON.spark + (D.noVintage ? 'No vintage on the label. Enter it, then tap Update wine info with AI for the right drinking window.' : 'Wine info completed. Review and correct.')
     : `Details could not be completed: ${esc(D.aiMsg)} You can fill them in yourself.`;
 }
 
@@ -706,4 +709,35 @@ async function saveWineForm() {
     busy(false);
     toast('Not saved: ' + e.message);
   }
+}
+
+/* ---------------------------------------------------------------- no vintage on the label: ask for it */
+
+function vintageAsk() {
+  let root = $('#vint-root');
+  if (!root) { root = document.createElement('div'); root.id = 'vint-root'; document.body.appendChild(root); }
+  const y = new Date().getFullYear();
+  const years = Array.from({ length: 12 }, (_, i) => y - 1 - i);
+  root.innerHTML = `<div class="sheet-backdrop" data-act="vint-close"></div>
+  <div class="sheet vint-sheet" role="dialog" aria-modal="true" aria-label="Which vintage is it?">
+    <div class="between"><h2 style="font-size:19px;font-weight:600">Which vintage is it?</h2><button class="icon-btn" data-act="vint-close" aria-label="Close">${ICON.x}</button></div>
+    <p class="small muted" style="margin:0">The vintage is not readable on the label. It decides the drinking window, the taste profile and the prices.</p>
+    <div class="vint-row"><input id="vint-in" inputmode="numeric" maxlength="4" placeholder="${y - 3}" aria-label="Vintage"><button class="btn accent" data-act="vint-ok">Fill in</button></div>
+    <div class="vint-years">${years.map(v => `<button class="chip" data-act="vint-pick" data-v="${v}">${v}</button>`).join('')}</div>
+    <button class="btn ghost block" data-act="vint-pick" data-v="NV">Non-vintage (NV)</button>
+  </div>`;
+  const i = $('#vint-in');
+  if (i) { setTimeout(() => i.focus(), 80); i.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); vintageChosen(i.value.trim()); } }); }
+}
+function vintageClose() { const r = $('#vint-root'); if (r) r.innerHTML = ''; }
+function vintageChosen(v) {
+  if (!D) { vintageClose(); return; }
+  if (v === 'NV') { vintageClose(); D.noVintage = false; updateBanner(); toast('Kept as a non-vintage wine.'); return; }
+  if (!/^\d{4}$/.test(v) || Number(v) < 1900 || Number(v) > new Date().getFullYear()) { toast('Enter the vintage with four digits, for example 2019.'); return; }
+  vintageClose();
+  D.fields.vintage = v;
+  D.touched.add('vintage');
+  const el = $('[name="vintage"]');
+  if (el) el.value = v;
+  runAnalysis();
 }
