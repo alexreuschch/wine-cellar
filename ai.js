@@ -221,7 +221,7 @@ function listGuideHtml() {
     <h3>How it works</h3>
     <ul>
       <li><b>Photograph the pages</b> of the wine list you want to compare, one after the other, up to 10. Hold the phone straight and make sure the prices are sharp.</li>
-      <li><b>Set your price range</b> per bottle, in the currency of the list. You can leave it empty.</li>
+      <li><b>Set your budget per bottle</b>, what you want to spend on one bottle, in the currency of the list. You can leave it empty.</li>
       <li><b>Say what you eat</b> in the field at the bottom, by typing or with the microphone. Check the text before you start.</li>
     </ul>
     <h3>What you get</h3>
@@ -282,8 +282,9 @@ function listHtml() {
       ${WL.pages.length ? `<div class="wl-pages">${pages}</div>` : '<p class="small muted" style="margin:0">Photograph the pages of the wine list you want to compare, one after the other.</p>'}
       ${full ? '' : `<label class="btn ${WL.pages.length ? '' : 'primary big '}block">${ICON.camera}${WL.pages.length ? 'Add page' : 'Take a photo of the first page'}<input type="file" accept="image/*" capture="environment" data-change="wl-photo" hidden></label>
       <label class="btn ghost block">Choose from gallery<input type="file" accept="image/*" multiple data-change="wl-photo" hidden></label>`}
-      <div class="sec-head" style="margin-top:6px"><h2>Price per bottle</h2><span class="small muted">in the currency of the list</span></div>
-      <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="Any" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="Any" value="${esc(WL.max)}"></label></div>
+      <div class="sec-head" style="margin-top:6px"><h2>Your budget per bottle</h2><span class="small muted">optional</span></div>
+      <p class="small muted" style="margin:-4px 0 0">How much you want to spend on one bottle, in ${esc(countryCur(travelCountry()))} as on the list. The best wine within it becomes your first pick, <b>Best in your range</b>. Leave it empty for no limit.</p>
+      <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
       <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
       <button class="btn accent big block" data-act="wl-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}${res ? 'Analyze again' : 'Find the best wines'}</button>
     </section>`;

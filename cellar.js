@@ -23,6 +23,23 @@ const offChip = (act, label) => `<button class="chip on" data-act="${act}" aria-
 
 const F_WINE = { label: 'Wine', plural: 'wine types', of: w => [w.type], order: TYPES };
 const F_GRAPE = { label: 'Grape', plural: 'grapes', of: grapeNames };
+/* country and region of a wine, from its region field "Côte de Nuits, Burgundy, France": the region is the part right before the country.
+   Each shows the flag of the country. The choices follow each other: with France set, Region only offers French regions, and the other way round. */
+const flagEmoji2 = code => String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65));
+function regionOf(w) {
+  const parts = str(w.region).split(',').map(x => x.trim()).filter(Boolean);
+  const c = countryOf(w);
+  const i = c ? parts.findIndex(x => COUNTRY_CODES[lc(x)] === c.code) : parts.length;
+  return i > 0 ? parts[i - 1] : '';
+}
+const countryNameOf = w => { const c = countryOf(w); return c ? SHOP_COUNTRIES[c.code] || c.name : ''; };
+const codeOfCountry = name => COUNTRY_CODES[lc(name)] || Object.keys(SHOP_COUNTRIES).find(k => lc(SHOP_COUNTRIES[k]) === lc(name)) || '';
+const F_COUNTRY = { label: 'Country', plural: 'countries', of: w => { const n = countryNameOf(w); return n ? [n] : []; },
+  lead: name => { const code = codeOfCountry(name); return code ? `<span class="flag">${flagEmoji2(code)}</span>` : ''; } };
+const F_REGION = { label: 'Region', plural: 'regions', of: w => { const r = regionOf(w); return r ? [r] : []; },
+  lead: name => { const w = S.wines.find(x => lc(regionOf(x)) === lc(name) && countryOf(x)); return w ? flagOf(w) : ''; } };
+/* the phase in the drinking window, as on the Window screen */
+const F_WINDOW = { label: 'Window', plural: 'phases', of: w => [statusOf(w)], order: STATUS_ORDER, dot: n => (STATUS[n] ? STATUS[n].c : '') };
 const F_RATING = { label: 'Rating', kind: 'rating', of: () => [] };
 /* journal month as 'Nov 2026', and back to '2026-11' for sorting */
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -40,8 +57,11 @@ const CTX = {
     facets: {
       wine: F_WINE,
       grape: F_GRAPE,
-      food: { label: 'Food', plural: 'kinds of food', of: foodNames },
+      country: F_COUNTRY,
+      region: F_REGION,
+      window: F_WINDOW,
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
+      food: { label: 'Food', plural: 'kinds of food', of: foodNames },
       vintage: F_VINTAGE,
       drinkby: F_DRINKBY,
       // a sub-region, village or style tapped in a background: exactly the wines counted on its chip
@@ -72,7 +92,9 @@ const CTX = {
     facets: {
       wine: F_WINE,
       grape: F_GRAPE,
-      window: { label: 'Window', plural: 'drinking windows', of: w => [statusOf(w)], order: STATUS_ORDER, dot: v => (STATUS[v] || {}).c },
+      country: F_COUNTRY,
+      region: F_REGION,
+      window: F_WINDOW,
       price: F_PRICE
     },
     items: () => topPool(),
@@ -216,7 +238,8 @@ function facetChipsHtml(ctx) {
   else if (st.all[k] && rest.length > 12) { rest = def.order ? rest : byName(rest); boxed = true; }
   else if (rest.length > 12) { more = `<button class="chip" data-act="f-more" data-ctx="${ctx}" data-k="${k}">Show all ${rest.length}</button>`; rest = rest.slice(0, 12); }
   const dot = x => (def.dot && def.dot(x.name) ? `<span class="dot" style="--c:${def.dot(x.name)}"></span>` : '');
-  const chip = (x, on) => `<button class="chip${on ? ' on' : ''}" data-act="f-chip" data-ctx="${ctx}" data-k="${k}" data-v="${esc(x.key)}">${dot(x)}${esc(x.name)}${on ? ICON.x : ` <span class="n">${x.n}</span>`}</button>`;
+  const lead = x => (def.lead ? def.lead(x.name) : '');
+  const chip = (x, on) => `<button class="chip${on ? ' on' : ''}" data-act="f-chip" data-ctx="${ctx}" data-k="${k}" data-v="${esc(x.key)}">${dot(x)}${lead(x)}${esc(x.name)}${on ? ICON.x : ` <span class="n">${x.n}</span>`}</button>`;
   const parts = [];
   if (selected.length) parts.push(`<div class="chips">${selected.map(x => chip(x, true)).join('')}</div>`);
   if (rest.length) parts.push(`<div class="chips${boxed ? ' scroll-box' : ''}">${rest.map(x => chip(x, false)).join('')}${more}</div>`);
