@@ -688,3 +688,9 @@ div.ab-row { grid-template-columns: 40px minmax(0, 1fr); }
 .vint-row input { width: 100%; min-width: 0; box-sizing: border-box; height: 50px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 22px; text-align: center; letter-spacing: .08em; }
 .vint-row .btn { height: 50px; padding: 0 20px; }
 .vint-years { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* wine info: what is missing */
+.wi-tab { padding: 4px 0; }
+.wi-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.wi-row:last-child { border-bottom: 0; }
+.wi-row b { font-variant-numeric: tabular-nums; }

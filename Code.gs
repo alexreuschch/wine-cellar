@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 21;
+var API_VERSION = 22;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -68,6 +68,8 @@ var ACTIONS = {
   profiles: actionProfiles_,
   info: actionInfo_,
   infoFill: actionInfoFill_,
+  complete: actionComplete_,
+  infoKeys: actionInfoKeys_,
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
@@ -269,7 +271,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Label details', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Taste profiles', info: 'Background', infoFill: 'Background' };
+var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -958,6 +960,20 @@ var ANALYZE_PROMPT = [
   'Use null for anything you cannot determine. Do not include ratings, scores or prices.'
 ].join('\n');
 
+function analyzeRequest_(image, hints) {
+  var known = Object.keys(hints).filter(function (k) { return hints[k] !== '' && hints[k] !== null && hints[k] !== undefined; });
+  var prompt = ANALYZE_PROMPT;
+  if (!image) prompt = prompt.replace('Read the wine label in this photo and return', 'There is no photo. Based on the details below, return');
+  if (known.length) {
+    prompt += '\n\nThe owner confirmed these details. Treat them as correct, keep them unchanged in your answer, and base everything else on them, especially the drinking window for this exact vintage:\n' +
+      known.map(function (k) { return k + ': ' + (Array.isArray(hints[k]) ? hints[k].join(', ') : hints[k]); }).join('\n');
+  }
+  var content = [];
+  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } });
+  content.push({ type: 'text', text: prompt });
+  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: content }] };
+}
+
 function actionAnalyze_(req) {
   var hints = req.hints || {};
   var known = Object.keys(hints).filter(function (k) { return hints[k] !== '' && hints[k] !== null && hints[k] !== undefined; });
@@ -1054,6 +1070,74 @@ function actionProfiles_(req) {
     });
     return { wines: out, failed: failed };
   });
+}
+
+/** Completes the AI details of a few wines at the same time: only empty fields are filled, nothing the owner entered is changed. */
+function actionComplete_(req) {
+  var ids = (Array.isArray(req.ids) ? req.ids : []).map(String).slice(0, 4);
+  if (!ids.length) return { wines: [], failed: [] };
+  var t = table_(SHEETS.wines);
+  var rows = ids.map(function (id) { var i = findIndex_(t, id); return i < 0 ? null : toObj_(t.headers, t.rows[i]); }).filter(Boolean);
+  var list = function (v) { if (Array.isArray(v)) return v; try { var a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch (e) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(String); } };
+  var hintsOf = function (w) {
+    var h = {};
+    ['producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste'].forEach(function (k) { if (String(w[k] || '').trim()) h[k] = String(w[k]); });
+    if (list(w.tasteTags).length) h.tasteTags = list(w.tasteTags);
+    if (list(w.pairings).length) h.pairings = list(w.pairings);
+    return h;
+  };
+  var res = rows.map(function () { return null; }), err = rows.map(function () { return ''; });
+  for (var round = 0; round < 2; round++) {
+    var todo = rows.map(function (w, i) { return i; }).filter(function (i) { return !res[i]; });
+    if (!todo.length || (round > 0 && elapsed_() > TIME_SOFT)) break;
+    var replies = callClaudeMany_(todo.map(function (i) { return analyzeRequest_(null, hintsOf(rows[i])); }));
+    todo.forEach(function (i, j) {
+      try {
+        var d = parseJson_(textOf_(replies[j]), 'No answer');
+        var prof = profileFrom_(replies[j]);
+        d.profile = prof ? prof.profile : null;
+        res[i] = d;
+      } catch (e) { err[i] = replies.errors[j] || 'The AI returned no usable details'; }
+    });
+  }
+  return withLock_(function () {
+    var t2 = table_(SHEETS.wines), out = [], failed = [];
+    rows.forEach(function (w, i) {
+      var d = res[i];
+      if (!d) { failed.push({ id: w.id, error: err[i] }); return; }
+      var idx = findIndex_(t2, w.id);
+      if (idx < 0) return;
+      var obj = toObj_(t2.headers, t2.rows[idx]);
+      var empty = function (k) { return !String(obj[k] === null || obj[k] === undefined ? '' : obj[k]).trim() || String(obj[k]) === '[]'; };
+      ['region', 'grapes', 'taste'].forEach(function (k) { if (empty(k) && d[k]) obj[k] = String(d[k]).slice(0, k === 'taste' ? 1200 : 200); });
+      if (empty('type') && d.type) obj.type = String(d.type);
+      ['tasteTags', 'pairings'].forEach(function (k) { if (!list(obj[k]).length && Array.isArray(d[k]) && d[k].length) obj[k] = d[k].map(String).slice(0, 12).join(', '); });
+      if (empty('drinkFrom') && empty('drinkUntil') && Number(d.drinkFrom) && Number(d.drinkUntil)) {
+        ['drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil'].forEach(function (k) { if (Number(d[k])) obj[k] = Number(d[k]); });
+      }
+      // the profile: added when missing, otherwise only its empty parts are filled
+      var cur = null;
+      try { cur = obj.profile ? JSON.parse(obj.profile) : null; } catch (e) { cur = null; }
+      if (d.profile) {
+        if (!cur || !(cur.body || (cur.aromas || []).length || (cur.foods || []).length)) cur = d.profile;
+        else Object.keys(d.profile).forEach(function (k) {
+          var v = cur[k];
+          if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) cur[k] = d.profile[k];
+        });
+        if (/\d\s*%/.test(String(w.grapes || ''))) cur.typical = false;
+        obj.profile = JSON.stringify(cur);
+      }
+      obj.updatedAt = new Date().toISOString();
+      writeRow_(t2, idx, obj);
+      out.push(obj);
+    });
+    return { wines: out, failed: failed };
+  });
+}
+
+/** The regions, grapes, styles and producers that already have a background. */
+function actionInfoKeys_() {
+  return { keys: readAll_(SHEETS.info).map(function (r) { return String(r.key); }) };
 }
 
 function actionStreetPrice_(req) {

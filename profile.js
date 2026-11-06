@@ -207,7 +207,7 @@ function grapeRingHtml(w) {
     used.add(c);
     return { k: g.name, n: g.n, c, info: g.name };
   });
-  const center = rows.length === 1 ? ['100%', 'grape'] : [String(rows.length), 'grapes'];
+  const center = [String(rows.length), rows.length === 1 ? 'grape' : 'grapes'];
   return `<div class="tp-block"><p class="tp-lead">Grapes${w.profile && w.profile.typical ? ' · typical blend' : ''}</p>${donut(rows, 100, { label: 'Grapes', pctOnly: true, center, wrap: true })}</div>`;
 }
 
@@ -263,36 +263,68 @@ function applyProfiles(rows) {
   persist();
 }
 
-async function profileAll() {
+/* what the AI has not filled in yet, per wine */
+const PROFILE_FACTS = ['producerLine', 'about', 'classification', 'ageing', 'vineyard', 'vintageNote'];
+const MISSING_PARTS = [
+  ['profile', 'Taste profile (taste axes, aromas, food)', w => !hasProfile(w)],
+  ['facts', 'Background facts (producer, classification, ageing, vintage)', w => !w.profile || !PROFILE_FACTS.some(k => str(w.profile[k]).trim())],
+  ['window', 'Drinking window', w => w.drinkFrom === null && w.drinkUntil === null],
+  ['taste', 'Taste notes, taste tags and dishes', w => !str(w.taste).trim() || !w.tasteTags.length || !w.pairings.length],
+  ['basics', 'Region or grapes', w => !str(w.region).trim() || !str(w.grapes).trim()]
+];
+const missingParts = w => MISSING_PARTS.filter(m => m[2](w)).map(m => m[0]);
+const incompleteWines = () => S.wines.filter(w => missingParts(w).length);
+
+/* regions, grapes, styles and producers without a background, checked against the server once per session */
+let INFO_KEYS = null;
+async function loadInfoKeys() {
+  if (INFO_KEYS || (S.version && S.version < 22)) return;
+  try { INFO_KEYS = new Set((await api('infoKeys', {})).keys || []); if (location.hash.startsWith('#/settings')) refreshView(); } catch (e) { INFO_KEYS = null; }
+}
+function missingInfos() {
+  const have = infoCache(), seen = new Set();
+  S.wines.forEach(w => infoItems(w).forEach(x => { const k = infoKey(x.kind, x.name, x.context); if (!have[k] && !(INFO_KEYS && INFO_KEYS.has(k))) seen.add(k); }));
+  return seen.size;
+}
+
+const COMPLETE_BATCH = 3;
+async function completeAll() {
   if (PROF.busy) return;
-  const todo = S.wines.filter(w => !hasProfile(w)).sort((a, b) => (b.count > 0) - (a.count > 0)).map(w => w.id);
-  if (!todo.length) { toast('All wines have a taste profile.'); return; }
+  const todo = incompleteWines().sort((a, b) => (b.count > 0) - (a.count > 0)).map(w => w.id);
   Object.assign(PROF, { busy: true, done: 0, total: todo.length, failed: 0, lastError: '' });
   refreshView();
+  const say = t => { const el = $('#prof-progress'); if (el) el.textContent = t; };
   try {
-    for (let i = 0; i < todo.length; i += PROF_BATCH) {
-      const d = await api('profiles', { ids: todo.slice(i, i + PROF_BATCH) });
-      applyProfiles(d.wines);
-      PROF.done = Math.min(todo.length, i + PROF_BATCH);
+    for (let i = 0; i < todo.length; i += COMPLETE_BATCH) {
+      const d = await api('complete', { ids: todo.slice(i, i + COMPLETE_BATCH) });
+      (d.wines || []).forEach(r => upsertWine(normWine(r)));
+      persist();
+      PROF.done = Math.min(todo.length, i + COMPLETE_BATCH);
       PROF.failed += (d.failed || []).length;
       if ((d.failed || []).length) PROF.lastError = d.failed[0].error || '';
-      const el = $('#prof-progress');
-      if (el) el.textContent = `${PROF.done} of ${PROF.total} wines done…`;
+      say(`${PROF.done} of ${PROF.total} wines done…`);
     }
-    await fillInfos(S.wines, (n, t) => { const el = $('#prof-progress'); if (el) el.textContent = `Background on regions, grapes, styles and producers: ${n} of ${t}…`; });
-    toast(PROF.failed ? `Done. ${PROF.failed} ${PROF.failed === 1 ? 'wine' : 'wines'} without a profile: ${aiErr(PROF.lastError || 'no answer')} Tap the button again for the rest.` : 'All taste profiles and backgrounds added.');
-  } catch (e) { toast(/Unknown action/i.test(e.message) ? 'Taste profiles need the new Code.gs.' : aiErr(e.message)); }
+    await fillInfos(S.wines, (n, t) => say(`Background on regions, grapes, styles and producers: ${n} of ${t}…`));
+    INFO_KEYS = null;
+    loadInfoKeys();
+    toast(PROF.failed ? `Done. ${PROF.failed} ${PROF.failed === 1 ? 'wine' : 'wines'} could not be completed: ${aiErr(PROF.lastError || 'no answer')} Tap the button again for the rest.` : 'Wine info completed.');
+  } catch (e) { toast(/Unknown action/i.test(e.message) ? 'This needs the new Code.gs.' : aiErr(e.message)); }
   PROF.busy = false;
   refreshView();
 }
 
-function profilesBoxHtml() {
-  const all = S.wines.length, missing = S.wines.filter(w => !hasProfile(w)).length;
-  return `<section class="box"><span class="box-title">Taste profiles</span>
-    <p class="small" style="margin:0">${all - missing} of ${all} wines have a taste profile with taste axes, main aromas, food categories and background.</p>
-    ${PROF.busy && !PROF.one ? `<p class="small" id="prof-progress" style="margin:0">${PROF.done} of ${PROF.total} wines done…</p>` : ''}
-    <button class="btn accent block" data-act="profile-all"${PROF.busy || !missing ? ' disabled' : ''}>${ICON.spark}${missing ? `Add taste profiles for ${missing} ${missing === 1 ? 'wine' : 'wines'}` : 'All wines have a taste profile'}</button>
-    <p class="muted tiny" style="margin:0">Costs about 2 cents per wine. Keep the app open while it runs. New wines get their profile when the label is read.</p></section>`;
+function wineInfoBoxHtml() {
+  loadInfoKeys();
+  const all = S.wines.length, inc = incompleteWines(), bg = missingInfos();
+  const rows = MISSING_PARTS.map(([k, label, test]) => [label, S.wines.filter(test).length]).filter(r => r[1]);
+  const list = rows.length || bg ? `<div class="usage-tab wi-tab">${rows.map(([l, n]) => `<div class="wi-row"><span>${esc(l)}</span><b>${n}</b></div>`).join('')}${bg ? `<div class="wi-row"><span>Background on regions, grapes, styles and producers</span><b>${bg}</b></div>` : ''}</div>` : '';
+  const todo = inc.length || bg;
+  return `<section class="box"><span class="box-title">Wine info</span>
+    <p class="small" style="margin:0">${inc.length ? `${inc.length} of ${all} wines are missing AI details:` : `All ${all} wines have their AI details${bg ? ', only some backgrounds are missing:' : '.'}`}</p>
+    ${list}
+    ${PROF.busy ? `<p class="small" id="prof-progress" style="margin:0">${PROF.done} of ${PROF.total} wines done…</p>` : ''}
+    <button class="btn accent block" data-act="complete-all"${PROF.busy || !todo ? ' disabled' : ''}>${ICON.spark}${inc.length ? `Complete wine info for ${inc.length} ${inc.length === 1 ? 'wine' : 'wines'}` : bg ? 'Add the missing backgrounds' : 'Wine info is complete'}</button>
+    <p class="muted tiny" style="margin:0">Only empty fields are filled, nothing you entered is changed. About 3 cents per wine and 1 cent per region, grape, style or producer, each only once. Street prices and best offers stay separate. Keep the app open while it runs.</p></section>`;
 }
 
 /* ---------------------------------------------------------------- edit */

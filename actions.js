@@ -143,7 +143,7 @@ const ACTS = {
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
   'info-mine': () => { const m = infoMine(); closeInfo(); if (m.go) insightsGo(m.go[0], m.go[1]); },
-  'profile-all': () => profileAll(),
+  'complete-all': () => completeAll(),
   'tp-set': el => { const k = el.dataset.k, v = Number(el.dataset.v); D.profile[k] = D.profile[k] === v ? null : v; D.touched.add('profile'); renderProfileEditor(); },
   'tp-aroma': el => {
     const g = el.dataset.v, a = D.profile.aromas, i = a.findIndex(x => x.g === g);

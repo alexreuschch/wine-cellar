@@ -176,20 +176,31 @@ async function saveEdit() {
 }
 
 /* AI usage of the last months, logged by the script with estimated list prices */
-const USAGE_ORDER = ['Label details', 'Street prices', 'Best offer', 'Sommelier', 'Wine list', 'Consultant', 'Other'];
+const USAGE_ORDER = ['Wine info', 'Background', 'Street prices', 'Best offer', 'Sommelier', 'Wine list', 'Consultant'];
+// earlier names of the same features
+const USAGE_OLD = { 'Label details': 'Wine info', 'Taste profiles': 'Wine info' };
+function usageMonth(m) {
+  const kinds = {};
+  Object.keys(m.kinds || {}).forEach(k => {
+    const n = USAGE_OLD[k] || k, e = m.kinds[k], t = kinds[n] || (kinds[n] = { calls: 0, searches: 0, usd: 0 });
+    t.calls += Number(e.calls) || 0; t.searches += Number(e.searches) || 0; t.usd += Number(e.usd) || 0;
+  });
+  return { month: m.month, kinds };
+}
 function usageHtml() {
   if (!S.usage.length) return S.version && S.version < 13 ? '' : `<section class="box"><span class="box-title">AI usage</span><p class="small muted" style="margin:0">No AI requests counted yet.</p></section>`;
   const usd = v => `USD ${fmtNum(v, 2)}`;
   const monthName = m => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); };
-  const cur0 = S.usage[0];
-  const kinds = USAGE_ORDER.filter(k => cur0.kinds[k]);
+  const cur0 = usageMonth(S.usage[0]);
+  // every feature with requests, the known ones first, so the rows always add up to the total
+  const kinds = USAGE_ORDER.filter(k => cur0.kinds[k]).concat(Object.keys(cur0.kinds).filter(k => !USAGE_ORDER.includes(k) && k !== 'Other').sort(), cur0.kinds.Other ? ['Other'] : []);
   const total = m => Object.values(m.kinds).reduce((a, e) => a + (Number(e.usd) || 0), 0);
   const calls = m => Object.values(m.kinds).reduce((a, e) => a + (Number(e.calls) || 0), 0);
   return `<section class="box"><span class="box-title">AI usage</span>
     <p class="small" style="margin:0"><b>${esc(monthName(cur0.month))}</b>: ${calls(cur0)} requests, about ${usd(total(cur0))}</p>
     ${kinds.length ? `<div class="usage-tab"><div class="usage-row head"><span>Feature</span><span>Requests</span><span>Searches</span><span>Cost</span></div>
       ${kinds.map(k => { const e = cur0.kinds[k]; return `<div class="usage-row"><span>${esc(k)}</span><span>${e.calls}</span><span>${e.searches || 0}</span><span>${usd(e.usd)}</span></div>`; }).join('')}</div>` : ''}
-    ${S.usage.slice(1).filter(m => calls(m)).map(m => `<p class="small muted" style="margin:0">${esc(monthName(m.month))}: ${calls(m)} requests, about ${usd(total(m))}</p>`).join('')}
+    ${S.usage.slice(1).map(usageMonth).filter(m => calls(m)).map(m => `<p class="small muted" style="margin:0">${esc(monthName(m.month))}: ${calls(m)} requests, about ${usd(total(m))}</p>`).join('')}
     <p class="muted tiny" style="margin:0">Estimated from list prices of the AI service. The Claude Console shows the exact amounts under Usage.</p></section>`;
 }
 
@@ -262,7 +273,7 @@ function viewSettings(first) {
     ${first ? '' : locationsHtml()}
     ${first ? '' : retailersHtml()}
     ${first ? '' : peopleHtml()}
-    ${first ? '' : profilesBoxHtml()}
+    ${first ? '' : wineInfoBoxHtml()}
     ${first ? '' : usageHtml()}
     ${first ? '' : `<section class="box"><span class="box-title">Your data</span>
       <button class="btn block" data-act="export"${U.exporting ? ' disabled' : ''}>${ICON.download}${U.exporting ? 'Preparing file…' : 'Export all data to Excel'}</button>
