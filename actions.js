@@ -142,6 +142,7 @@ const ACTS = {
   'vint-close': () => vintageClose(),
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
+  'info-grape': el => { const g = el.dataset.g; closeInfo(); insightsGo('grape', g); },
   'info-mine': () => { const m = infoMine(); closeInfo(); if (m.go) insightsGo(m.go[0], m.go[1]); },
   'complete-all': () => completeAll(),
   'tp-set': el => { const k = el.dataset.k, v = Number(el.dataset.v); D.profile[k] = D.profile[k] === v ? null : v; D.touched.add('profile'); renderProfileEditor(); },

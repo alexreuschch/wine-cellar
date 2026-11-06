@@ -392,7 +392,8 @@ const infoKey = (kind, name, context) => `${kind}|${kind === 'region' ? infoFirs
 function infoCache() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
 const countryName = c => { if (COUNTRY_NAMES[c]) return COUNTRY_NAMES[c]; try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch (e) { return c; } };
 /* a grape background from before the charts is written again once */
-const infoOld = (kind, d) => kind === 'grape' && !(d && d.v >= 3) && !(S.version && S.version < 24);
+const INFO_NEW = { grape: [3, 24], region: [2, 25], producer: [2, 25] };
+const infoOld = (kind, d) => !!INFO_NEW[kind] && ((d && d.v) || 0) < INFO_NEW[kind][0] && !(S.version && S.version < INFO_NEW[kind][1]);
 function infoRemember(key, data) { try { const c = infoCache(); c[key] = data; localStorage.setItem('wc-info', JSON.stringify(c)); } catch (e) { /* kept for this session */ } }
 
 async function openInfo(kind, name, context) {
@@ -428,35 +429,143 @@ function infoMine() {
   return { all, inStock, go };
 }
 
-/* the grape at a glance: other names, key facts with the origin flag, ageing as a timeline, what it is used for, where it is planted */
-function grapeFactsHtml(d) {
-  const age = d.ageing;
-  const facts = d.facts.filter(f => !(age && /ageing|aging/i.test(f.label)));
-  const tile = (f, i) => {
-    const flag = /^origin$/i.test(f.label) && d.originCountry ? `<span class="gi-fflag">${flagEmoji(d.originCountry)}</span> ` : '';
-    return `<div class="ab-fact${facts.length % 2 && i === facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${flag}${esc(f.value)}</b></div></div>`;
-  };
-  const aka = (d.aka || []).length ? `<div class="gi-aka"><span>Also known as</span><div class="gi-chips">${d.aka.map(a => `<span class="gi-chip">${esc(a)}</span>`).join('')}</div></div>` : '';
-  return `${aka}${facts.length ? `<div class="ab-facts">${facts.map(tile).join('')}</div>` : ''}${age ? grapeAgeHtml(d) : ''}`;
+/* ---------------------------------------------------------------- the background sheet: tiles, boxes and charts */
+
+const factOf = (d, re) => d.facts.find(f => re.test(f.label));
+/* key facts as tiles, two per row; a last single tile takes the full width */
+function tilesHtml(list) {
+  return list.length ? `<div class="ab-facts">${list.map((f, i) => `<div class="ab-fact${list.length % 2 && i === list.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${f.html || esc(f.value)}</b></div></div>`).join('')}</div>` : '';
 }
-function grapeAgeHtml(d) {
-  const age = d.ageing, f = d.facts.find(x => /ageing|aging/i.test(x.label));
-  const top = Math.max(...[age.everyday, age.best].filter(Boolean).map(x => x[1]));
+const boxHtml = (label, inner, cls) => `<div class="gi-box${cls ? ' ' + cls : ''}"><div class="gi-box-h"><span>${esc(label)}</span></div>${inner}</div>`;
+
+/* ageing as a timeline in years after the vintage: everyday wines and the best wines */
+function ageHtml(age, text) {
+  const rows = [['Everyday', age.everyday, 'e'], ['Best wines', age.best, 'b'], ['Typical', age.typical, 'b']].filter(r => r[1]);
+  const top = Math.max(...rows.map(r => r[1][1]));
   const end = Math.min(40, Math.max(10, top > 20 ? Math.ceil(top / 10) * 10 : Math.ceil(top / 5) * 5));
   const pos = v => `${Math.min(100, v / end * 100)}%`;
   const yrs = x => `${x[0]} to ${x[1] > end ? end + '+' : x[1]} years`;
-  const row = (label, x, cls) => x ? `<div class="gi-age-row"><span>${label}</span><span class="gi-age-tr"><i class="${cls}" style="left:${pos(x[0])};width:calc(${pos(Math.min(x[1], end))} - ${pos(x[0])})"></i></span><b>${yrs(x)}</b></div>` : '';
+  const row = ([label, x, cls]) => `<div class="gi-age-row"><span>${label}</span><span class="gi-age-tr"><i class="${cls}" style="left:${pos(x[0])};width:calc(${pos(Math.min(x[1], end))} - ${pos(x[0])})"></i></span><b>${yrs(x)}</b></div>`;
   const ticks = []; for (let y = 0; y <= end; y += end > 20 ? 10 : 5) ticks.push(`<em style="left:${pos(y)}">${y === end && top > end ? y + '+' : y}</em>`);
-  return `<div class="gi-age"><div class="gi-age-h"><span>Ageing potential</span>${f ? `<b>${esc(f.value)}</b>` : ''}</div>
-    ${row('Everyday', age.everyday, 'e')}${row('Best wines', age.best, 'b')}
+  return `<div class="gi-box gi-age"><div class="gi-box-h"><span>Ageing potential</span>${text ? `<b>${esc(text)}</b>` : ''}</div>
+    ${rows.map(row).join('')}
     <div class="gi-age-row axis"><span></span><span class="gi-age-ax">${ticks.join('')}</span><b>years</b></div></div>`;
+}
+/* ageing written as text before the timeline existed, for example "3 to 10 years" or "drink within 2 years" */
+function ageFromText(t) {
+  const n = (str(t).match(/\d+/g) || []).map(Number).filter(x => x <= 100);
+  if (n.length >= 2 && n[1] > n[0]) return { typical: [n[0], n[1]] };
+  if (n.length === 1 && n[0] > 0) return { typical: [0, n[0]] };
+  return null;
+}
+
+/* serving temperature on a thermometer from 4 to 22 °C */
+const TH_LO = 4, TH_HI = 22;
+function serveFromText(t) {
+  let n = (str(t).match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  if (/°\s*F|\bF\b|fahrenheit/i.test(str(t)) && !/°\s*C/i.test(str(t))) n = n.map(x => Math.round((x - 32) * 5 / 9));
+  n = n.filter(x => x >= 0 && x <= 25);
+  return n.length ? [Math.min(...n), Math.max(...n)] : null;
+}
+function thermoColor(c) {
+  const stops = [[4, [74, 144, 194]], [10, [120, 176, 196]], [14, [217, 178, 58]], [22, [194, 65, 79]]];
+  let k = 0; while (k < stops.length - 2 && c > stops[k + 1][0]) k++;
+  const [a, ca] = stops[k], [b, cb] = stops[k + 1], f = Math.max(0, Math.min(1, (c - a) / (b - a)));
+  return `rgb(${ca.map((v, i) => Math.round(v + (cb[i] - v) * f)).join(',')})`;
+}
+function serveHtml(range, text) {
+  const pos = v => `${(Math.max(TH_LO, Math.min(TH_HI, v)) - TH_LO) / (TH_HI - TH_LO) * 100}%`;
+  const [lo, hi] = range, mid = (lo + hi) / 2;
+  const deg = lo === hi ? `${lo}°C` : `${lo} to ${hi}°C`;
+  const ticks = [5, 10, 15, 20].map(t => `<em style="left:${pos(t)}">${t}</em>`).join('');
+  return `<div class="gi-box gi-serve"><div class="gi-box-h"><span>Serving temperature</span>${text && str(text).replace(/\s/g, '') !== deg.replace(/\s/g, '') ? `<b>${esc(text)}</b>` : ''}</div>
+    <div class="gi-age-row"><span>Serve at</span><span class="th-tr" style="--bulb:${thermoColor(mid)}"><i style="left:${pos(lo)};width:max(10px, calc(${pos(hi)} - ${pos(lo)}));background:${thermoColor(mid)}"></i></span><b>${deg}</b></div>
+    <div class="gi-age-row axis"><span></span><span class="gi-age-ax th-ax">${ticks}</span><b>°C</b></div></div>`;
+}
+
+/* the color of a grape as a dot: red, white or pink skinned */
+const grapeDot = v => `<i class="fact-dot" style="background:${/white|green|yellow|blanc|golden/i.test(v) ? TYPE_CHART.White : /pink|grey|gray|gris|ros[eé]|copper/i.test(v) ? TYPE_CHART['Rosé'] : TYPE_CHART.Red}"></i>`;
+
+/* grape names as chips: tap one to see your wines with it */
+function cellarGrapes() {
+  const m = new Map();
+  S.wines.forEach(w => grapeShares(Object.assign({}, w, { count: 1 })).forEach(g => { const k = lc(g.name); m.set(k, (m.get(k) || 0) + 1); }));
+  return m;
+}
+const grapeChip = (name, mine) => { const n = mine.get(lc(name)) || 0; return n ? `<button class="gi-chip link" data-act="info-grape" data-g="${esc(name)}">${esc(name)}<em>${n}</em></button>` : `<span class="gi-chip">${esc(name)}</span>`; };
+/* grapes named in a text become chips where you have wines with them */
+function grapeText(t, names, mine) {
+  const list = [...new Set(names.filter(n => mine.get(lc(n))))].sort((a, b) => b.length - a.length);
+  let out = esc(t);
+  if (!list.length) return out;
+  const re = new RegExp(`(^|[^\\p{L}])(${list.map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[^\\p{L}]|$)`, 'giu');
+  return out.replace(re, (m0, pre, n) => `${pre}<button class="gi-chip inline link" data-act="info-grape" data-g="${n}">${n}</button>`);
+}
+
+function mapHtml(m, name) {
+  const lat = Math.max(-80, Math.min(80, m.lat)), cos = Math.cos(lat * Math.PI / 180);
+  const want = Math.max(250, m.km * 2.6);                          // km across the map
+  const z = Math.max(3, Math.min(7, Math.floor(Math.log2(40075 * cos * 340 / (256 * want)))));
+  const n = 2 ** z, kmpp = 40075 * cos / (256 * n);
+  const px = (m.lon + 180) / 360 * 256 * n;
+  const py = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / cos) / Math.PI) / 2 * 256 * n;
+  const cx = Math.floor(px / 256), cy = Math.floor(py / 256), imgs = [];
+  for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) {
+    const tx = ((cx + dx) % n + n) % n, ty = cy + dy;
+    if (ty < 0 || ty >= n) continue;
+    imgs.push(`<img alt="" loading="lazy" src="https://${'abcd'[(tx + ty) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}@2x.png" style="left:${Math.round((cx + dx) * 256 - px)}px;top:${Math.round(ty * 256 - py)}px">`);
+  }
+  const r = Math.max(10, Math.min(70, m.km / 2 / kmpp));
+  return `<a class="gi-map" href="https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lon}" target="_blank" rel="noopener" aria-label="${esc(name)} on the map">
+    <div class="gi-map-c">${imgs.join('')}</div><span class="gi-pin" style="width:${Math.round(r * 2)}px;height:${Math.round(r * 2)}px"></span><span class="gi-pin-dot"></span>
+    <span class="gi-map-attr">© OpenStreetMap © CARTO</span></a>`;
+}
+
+/* what the sheet shows between the summary and the text, for each kind */
+function infoTopHtml(d) {
+  const k = INFO.kind;
+  if (k === 'grape') {
+    const age = d.ageing, ageF = factOf(d, /ageing|aging/i);
+    const facts = d.facts.filter(f => !(age && f === ageF)).map(f => /^origin$/i.test(f.label) && d.originCountry ? Object.assign({}, f, { html: `<i class="gi-fflag">${flagEmoji(d.originCountry)}</i> ${esc(f.value)}` })
+      : /^colou?r$/i.test(f.label) ? Object.assign({}, f, { html: `${grapeDot(f.value)}${esc(f.value)}` }) : f);
+    const aka = (d.aka || []).length ? `<div class="gi-box gi-aka"><div class="gi-box-h"><span>Also known as</span><b>${esc(d.aka.join(', '))}</b></div></div>` : '';
+    return `${aka}${tilesHtml(facts)}${age ? ageHtml(age, ageF && ageF.value) : ''}`;
+  }
+  if (k === 'region') {
+    const c = countryOf({ region: INFO.name });
+    const gF = factOf(d, /main grapes|grapes/i);
+    const grapes = (d.grapes && d.grapes.length ? d.grapes : str(gF && gF.value).split(/,|\band\b/).map(x => x.trim()).filter(Boolean)).slice(0, 8);
+    const facts = d.facts.filter(f => f !== gF).map(f => /^country$/i.test(f.label) && c ? Object.assign({}, f, { html: `<i class="gi-fflag">${flagEmoji(c.code)}</i> ${esc(f.value)}` }) : f);
+    const mine = cellarGrapes();
+    return `${d.map ? mapHtml(d.map, d.title || INFO.name) : ''}${tilesHtml(facts)}${grapes.length ? boxHtml('Main grapes', `<div class="gi-chips">${grapes.map(g => grapeChip(g, mine)).join('')}</div>`) : ''}`;
+  }
+  if (k === 'style') {
+    const sF = factOf(d, /serv/i), aF = factOf(d, /ageing|aging|keep/i);
+    const serve = d.serve || (sF && serveFromText(sF.value));
+    const age = d.ageing || (aF && ageFromText(aF.value));
+    const facts = d.facts.filter(f => !(serve && f === sF) && !(age && f === aF));
+    return `${tilesHtml(facts)}${serve ? serveHtml(serve, sF && sF.value) : ''}${age ? ageHtml(age, aF && aF.value) : ''}`;
+  }
+  if (k === 'producer') {
+    const facts = d.facts.filter(f => !/farming/i.test(f.label));
+    if (d.website) facts.push({ label: 'Website', html: `<a class="gi-web" href="${esc(d.website)}" target="_blank" rel="noopener">${esc(d.website.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''))}${ICON.link}</a>` });
+    return tilesHtml(facts);
+  }
+  return tilesHtml(d.facts);
+}
+function infoTextHtml(d) {
+  const k = INFO.kind;
+  const secs = k === 'grape' ? d.sections.filter(x => !/where it grows/i.test(x.h)) : d.sections;
+  const mine = k === 'region' ? cellarGrapes() : null;
+  const names = mine ? [...(d.grapes || []), ...mine.keys()].map(n => n) : [];
+  return secs.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${mine ? grapeText(x.t, names, mine) : esc(x.t)}</p></div>`).join('');
 }
 function grapeChartsHtml(d) {
   const bar = (lead, name, pct, color) => `<div class="gi-bar">${lead}<span class="gi-name">${esc(name)}</span><span class="tr"><i style="width:${Math.max(3, pct)}%;background:${color}"></i></span><b>${pct}%</b></div>`;
   const used = (d.usedFor || []).map(x => bar(`<span class="gi-dot" style="background:${TYPE_CHART[x.type] || 'var(--gold)'}"></span>`, x.type, x.pct, TYPE_CHART[x.type] || 'var(--gold)'));
   const planted = (d.planted || []).map(x => bar(`<span class="gi-flag">${flagEmoji(x.country)}</span>`, countryName(x.country), x.pct, 'var(--gold)'));
-  return `${used.length ? `<div class="gi-sec"><h3>Mostly used for</h3>${used.join('')}</div>` : ''}
-    ${planted.length ? `<div class="gi-sec"><h3>Mostly planted</h3>${planted.join('')}<p class="tiny muted" style="margin:2px 0 0">Approximate share of the world's vineyards planted with this grape${d.area ? `, ${esc(d.area)} in total` : ''}.</p></div>` : ''}`;
+  return `${used.length ? boxHtml('Mostly used for', used.join(''), 'gi-chart') : ''}
+    ${planted.length ? boxHtml('Mostly planted', `${planted.join('')}<p class="tiny muted" style="margin:0">Approximate share of the world's vineyards planted with this grape${d.area ? `, ${esc(d.area)} in total` : ''}.</p>`, 'gi-chart') : ''}`;
 }
 function grapeMineHtml(mine) {
   const rated = mine.all.filter(x => x.myRating !== null);
@@ -477,8 +586,8 @@ function renderInfo() {
     ? `<div class="info-wait"><p class="somm-wait">Looking up ${esc(INFO.name)}<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Written once by AI, then kept for all your wines.</p></div>`
     : INFO.error ? `<p class="small" style="margin:0;color:var(--red, #E06C6C)">${esc(INFO.error)}</p>`
     : d ? `${d.summary ? `<p class="info-summary">${esc(d.summary)}</p>` : ''}
-        ${INFO.kind === 'grape' ? grapeFactsHtml(d) : d.facts.length ? `<div class="ab-facts">${d.facts.map((f, i) => `<div class="ab-fact${d.facts.length % 2 && i === d.facts.length - 1 ? ' wide' : ''}"><div><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div></div>`).join('')}</div>` : ''}
-        ${(INFO.kind === 'grape' ? d.sections.filter(x => !/where it grows/i.test(x.h)) : d.sections).map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${esc(x.t)}</p></div>`).join('')}
+        ${infoTopHtml(d)}
+        ${infoTextHtml(d)}
         ${INFO.kind === 'grape' ? grapeChartsHtml(d) : ''}
         <p class="tiny muted" style="margin:0">Written by AI from its knowledge, kept for all your wines.</p>` : '';
   const yours = INFO.kind === 'grape' ? (d && !INFO.busy ? grapeMineHtml(mine) : '') : mine.all.length && mine.go
