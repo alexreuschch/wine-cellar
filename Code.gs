@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 25;
+var API_VERSION = 26;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1346,7 +1346,7 @@ function infoKey_(kind, name, context) {
   return kind + '|' + n + (kind === 'producer' && context ? '|' + first(context) : '');
 }
 /** A grape background from before the charts; it is written again once. */
-function infoOld_(kind, info) { var v = (info && info.v) || 0; return kind === 'grape' ? v < 3 : (kind === 'region' || kind === 'producer') && v < 2; }
+function infoOld_(kind, info) { var v = (info && info.v) || 0; return kind === 'grape' || kind === 'region' ? v < 3 : kind === 'producer' && v < 2; }
 
 /** What each kind returns besides the text, for the charts, the map and the links. */
 var INFO_MORE = {
@@ -1355,7 +1355,8 @@ var INFO_MORE = {
     '"area": "vineyard area worldwide, for example about 115,000 hectares", ' +
     '"usedFor": [{"type": "Red, White, Sparkling, Rosé, Dessert or Fortified", "pct": share of all wine made from this grape in percent}], ' +
     '"planted": [{"country": "two letter ISO code", "pct": share of the world vineyard area of this grape in percent}] for the five largest countries, "aka": ["other names it is known by, up to five"]. Percentages are rounded estimates',
-  region: ', "grapes": ["the main grape varieties, most important first, up to six, as they are usually written"], "lat": latitude of the center of the region, "lon": longitude of the center, "km": its approximate size from end to end in kilometers',
+  region: ', "grapes": ["the main grape varieties, most important first, up to six, as they are usually written"], "lat": latitude of the center of the region, "lon": longitude of the center, "km": its approximate size from end to end in kilometers, ' +
+    '"terms": [{"t": "the words exactly as written in the sections", "k": "grape, area, village or style"}] for every grape variety, sub region, appellation, village and wine style named in the sections, except the region itself',
   style: ', "serve": [lowest, highest] serving temperature in degrees Celsius, "ageing": {"everyday": [from, to], "best": [from, to]} in years after the vintage, for simple wines and for the best wines of this style',
   producer: ', "website": "the official website of the producer, only if you know it, otherwise empty"'
 };
@@ -1383,7 +1384,10 @@ function infoFrom_(kind, res) {
   var span = function (a, max) { if (!Array.isArray(a) || a.length < 2) return null; var x = Math.max(0, Math.round(Number(a[0]))), y = Math.round(Number(a[1])); return isFinite(x) && isFinite(y) && y > x && y <= max ? [x, y] : null; };
   var ageOf = function (age) { age = age || {}; var a = { everyday: span(age.everyday, 100), best: span(age.best, 100) }; return a.everyday || a.best ? a : null; };
   if (kind === 'region') {
-    info.v = 2;
+    info.v = 3;
+    var all = info.sections.map(function (x) { return x.t; }).join(' ').toLowerCase(), self = String(info.title || '').split(',')[0].trim().toLowerCase(), seen = {};
+    info.terms = (Array.isArray(d.terms) ? d.terms : []).map(function (x) { return { t: txt(x && x.t, 60), k: ['grape', 'area', 'village', 'style'].indexOf(String(x && x.k || '').toLowerCase()) >= 0 ? String(x.k).toLowerCase() : 'area' }; })
+      .filter(function (x) { var l = x.t.toLowerCase(); if (!x.t || l === self || seen[l] || all.indexOf(l) < 0) return false; seen[l] = true; return true; }).slice(0, 40);
     info.grapes = (Array.isArray(d.grapes) ? d.grapes : []).map(function (g) { return txt(g, 40); }).filter(Boolean).slice(0, 6);
     var lat = Number(d.lat), lon = Number(d.lon), km = Number(d.km);
     if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && (lat || lon)) info.map = { lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000, km: isFinite(km) && km > 0 ? Math.min(2000, Math.round(km)) : 100 };

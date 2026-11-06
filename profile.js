@@ -392,7 +392,7 @@ const infoKey = (kind, name, context) => `${kind}|${kind === 'region' ? infoFirs
 function infoCache() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
 const countryName = c => { if (COUNTRY_NAMES[c]) return COUNTRY_NAMES[c]; try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch (e) { return c; } };
 /* a grape background from before the charts is written again once */
-const INFO_NEW = { grape: [3, 24], region: [2, 25], producer: [2, 25] };
+const INFO_NEW = { grape: [3, 24], region: [3, 26], producer: [2, 25] };
 const infoOld = (kind, d) => !!INFO_NEW[kind] && ((d && d.v) || 0) < INFO_NEW[kind][0] && !(S.version && S.version < INFO_NEW[kind][1]);
 function infoRemember(key, data) { try { const c = infoCache(); c[key] = data; localStorage.setItem('wc-info', JSON.stringify(c)); } catch (e) { /* kept for this session */ } }
 
@@ -492,33 +492,81 @@ function cellarGrapes() {
   S.wines.forEach(w => grapeShares(Object.assign({}, w, { count: 1 })).forEach(g => { const k = lc(g.name); m.set(k, (m.get(k) || 0) + 1); }));
   return m;
 }
-const grapeChip = (name, mine) => { const n = mine.get(lc(name)) || 0; return n ? `<button class="gi-chip link" data-act="info-grape" data-g="${esc(name)}">${esc(name)}<em>${n}</em></button>` : `<span class="gi-chip">${esc(name)}</span>`; };
-/* grapes named in a text become chips where you have wines with them */
-function grapeText(t, names, mine) {
-  const list = [...new Set(names.filter(n => mine.get(lc(n))))].sort((a, b) => b.length - a.length);
-  let out = esc(t);
+/* grapes, sub regions, villages and styles named in the text become chips; the number shows your matching wines, counted when the sheet opens */
+const termNorm = v => str(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function termCount(t, k, grapes) { return k === 'grape' ? grapes.get(lc(t)) || 0 : S.wines.filter(w => matches(w, t)).length; }
+function termChip(text, x, grapes, inline) {
+  const n = termCount(x.t, x.k, grapes);
+  const cls = `gi-chip${inline ? ' inline' : ''}`;
+  return n ? `<button class="${cls} link" data-act="info-term" data-k="${x.k === 'grape' ? 'grape' : 'search'}" data-t="${esc(x.t)}">${text}<em>${n}</em></button>` : `<span class="${cls}">${text}</span>`;
+}
+function termText(t, terms, grapes) {
+  const list = terms.filter(x => x.t).sort((a, b) => b.t.length - a.t.length);
+  const out = esc(t);
   if (!list.length) return out;
-  const re = new RegExp(`(^|[^\\p{L}])(${list.map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[^\\p{L}]|$)`, 'giu');
-  return out.replace(re, (m0, pre, n) => `${pre}<button class="gi-chip inline link" data-act="info-grape" data-g="${n}">${n}</button>`);
+  const by = new Map(list.map(x => [termNorm(esc(x.t)), x]));
+  const re = new RegExp(`(^|[^\\p{L}])(${list.map(x => esc(x.t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[^\\p{L}]|$)`, 'giu');
+  return out.replace(re, (m0, pre, hit) => { const x = by.get(termNorm(hit)); return x ? pre + termChip(hit, x, grapes, true) : m0; });
 }
 
-function mapHtml(m, name) {
-  const lat = Math.max(-80, Math.min(80, m.lat)), cos = Math.cos(lat * Math.PI / 180);
-  const want = Math.max(250, m.km * 2.6);                          // km across the map
-  const z = Math.max(3, Math.min(7, Math.floor(Math.log2(40075 * cos * 340 / (256 * want)))));
-  const n = 2 ** z, kmpp = 40075 * cos / (256 * n);
-  const px = (m.lon + 180) / 360 * 256 * n;
-  const py = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / cos) / Math.PI) / 2 * 256 * n;
-  const cx = Math.floor(px / 256), cy = Math.floor(py / 256), imgs = [];
-  for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) {
-    const tx = ((cx + dx) % n + n) % n, ty = cy + dy;
-    if (ty < 0 || ty >= n) continue;
-    imgs.push(`<img alt="" loading="lazy" src="https://${'abcd'[(tx + ty) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}@2x.png" style="left:${Math.round((cx + dx) * 256 - px)}px;top:${Math.round(ty * 256 - py)}px">`);
+/* where the region lies: its country drawn from Natural Earth outlines, kept in the app (world.json), no map service */
+let WORLD = null;
+function loadWorld() {
+  if (!WORLD) WORLD = fetch('world.json').then(r => r.json()).then(raw => {
+    const out = [];
+    Object.entries(raw).forEach(([c, rings]) => rings.forEach(enc => {
+      const pts = []; let x = 0, y = 0, x0 = 999, x1 = -999, y0 = 999, y1 = -999;
+      for (let i = 0; i < enc.length; i += 2) { x += enc[i]; y += enc[i + 1]; const lon = x / 100, lat = y / 100; pts.push([lon, lat]); x0 = Math.min(x0, lon); x1 = Math.max(x1, lon); y0 = Math.min(y0, lat); y1 = Math.max(y1, lat); }
+      out.push({ c, pts, box: [x0, y0, x1, y1] });
+    }));
+    return out;
+  }).catch(e => { WORLD = null; throw e; });
+  return WORLD;
+}
+function inRing(lon, lat, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
   }
-  const r = Math.max(10, Math.min(70, m.km / 2 / kmpp));
-  return `<a class="gi-map" href="https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lon}" target="_blank" rel="noopener" aria-label="${esc(name)} on the map">
-    <div class="gi-map-c">${imgs.join('')}</div><span class="gi-pin" style="width:${Math.round(r * 2)}px;height:${Math.round(r * 2)}px"></span><span class="gi-pin-dot"></span>
-    <span class="gi-map-attr">© OpenStreetMap © CARTO</span></a>`;
+  return inside;
+}
+function mapSvg(world, m, label) {
+  const W = 340, H = 190, rDeg = Math.max(0.15, m.km / 2 / 111);
+  const home = world.find(r => m.lon >= r.box[0] && m.lon <= r.box[2] && m.lat >= r.box[1] && m.lat <= r.box[3] && inRing(m.lon, m.lat, r.pts));
+  const near = home ? world.filter(r => r.c === home.c && r.box[0] < home.box[2] + 3 && r.box[2] > home.box[0] - 3 && r.box[1] < home.box[3] + 3 && r.box[3] > home.box[1] - 3) : [];
+  let [x0, y0, x1, y1] = home ? [Math.min(...near.map(r => r.box[0])), Math.min(...near.map(r => r.box[1])), Math.max(...near.map(r => r.box[2])), Math.max(...near.map(r => r.box[3]))] : [m.lon - 6, m.lat - 4, m.lon + 6, m.lat + 4];
+  x0 = Math.min(x0, m.lon - rDeg * 1.5); x1 = Math.max(x1, m.lon + rDeg * 1.5); y0 = Math.min(y0, m.lat - rDeg); y1 = Math.max(y1, m.lat + rDeg);
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180);
+  let w = (x1 - x0) * k, h = y1 - y0;
+  if (w > 40) { x0 = m.lon - 20 / k; x1 = m.lon + 20 / k; w = 40; }
+  if (h > 30) { y0 = m.lat - 15; y1 = m.lat + 15; h = 30; }
+  let cx = (x0 + x1) / 2 * k, cy = -(y0 + y1) / 2;
+  w *= 1.16; h *= 1.16;
+  if (w / h > W / H) h = w * H / W; else w = h * W / H;
+  const s = W / w, px = lon => ((lon * k - cx) * s + W / 2), py = lat => ((-lat - cy) * s + H / 2);
+  const vx0 = cx / k - w / 2 / k, vx1 = cx / k + w / 2 / k, vy0 = -cy - h / 2, vy1 = -cy + h / 2;
+  const seen = world.filter(r => r.box[0] < vx1 && r.box[2] > vx0 && r.box[1] < vy1 && r.box[3] > vy0);
+  const path = r => 'M' + r.pts.map(([lo, la]) => `${px(lo).toFixed(1)} ${py(la).toFixed(1)}`).join('L') + 'Z';
+  const other = seen.filter(r => !home || r.c !== home.c).map(path).join('');
+  const own = home ? seen.filter(r => r.c === home.c).map(path).join('') : '';
+  const X = px(m.lon), Y = py(m.lat), R = Math.max(6, rDeg * s);
+  const right = X < W * 0.62;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <path d="${other}" class="m-land"/><path d="${own}" class="m-home"/>
+    <circle cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="${R.toFixed(1)}" class="m-area"/><circle cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="3.6" class="m-dot"/>
+    <text x="${(right ? X + R + 6 : X - R - 6).toFixed(1)}" y="${(Y + 4).toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="m-label">${esc(label)}</text></svg>`;
+}
+function mapHtml(m, label) {
+  return `<div class="gi-map" data-lat="${m.lat}" data-lon="${m.lon}" data-km="${m.km}" data-label="${esc(label)}"></div>`;
+}
+function drawMaps() {
+  const els = [...document.querySelectorAll('.gi-map:not(.done)')];
+  if (!els.length) return;
+  loadWorld().then(world => els.forEach(el => {
+    el.innerHTML = mapSvg(world, { lat: Number(el.dataset.lat), lon: Number(el.dataset.lon), km: Number(el.dataset.km) }, el.dataset.label);
+    el.classList.add('done');
+  })).catch(() => els.forEach(el => el.remove()));
 }
 
 /* what the sheet shows between the summary and the text, for each kind */
@@ -537,7 +585,7 @@ function infoTopHtml(d) {
     const grapes = (d.grapes && d.grapes.length ? d.grapes : str(gF && gF.value).split(/,|\band\b/).map(x => x.trim()).filter(Boolean)).slice(0, 8);
     const facts = d.facts.filter(f => f !== gF).map(f => /^country$/i.test(f.label) && c ? Object.assign({}, f, { html: `<i class="gi-fflag">${flagEmoji(c.code)}</i> ${esc(f.value)}` }) : f);
     const mine = cellarGrapes();
-    return `${d.map ? mapHtml(d.map, d.title || INFO.name) : ''}${tilesHtml(facts)}${grapes.length ? boxHtml('Main grapes', `<div class="gi-chips">${grapes.map(g => grapeChip(g, mine)).join('')}</div>`) : ''}`;
+    return `${d.map ? mapHtml(d.map, str(d.title || INFO.name).split(',')[0]) : ''}${tilesHtml(facts)}${grapes.length ? boxHtml('Main grapes', `<div class="gi-chips">${grapes.map(g => termChip(esc(g), { t: g, k: 'grape' }, mine)).join('')}</div>`) : ''}`;
   }
   if (k === 'style') {
     const sF = factOf(d, /serv/i), aF = factOf(d, /ageing|aging|keep/i);
@@ -556,9 +604,9 @@ function infoTopHtml(d) {
 function infoTextHtml(d) {
   const k = INFO.kind;
   const secs = k === 'grape' ? d.sections.filter(x => !/where it grows/i.test(x.h)) : d.sections;
-  const mine = k === 'region' ? cellarGrapes() : null;
-  const names = mine ? [...(d.grapes || []), ...mine.keys()].map(n => n) : [];
-  return secs.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${mine ? grapeText(x.t, names, mine) : esc(x.t)}</p></div>`).join('');
+  const grapes = k === 'region' ? cellarGrapes() : null;
+  const terms = grapes ? [...(d.terms || []), ...(d.grapes || []).map(t => ({ t, k: 'grape' }))].filter((x, i, a) => a.findIndex(y => termNorm(y.t) === termNorm(x.t)) === i) : [];
+  return secs.map(x => `<div class="info-sec"><h3>${esc(x.h)}</h3><p>${grapes ? termText(x.t, terms, grapes) : esc(x.t)}</p></div>`).join('');
 }
 function grapeChartsHtml(d) {
   const bar = (lead, name, pct, color) => `<div class="gi-bar">${lead}<span class="gi-name">${esc(name)}</span><span class="tr"><i style="width:${Math.max(3, pct)}%;background:${color}"></i></span><b>${pct}%</b></div>`;
@@ -600,6 +648,7 @@ function renderInfo() {
     </div>
     <div class="info-body">${body}${yours}</div>
   </div>`;
+  drawMaps();
 }
 
 /* ---------------------------------------------------------------- background written ahead, so the rows open at once */

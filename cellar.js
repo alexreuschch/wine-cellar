@@ -337,11 +337,14 @@ function viewCellar() {
   </main><a class="fab" href="#/add" aria-label="Add a new wine">${ICON.plusBig}</a>${nav('cellar')}`;
 }
 
+/* accents do not matter: "Ay" finds "Aÿ" */
+const searchNorm = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function matches(w, q) {
   if (!q) return true;
   const ins = inEntries(w);
-  const hay = [w.producer, w.name, w.vintage, w.region, w.grapes, w.type, w.stock.map(e => e.loc).join(' '), ins.map(e => e.retailer + ' ' + e.people).join(' '), w.pairings.join(' '), w.tasteTags.join(' ')].join(' ').toLowerCase();
-  return q.toLowerCase().split(/\s+/).every(part => hay.includes(part));
+  const p = w.profile || {};
+  const hay = searchNorm([w.producer, w.name, w.vintage, w.region, w.grapes, w.type, p.sub, p.style, p.classification, p.vineyard, w.stock.map(e => e.loc).join(' '), ins.map(e => e.retailer + ' ' + e.people).join(' '), w.pairings.join(' '), w.tasteTags.join(' ')].join(' '));
+  return searchNorm(q).split(/\s+/).filter(Boolean).every(part => hay.startsWith(part) || hay.includes(' ' + part) || new RegExp(`[^a-z0-9]${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(hay));
 }
 
 function priceLine(w) {

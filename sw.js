@@ -1,5 +1,5 @@
 /* Wine Cellar service worker: keeps the app working offline and updates it in the background. */
-const SHELL_CACHE = 'wc-shell-v64';
+const SHELL_CACHE = 'wc-shell-v65';
 const RUNTIME_CACHE = 'wc-runtime-v1';
 const SHELL = ['./', './index.html', './geo.js', './app.js', './cellar.js', './ai.js', './views.js', './profile.js', './sheets.js', './form.js', './settings.js', './actions.js', './styles.css', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './icon-maskable-512.png'];
 
@@ -26,7 +26,7 @@ self.addEventListener('fetch', e => {
     return;
   }
   const h = url.hostname;
-  if (h === 'fonts.googleapis.com' || h === 'fonts.gstatic.com' || h === 'cdn.jsdelivr.net' || h.endsWith('basemaps.cartocdn.com') || h === 'docs.opencv.org') {
+  if (h === 'fonts.googleapis.com' || h === 'fonts.gstatic.com' || h === 'cdn.jsdelivr.net' || h === 'docs.opencv.org') {
     e.respondWith(cacheFirst(req));
   }
   // Everything else (your Google Apps Script) always goes to the network.
