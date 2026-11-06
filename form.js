@@ -154,6 +154,20 @@ function formBody() {
   // in Edit the AI status stands right above the update button, where you tapped
   const aiBanner = '<div id="ai-banner" hidden></div>';
   const banner = (D.mode === 'edit' ? '' : aiBanner) + '<div id="dup-box">' + dupHtml() + '</div>';
+  // in Edit, ratings and stock are what you change most, so they come right after vintage and type
+  const quick = `
+    <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
+      <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
+      <div class="scale"><span>0</span><span>50</span><span>100</span></div>
+      <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
+      <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
+    </div>
+    <div class="box"><span class="box-title">External ratings</span>
+      ${D.ratings.length ? `<div class="rec-list">${D.ratings.map((r, i) => `<div class="rec-row"><button class="rec-btn" data-act="ers-open" data-i="${i}" aria-label="Edit ${esc(r.sys)} rating"><span class="rec-text"><span class="rec-main">${esc(r.sys)}</span></span><span class="rate-val">${str(r.score).trim() === '' ? '<span class="muted">No score</span>' : ratingVisual({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })}</span>${ICON.chevron}</button><button class="icon-btn" data-act="rrm" data-i="${i}" aria-label="Remove ${esc(r.sys)} rating">${ICON.x}</button></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">No external ratings yet.</p>'}
+      ${D.ratings.length < SYSTEMS.length ? '<button class="btn dashed" data-act="ers-open" data-i="-1">Add rating</button>' : ''}
+    </div>
+    <div id="stock-box">${stockEditorHtml()}</div>
+`;
   return `
     ${D.preview ? `<img class="preview" src="${esc(D.preview)}" alt="Label">` : ''}
     <button class="btn ghost" data-act="new-photo">${D.preview ? 'Replace label photo' : 'Add label photo'}</button>
@@ -163,6 +177,7 @@ function formBody() {
       ${field('Wine', 'name', { full: true })}
       ${field('Vintage', 'vintage', { num: true, ph: '2019' })}
       <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+    ${D.mode === 'edit' ? `</div>${quick}<div class="form-grid">` : ''}
       ${field('Region', 'region', { full: true, ph: 'Piedmont, Italy' })}
       ${field('Grapes', 'grapes', { full: true, ph: 'Nebbiolo 100%' })}
 
@@ -179,17 +194,7 @@ function formBody() {
     ${D.mode === 'edit' ? aiBanner : ''}
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update wine info with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Fills in details, drinking window, taste profile and background from what you entered, for example the vintage. Fields you changed here stay as they are. About 3 cents.</p>
-    <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
-      <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
-      <div class="scale"><span>0</span><span>50</span><span>100</span></div>
-      <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
-      <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
-    </div>
-    <div class="box"><span class="box-title">External ratings</span>
-      ${D.ratings.length ? `<div class="rec-list">${D.ratings.map((r, i) => `<div class="rec-row"><button class="rec-btn" data-act="ers-open" data-i="${i}" aria-label="Edit ${esc(r.sys)} rating"><span class="rec-text"><span class="rec-main">${esc(r.sys)}</span></span><span class="rate-val">${str(r.score).trim() === '' ? '<span class="muted">No score</span>' : ratingVisual({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })}</span>${ICON.chevron}</button><button class="icon-btn" data-act="rrm" data-i="${i}" aria-label="Remove ${esc(r.sys)} rating">${ICON.x}</button></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">No external ratings yet.</p>'}
-      ${D.ratings.length < SYSTEMS.length ? '<button class="btn dashed" data-act="ers-open" data-i="-1">Add rating</button>' : ''}
-    </div>
-    <div id="stock-box">${stockEditorHtml()}</div>
+${D.mode === 'edit' ? '' : quick}
     ${D.mode === 'add' ? acquisitionBox() : `<div class="box"><span class="box-title">Purchases</span><div id="purchases-box">${purchasesHtml(wineById(D.id) || { id: D.id }, true)}</div>
       <button class="btn dashed" data-act="record-add">Add purchase record</button>
       <p class="muted tiny" style="margin:0">Tap a purchase to edit it or to set the retailer's website.</p></div>`}
