@@ -201,10 +201,28 @@ function viewInsights() {
 }
 
 /* opens the cellar or the journal with the filter that matches a row in Insights */
+/* a filter opened from Insights or a background chip is only for this visit: leaving that screen brings back what was set before */
+function jumpStart(p) {
+  if (U.jump && U.jump.p === p) return;
+  U.jump = { p, f: p === 'window' ? null : U.f[p], search: U.search, jSearch: U.jSearch, winFilter: U.winFilter, termPool: U.termPool };
+}
+function jumpCheck() {
+  const j = U.jump;
+  if (!j) return;
+  const p = route().p;
+  if (p === j.p || p === 'wine' || p === 'edit' || p === 'add') return;
+  if (j.p === 'window') U.winFilter = j.winFilter;
+  else U.f[j.p] = j.f || newF();
+  if (j.p === 'cellar') { U.search = j.search; U.termPool = j.termPool; }
+  if (j.p === 'journal') U.jSearch = j.jSearch;
+  U.jump = null;
+}
+
 function insightsGo(k, v) {
-  if (k === 'window') { U.winFilter = v; go('#/window'); return; }
+  if (k === 'window') { jumpStart('window'); U.winFilter = v; go('#/window'); return; }
   if (k === 'month') {
     // bottles opened in that month: the month and the occasions of opened bottles
+    jumpStart('journal');
     U.f.journal = newF();
     U.jSearch = '';
     const name = monthOf({ date: v });
@@ -214,11 +232,13 @@ function insightsGo(k, v) {
     return;
   }
   if (k === 'person' || k === 'jtype') {
+    jumpStart('journal');
     U.f.journal = newF();
     U.f.journal.sel[k === 'person' ? 'person' : 'type'] = [lc(v)];
     go('#/journal');
     return;
   }
+  jumpStart('cellar');
   U.f.cellar = newF();
   U.search = '';
   if (k === 'term') { U.termPool = [v]; U.f.cellar.sel.term = [lc(v.t)]; go('#/cellar'); return; }

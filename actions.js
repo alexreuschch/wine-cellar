@@ -596,6 +596,7 @@ function init() {
   });
   window.addEventListener('hashchange', () => {
     navTrack();
+    jumpCheck();
     if (SOMM.listening && route().p !== 'sommelier') sommStopVoice();
     if (RS) closeSheet();
     if (RT) { RT = null; renderRatingSheet(); }
