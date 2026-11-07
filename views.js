@@ -555,7 +555,7 @@ function viewWine(id) {
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w) || clText(w.size || 75), alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
-    <div class="detail-top">${isDisc(w) ? `<a class="back" href="#/top">${ICON.back}Top rated</a>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
+    <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}
     <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
     ${isDisc(w) ? discoveryHtml(w) : stockHtml(w)}

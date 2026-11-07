@@ -277,8 +277,9 @@ const ACTS = {
   'cancel-form': () => {
     const back = D && D.mode === 'edit' ? '#/wine/' + encodeURIComponent(D.id) : '#/cellar';
     D = null;
-    go(back, true);
+    if (navPrev() === back) history.back(); else go(back, true);
   },
+  'nav-back': () => history.back(),
   'skip-photo': () => { D.step = 'form'; render(); },
   'new-photo': () => { D.step = 'photo'; render(); },
   retake: () => { D.step = 'photo'; D.src = null; render(); },
@@ -594,6 +595,7 @@ function init() {
     if (e.target && (e.target.id === 'ed-name' || e.target.id === 'ed-site') && e.key === 'Enter') { e.preventDefault(); saveEdit(); }
   });
   window.addEventListener('hashchange', () => {
+    navTrack();
     if (SOMM.listening && route().p !== 'sommelier') sommStopVoice();
     if (RS) closeSheet();
     if (RT) { RT = null; renderRatingSheet(); }

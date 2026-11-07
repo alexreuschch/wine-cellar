@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.0.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -708,7 +708,30 @@ function route() {
   return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null };
 }
 const isFormRoute = () => ['add', 'edit'].includes(route().p);
-const go = (hash, replace) => (replace ? location.replace(hash) : (location.hash = hash));
+const go = (hash, replace) => { if (replace) { NAV.replacing = true; location.replace(hash); } else location.hash = hash; };
+
+/* where you came from: the screens of this session in order, and how far down each was scrolled */
+const NAV = { stack: [location.hash || '#/cellar'], scroll: {}, replacing: false, restore: null };
+const NAV_LABEL = { cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', 'journal-ai': 'Journal Assistant', settings: 'Settings', wine: 'Back' };
+const hashRoute = h => { const [p, id] = String(h || '').replace(/^#\/?/, '').split('/'); return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null }; };
+/* called on every change of the screen, before it is drawn */
+function navTrack() {
+  const h = location.hash || '#/cellar', st = NAV.stack;
+  NAV.scroll[st[st.length - 1]] = window.scrollY;
+  NAV.restore = null;
+  if (NAV.replacing) { NAV.replacing = false; st[st.length - 1] = h; return; }
+  if (st.length > 1 && st[st.length - 2] === h) { st.pop(); NAV.restore = NAV.scroll[h] || 0; return; }
+  if (st[st.length - 1] !== h) st.push(h);
+  if (st.length > 60) st.splice(0, st.length - 60);
+}
+/* the screen before this one, if you came from inside the app */
+const navPrev = () => (NAV.stack.length > 1 ? NAV.stack[NAV.stack.length - 2] : null);
+/* the back link of a detail page: to where you came from, else to a fixed screen */
+function backLinkHtml(fallbackHash, fallbackLabel) {
+  const prev = navPrev();
+  const label = prev ? NAV_LABEL[hashRoute(prev).p] || 'Back' : fallbackLabel;
+  return `<a class="back" href="${esc(prev || fallbackHash)}"${prev ? ' data-act="nav-back"' : ''}>${ICON.back}${esc(label)}</a>`;
+}
 
 function render() {
   const app = $('#app');
@@ -736,7 +759,8 @@ function render() {
     default: html = viewCellar();
   }
   app.innerHTML = html;
-  if (key !== lastRouteKey) window.scrollTo(0, 0);
+  if (key !== lastRouteKey) window.scrollTo(0, NAV.restore || 0);
+  NAV.restore = null;
   lastRouteKey = key;
   afterRender(r);
 }

@@ -743,7 +743,8 @@ async function saveWineForm() {
     D = null;
     busy(false);
     if (fromWish) wishDelete(fromWish);
-    go('#/wine/' + encodeURIComponent(saved.id), true);
+    const to = '#/wine/' + encodeURIComponent(saved.id);
+    if (base && navPrev() === to) history.back(); else go(to, true);
     const ret = acq && acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '';
     if (ret && str(acq.website).trim() !== str(acq.websiteInit).trim()) saveRetailerSite(ret, str(acq.website).trim());
     if (refetch && S.version >= 5) updateStreetPrices([saved.id], true);
