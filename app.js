@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.3.1';
+const APP_VERSION = '3.4.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -133,7 +133,8 @@ function parseRatings(v) {
   let a = v;
   if (!Array.isArray(a)) { try { a = JSON.parse(v || '[]'); } catch (e) { a = []; } }
   if (!Array.isArray(a)) return [];
-  return a.filter(r => r && r.sys && r.score !== '' && r.score !== null && !isNaN(Number(r.score))).map(r => ({ sys: String(r.sys), score: Number(r.score) }));
+  // date: when you entered or changed it yourself, so a check for rating hints can skip it for a while
+  return a.filter(r => r && r.sys && r.score !== '' && r.score !== null && !isNaN(Number(r.score))).map(r => Object.assign({ sys: String(r.sys), score: Number(r.score) }, /^\d{4}-\d{2}-\d{2}$/.test(String(r.date || '')) ? { date: String(r.date) } : {}));
 }
 
 function parseJSON(v, d) {
@@ -227,6 +228,7 @@ function normWine(w) {
     offer: parseOffer(w),
     myRating: numOrNull(w.myRating),
     myFav: w.myFav === true || String(w.myFav).toUpperCase() === 'TRUE',
+    ratingChecks: (() => { let o = w.ratingChecks; if (typeof o === 'string') { try { o = JSON.parse(o || '{}'); } catch (e) { o = {}; } } return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; })(),
     ratings: parseRatings(w.ratings),
     labelFileId: str(w.labelFileId),
     thumb: str(w.thumb),
@@ -317,6 +319,7 @@ function serialWine(w) {
   o.profile = w.profile ? JSON.stringify(w.profile) : '';
   ['drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'myRating'].forEach(k => { if (o[k] === null) o[k] = ''; });
   o.myFav = w.myFav ? true : '';
+  o.ratingChecks = w.ratingChecks && Object.keys(w.ratingChecks).length ? JSON.stringify(w.ratingChecks) : '';
   return o;
 }
 

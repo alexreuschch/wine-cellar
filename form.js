@@ -28,7 +28,7 @@ function newDraft(mode, w) {
     myRating: src.myRating,
     myFav: !!src.myFav,
     acq: mode === 'add' ? { type: 'Purchase', pp: newPicker('people', ''), rp: newPicker('retailers', '', { single: true }), website: '', websiteInit: '' } : null,
-    ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score) })),
+    ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score), date: r.date || '' })),
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
     src: null, corners: null, cornersTouched: false,
     profile: src.profile ? JSON.parse(JSON.stringify(src.profile)) : emptyProfile(),
@@ -285,7 +285,9 @@ function saveRatingSheet() {
   const v = Number(String(RT.score).replace(',', '.'));
   const max = sysInfo(RT.sys).max;
   if (String(RT.score).trim() === '' || isNaN(v) || v < 0 || v > max) { toast(`${RT.sys} scores go from 0 to ${max}.`); return; }
-  const r = { sys: RT.sys, score: String(v) };
+  const old = RT.wineId ? null : RT.i >= 0 ? D.ratings[RT.i] : null;
+  // the date of your own entry, kept when nothing changed
+  const r = { sys: RT.sys, score: String(v), date: old && old.sys === RT.sys && Number(old.score) === v ? old.date || '' : todayISO() };
   if (RT.wineId) { const id = RT.wineId, back = RT.back; RT = null; renderRatingSheet(); saveWineRating(id, r, back); return; }
   if (RT.i >= 0) D.ratings[RT.i] = r; else D.ratings.push(r);
   RT = null;
@@ -715,7 +717,7 @@ async function saveWineForm() {
     tasteTags: splitList(f.tasteTags), pairings: splitList(f.pairings),
     drinkFrom: f.drinkFrom, drinkUntil: f.drinkUntil, peakFrom: f.peakFrom, peakUntil: f.peakUntil,
     stock, street,
-    ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => ({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })),
+    ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => Object.assign({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) }, r.date ? { date: r.date } : {})),
     thumb: D.thumb || (base ? base.thumb : ''),
     myRating: D.myRating,
     myFav: !!D.myFav,

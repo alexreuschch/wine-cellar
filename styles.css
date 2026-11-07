@@ -917,3 +917,8 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .somm-win { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .somm-win b { font-size: 14px; font-weight: 600; }
 .win-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--sc); color: var(--sc); }
+.rh-ic { position: relative; }
+.rh-ic.busy svg { animation: spin 1.4s linear infinite; }
+.rh-n { position: absolute; top: 4px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--gold); color: var(--on-gold); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.rh-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 0; }
+.rh-actions { display: flex; align-items: center; gap: 12px; }

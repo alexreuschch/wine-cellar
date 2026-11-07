@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 37;
+var API_VERSION = 39;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -19,9 +19,10 @@ var WINE_COLS = [
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom',
-  'stock', 'street', 'offer', 'profile', 'origin', 'size', 'myFav'
+  'stock', 'street', 'offer', 'profile', 'origin', 'size', 'myFav', 'ratingChecks'
 ];
 // myFav: TRUE when the owner marked the wine with a heart as one of their favorites
+// ratingChecks: when rating hints were last searched, per rating system, as JSON {"Vivino": "2026-11-07"}; only dates, never scores
 // size: the bottle size in cl, empty means a standard bottle of 75 cl
 // origin "discovery": a wine tasted out, for example in a restaurant, never in the cellar
 // The Removals tab is the journal: bottles going out (dir "out"), coming in (dir "in") and discoveries tasted out (dir "taste", no bottle).
@@ -47,7 +48,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '18';
+var SCHEMA_VERSION = '19';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -1400,21 +1401,27 @@ function actionRatingHints_(req) {
   if (idx < 0) throw new Error('Wine not found');
   var w = toObj_(t.headers, t.rows[idx]);
   var wine = [w.producer, w.name, w.vintage].filter(String).join(' ') + sizeText_(w.size);
+  var deep = req.deep === true;
+  var want = systems.map(function (x) { return x + ' (out of ' + RATING_SYSTEMS[x] + ')'; }).join(', ');
   var prompt = [
-    'Search the web for published ratings of this wine: ' + wine + (w.region ? ' (' + w.region + ')' : '') + '.',
-    'Rating systems to look for, with their scale: ' + systems.map(function (x) { return x + ' (out of ' + RATING_SYSTEMS[x] + ')'; }).join(', ') + '.',
-    'Critic scores are often quoted by wine shops, for example "Robert Parker 92 points". Vivino shows an average out of 5 on its wine pages.',
-    'Rules:',
-    '1. Report only a score you actually saw on a web page, with the URL of that page. Never estimate, never guess, never use a score of another wine.',
-    '2. Prefer this exact vintage. If a system only has a score for another vintage of the same wine, you may report it with that vintage.',
-    '3. At most one score per system, the most reliable one: from the rating system itself, otherwise from a shop that quotes it.',
-    '4. Leave out every system you did not find.',
+    'Find published ratings of this wine: ' + wine + (w.region ? ' (' + w.region + ')' : '') + (w.grapes ? ', ' + w.grapes : '') + '.',
+    'Rating systems to look for, with their scale: ' + want + '.',
+    'Search strategy, ' + (deep ? 'up to 8 searches' : 'at most 3 searches') + ', stop as soon as every system is found:',
+    '1. Search "' + [w.producer, w.name, w.vintage].filter(String).join(' ') + ' points". Shop and producer pages often quote several critic scores together, for example "Suckling 93, Falstaff 92".',
+    '2. Only if systems are still missing: the website of the producer (awards, press, accolades, Auszeichnungen) or Wine-Searcher, which lists critic scores per vintage.',
+    systems.indexOf('Vivino') >= 0 ? '3. Only if Vivino is still missing: search "' + [w.producer, w.name, w.vintage].filter(String).join(' ') + ' Vivino". Vivino shows an average out of 5.' : '3. Use a third search only for systems still missing.',
+    deep ? '4. As this is a deeper search, also try other spellings of the wine and producer, the appellation, and shops in other countries.' : '',
+    'How to read the results:',
+    'a. A score counts when it is stated clearly on a page or in a search result, with the URL of that page.',
+    'b. It must belong to exactly this wine: same producer and same cuvée (not the Gran Reserva instead of the Reserva, not the second wine). Prefer this vintage; a score of another vintage of the same wine may be reported with its vintage.',
+    'c. Abbreviations: RP, WA or Wine Advocate is Robert Parker; JS is James Suckling; WS is Wine Spectator; JR is Jancis Robinson; Dec is Decanter. Report them under the full name from the list.',
+    'd. Never estimate, never guess, never use a score of another wine. At most one score per system, the most reliable one. Leave out systems you did not find.',
     'Return ONLY a JSON object, no other text: {"hints": [{"sys": "system name exactly as in the list", "score": number on its scale, "vintage": "year or NV", "url": "https://...", "source": "name of the website"}]}. If you found nothing, return {"hints": []}.'
-  ].join('\n');
+  ].filter(String).join('\n');
   var res = callClaude_({
-    model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
+    model: deep ? (props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL) : (props_().getProperty('PRICE_MODEL') || PRICE_MODEL),
     max_tokens: 2000,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(5, 2 + systems.length) }],
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: deep ? 8 : 3 }],
     messages: [{ role: 'user', content: prompt }]
   });
   var d;
@@ -1428,7 +1435,21 @@ function actionRatingHints_(req) {
     seen[h.sys] = true;
     return { sys: String(h.sys), score: Math.round(v * 10) / 10, vintage: String(h.vintage || '').slice(0, 8), url: url.slice(0, 500), source: String(h.source || '').slice(0, 80) };
   }).filter(Boolean);
-  return { id: String(req.id), vintage: String(w.vintage || ''), hints: hints };
+  // remember when each system was searched, so a new check can skip it for a while; only the date is kept, never a score
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var checks = withLock_(function () {
+    var t2 = table_(SHEETS.wines);
+    var i2 = findIndex_(t2, req.id);
+    if (i2 < 0) return {};
+    var obj = toObj_(t2.headers, t2.rows[i2]);
+    var c = {};
+    try { c = JSON.parse(obj.ratingChecks || '{}') || {}; } catch (e) { c = {}; }
+    systems.forEach(function (x) { c[x] = today; });
+    obj.ratingChecks = JSON.stringify(c);
+    writeRow_(t2, i2, obj);
+    return c;
+  });
+  return { id: String(req.id), vintage: String(w.vintage || ''), hints: hints, checks: checks };
 }
 
 /**

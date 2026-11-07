@@ -276,7 +276,9 @@ function viewWindow() {
 function viewTop() {
   const filters = filterArea('top');
   const btn = filterButton('top');
-  const lead = `<header class="top"><h1 class="title">Top rated</h1><div class="top-actions">${btn}</div></header>
+  // in External, the gold AI symbol checks published scores of the wines in the current selection
+  const magic = U.topMode === 'ext' ? rhIconHtml(topPool().filter(w => passes('top', w)).map(w => w.id)) : '';
+  const lead = `<header class="top"><h1 class="title">Top rated</h1><div class="top-actions">${magic}${btn}</div></header>
     ${filters}
     <div class="toggle"><button class="${U.topMode === 'mine' ? 'on' : ''}" data-act="top-mode" data-v="mine">My rating</button><button class="${U.topMode === 'ext' ? 'on' : ''}" data-act="top-mode" data-v="ext">External</button></div>
     ${U.topFinished ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:2px">${FIN}<span style="margin-left:4px">marks a finished wine with no bottles left</span></p>` : ''}
@@ -291,7 +293,7 @@ function topMoreHtml() {
 }
 function topBody() {
   // in External, the check for published scores of the wines in the current selection
-  const bar = U.topMode === 'ext' ? rhBarHtml(topPool().filter(w => passes('top', w)).map(w => w.id)) : '';
+  const bar = U.topMode === 'ext' ? rhBarHtml() : '';
   return bar + topList() + topMoreHtml();
 }
 function topList() {
