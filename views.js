@@ -690,58 +690,73 @@ async function shareCard(w) {
   // background: dark aubergine with a soft light from the top
   const g = x.createRadialGradient(W / 2, 260, 60, W / 2, 260, 900); g.addColorStop(0, '#3A1622'); g.addColorStop(1, '#1A0C12');
   x.fillStyle = g; x.fillRect(0, 0, W, H);
-  // the label: the photo shown on the wine page, else the small one
+  // the Vintary band at the bottom, the wine above it, centered in the space that is left
+  const bh = 330, by = H - bh;
   const shown = document.querySelector('#label-img');
   const img = (shown && shown.complete && shown.naturalWidth ? shown : null) || await shareLoadImg(w.thumb);
-  let y = 90;
-  if (img) {
-    const mh = 520, mw = 440, sc = Math.min(mw / img.naturalWidth, mh / img.naturalHeight);
-    const iw = img.naturalWidth * sc, ih = img.naturalHeight * sc, ix = (W - iw) / 2;
-    x.save(); x.shadowColor = 'rgba(0,0,0,.55)'; x.shadowBlur = 50; x.shadowOffsetY = 20; shareRound(x, ix, y, iw, ih, 18); x.fillStyle = '#000'; x.fill(); x.restore();
-    x.save(); shareRound(x, ix, y, iw, ih, 18); x.clip(); x.drawImage(img, ix, y, iw, ih); x.restore();
-    y += ih + 70;
-  } else y += 40;
-  // type and region, name, producer and vintage
-  const co = countryOf(w);
-  x.textAlign = 'center';
-  x.fillStyle = '#C2ACA8'; x.font = `500 26px ${sans}`;
-  x.fillText([w.type, w.region].filter(Boolean).join(' · ').toUpperCase(), W / 2, y);
-  y += 78;
-  x.fillStyle = '#FFF8E9'; x.font = `62px ${serif}`;
+  x.font = `60px ${serif}`;
   const tl = shareWrap(x, wineTitle(w), W - 2 * P).slice(0, 2);
-  tl.forEach(l => { x.fillText(l, W / 2, y); y += 72; });
-  x.fillStyle = '#F0E4D8'; x.font = `400 32px ${sans}`;
-  x.fillText([w.producer !== wineTitle(w) ? w.producer : '', w.vintage, w.size && w.size !== 75 ? sizeName(w.size) : ''].filter(Boolean).join(' · '), W / 2, y);
-  y += 80;
-  // my rating with the colored bar and its word
-  if (w.myRating !== null) {
-    x.fillStyle = '#C2ACA8'; x.font = `500 24px ${sans}`; x.fillText('MY RATING', W / 2, y); y += 70;
-    x.fillStyle = '#E6CB98'; x.font = `72px ${serif}`; x.fillText(w.myRating + '%', W / 2, y); y += 50;
-    const n = Math.round(w.myRating / 5), bw = W - 2 * P - 120, gap = 6, sw = (bw - gap * 19) / 20, bx = (W - bw) / 2;
-    SEG_COLORS.forEach((col, i) => { x.fillStyle = i < n ? col : '#45232F'; shareRound(x, bx + i * (sw + gap), y, sw, 18, 4); x.fill(); });
-    y += 62;
-    const rw = rateWord(w.myRating);
-    if (rw) { x.fillStyle = '#F0E4D8'; x.font = `500 30px ${sans}`; x.fillText(rw[1] + (rw[2] ? ' · ' + rw[2] : ''), W / 2, y); y += 40; }
-    if (w.myFav) { x.fillStyle = '#E8647A'; x.font = `500 26px ${sans}`; x.fillText('\u2665 One of my favorites', W / 2, y + 10); y += 40; }
-  }
-  // the drinking window
-  const p = windowParts(w);
-  if (p && y < H - 300) {
+  const rw = w.myRating !== null ? rateWord(w.myRating) : null;
+  const sub = [w.producer !== wineTitle(w) ? w.producer : '', w.vintage, w.size && w.size !== 75 ? sizeName(w.size) : ''].filter(Boolean).join(' · ');
+  const draw = (y0, on) => {
+    let y = y0;
+    if (img) {
+      const mh = 380 - (tl.length - 1) * 60, mw = 360, sc = Math.min(mw / img.naturalWidth, mh / img.naturalHeight);
+      const iw = img.naturalWidth * sc, ih = img.naturalHeight * sc, ix = (W - iw) / 2;
+      if (on) {
+        x.save(); x.shadowColor = 'rgba(0,0,0,.55)'; x.shadowBlur = 44; x.shadowOffsetY = 18; shareRound(x, ix, y, iw, ih, 16); x.fillStyle = '#000'; x.fill(); x.restore();
+        x.save(); shareRound(x, ix, y, iw, ih, 16); x.clip(); x.drawImage(img, ix, y, iw, ih); x.restore();
+      }
+      y += ih + 66;
+    } else y += 30;
+    x.textAlign = 'center';
+    if (on) { x.fillStyle = '#C2ACA8'; x.font = `500 28px ${sans}`; x.fillText([w.type, w.region].filter(Boolean).join(' · ').toUpperCase(), W / 2, y); }
+    y += 74;
+    if (on) { x.fillStyle = '#FFF8E9'; x.font = `60px ${serif}`; }
+    tl.forEach(l => { if (on) x.fillText(l, W / 2, y); y += 66; });
+    if (on) { x.fillStyle = '#F0E4D8'; x.font = `400 34px ${sans}`; x.fillText(sub, W / 2, y - 8); }
+    if (w.myRating !== null) {
+      y += 70;
+      if (on) { x.fillStyle = '#C2ACA8'; x.font = `500 26px ${sans}`; x.fillText('MY RATING', W / 2, y); }
+      y += 70;
+      if (on) { x.fillStyle = '#E6CB98'; x.font = `72px ${serif}`; x.fillText(w.myRating + '%', W / 2, y); }
+      y += 36;
+      const n = Math.round(w.myRating / 5), bw = W - 2 * P - 120, gap = 6, sw = (bw - gap * 19) / 20, bx = (W - bw) / 2;
+      if (on) SEG_COLORS.forEach((col, i) => { x.fillStyle = i < n ? col : '#45232F'; shareRound(x, bx + i * (sw + gap), y, sw, 18, 4); x.fill(); });
+      y += 18;
+      if (rw) { y += 50; if (on) { x.fillStyle = '#F0E4D8'; x.font = `500 32px ${sans}`; x.fillText(rw[1] + (rw[2] ? ' · ' + rw[2] : ''), W / 2, y); } }
+      if (w.myFav) { y += 52; if (on) { x.fillStyle = '#EE7A8D'; x.font = `500 30px ${sans}`; x.fillText('♥ One of my favorites', W / 2, y); } }
+    }
+    return y;
+  };
+  // the drinking window only when there is room for it
+  const room = by - 60;
+  const end = draw(0, false);
+  const p = windowParts(w), withWin = p && end + 110 < room - 40;
+  const total = end + (withWin ? 110 : 0);
+  const top = Math.max(50, Math.round((by - total) / 2 - 10));
+  let y = draw(top, true);
+  if (withWin) {
     const s = statusOf(w);
-    y += 40;
-    x.fillStyle = STATUS[s].c; x.font = `600 28px ${sans}`; x.fillText(s, W / 2, y); y += 40;
-    x.fillStyle = '#C2ACA8'; x.font = `400 26px ${sans}`; x.fillText(windowText(w), W / 2, y);
+    y += 66; x.fillStyle = STATUS[s].c; x.font = `600 30px ${sans}`; x.fillText(s, W / 2, y);
+    y += 44; x.fillStyle = '#C2ACA8'; x.font = `400 28px ${sans}`; x.fillText(windowText(w), W / 2, y);
   }
-  // the Vintary band
-  const bh = 170, by = H - bh;
+  // the band: logo and name as one centered mark, the claim below, Coming soon as a small badge
   x.fillStyle = '#620018'; x.fillRect(0, by, W, bh);
   x.fillStyle = 'rgba(230,203,152,.5)'; x.fillRect(0, by, W, 2);
   const logo = await shareLoadImg('icon-192.png');
-  x.textAlign = 'left';
-  if (logo) { x.save(); shareRound(x, P, by + 45, 80, 80, 18); x.clip(); x.drawImage(logo, P, by + 45, 80, 80); x.restore(); }
-  x.fillStyle = '#FFF8E9'; x.font = `46px ${serif}`; x.fillText('Vintary', P + 104, by + 88);
-  x.fillStyle = '#E6CB98'; x.font = `400 24px ${sans}`; x.fillText('Your personal wine companion · Wine, made personal.', P + 106, by + 126);
-  x.textAlign = 'right'; x.fillStyle = '#F4DFB4'; x.font = `600 24px ${sans}`; x.fillText('COMING SOON', W - P, by + 88);
+  const ls = 112, gapL = 26;
+  x.font = `84px ${serif}`;
+  const nw = x.measureText('Vintary').width, mw0 = (logo ? ls + gapL : 0) + nw, mx = (W - mw0) / 2, my = by + 44;
+  if (logo) { x.save(); shareRound(x, mx, my, ls, ls, 26); x.clip(); x.drawImage(logo, mx, my, ls, ls); x.restore(); }
+  x.textAlign = 'left'; x.fillStyle = '#FFF8E9'; x.fillText('Vintary', mx + (logo ? ls + gapL : 0), my + 84);
+  x.textAlign = 'center'; x.fillStyle = '#F4DFB4'; x.font = `400 34px ${sans}`;
+  x.fillText('Your personal wine companion · Wine, made personal.', W / 2, by + 212);
+  x.font = `600 24px ${sans}`;
+  const cs = 'COMING SOON', cw = x.measureText(cs).width + 24 * 3 + 56, cx = (W - cw) / 2, cy = by + 248;
+  x.strokeStyle = 'rgba(244,223,180,.75)'; x.lineWidth = 2; shareRound(x, cx, cy, cw, 50, 25); x.stroke();
+  x.fillStyle = '#F4DFB4';
+  if ('letterSpacing' in x) { x.letterSpacing = '3px'; x.fillText(cs, W / 2 + 1.5, cy + 34); x.letterSpacing = '0px'; } else x.fillText(cs, W / 2, cy + 34);
   return new Promise(res => c.toBlob(b => res(b), 'image/jpeg', 0.9));
 }
 /* Share: first the sheet that asks whether to add a shop link, and for which country */
