@@ -475,7 +475,7 @@ function openDiscovery(info, ctx = {}) {
   if (!info || !(str(info.producer).trim() || str(info.name).trim())) { toast('The wine could not be identified. Add it with the plus button in the cellar.'); return; }
   const same = findSameWine(info);
   RS = {
-    kind: 'taste', mode: 'add', wineId: same ? same.id : null, info, rating: same ? same.myRating : null, ratingInit: same ? same.myRating : null,
+    kind: 'taste', mode: 'add', wineId: same ? same.id : null, info, rating: same ? same.myRating : null, ratingInit: same ? same.myRating : null, fav: !!(same && same.myFav), favInit: !!(same && same.myFav),
     date: todayISO(), occasion: str(ctx.place), food: str(ctx.food), note: '', price: ctx.price ? String(ctx.price) : '', priceCur: ctx.priceCur || cur(),
     venue: str(ctx.venue), shopRef: ctx.shopRef || null, offer: ctx.offer || null,
     pp: newPicker('people', '')
@@ -485,7 +485,7 @@ function openDiscovery(info, ctx = {}) {
 function openDiscoveryEdit(r) {
   const w = wineById(r.wineId);
   RS = {
-    kind: 'taste', mode: 'edit', id: r.id, wineId: r.wineId, info: null, rating: w ? w.myRating : null, ratingInit: w ? w.myRating : null,
+    kind: 'taste', mode: 'edit', id: r.id, wineId: r.wineId, info: null, rating: w ? w.myRating : null, ratingInit: w ? w.myRating : null, fav: !!(w && w.myFav), favInit: !!(w && w.myFav),
     date: r.date || todayISO(), occasion: r.occasion, food: r.food, note: r.note, price: r.price === null ? '' : String(r.price), priceCur: r.priceCur || cur(),
     venue: r.venue, shopRef: r.shopRef, offer: null,
     pp: newPicker('people', r.people)
@@ -511,7 +511,8 @@ function tasteSheetHtml() {
     <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${RS.rating === null ? ' none' : ''}" id="ds-val">${RS.rating === null ? 'Not rated' : RS.rating + '%'}</span></div>
       <div class="rating-bar" id="ds-bar">${segsHtml(RS.rating, 30, 'lg')}</div>
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
-      <div class="rating-ctl"><button data-act="ds-rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="ds-rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div></div>
+      <div class="rating-ctl"><button data-act="ds-rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="ds-rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
+      ${rateExtrasHtml('ds')}</div>
     <div class="field"><span>Where were you?</span><div class="toggle three">${['restaurant', 'shop', 'other'].map(v => `<button class="${RS.venue === v ? 'on' : ''}" data-act="ds-venue" data-v="${v}">${{ restaurant: 'Restaurant', shop: 'Shop', other: 'Elsewhere' }[v]}</button>`).join('')}</div></div>
     <div class="grid2"><label class="field">Date<input type="date" name="date" data-input="rs" value="${esc(RS.date)}"></label>
       <label class="field">Price paid ${esc(RS.priceCur)}<input name="price" data-input="rs" inputmode="decimal" placeholder="Optional" value="${esc(RS.price)}"></label></div>
@@ -529,6 +530,7 @@ function setTasteRating(v) {
   const val = $('#ds-val'), bar = $('#ds-bar');
   if (val) { val.textContent = RS.rating === null ? 'Not rated' : RS.rating + '%'; val.classList.toggle('none', RS.rating === null); }
   if (bar) bar.innerHTML = segsHtml(RS.rating, 30, 'lg');
+  rateRefresh('ds');
 }
 function setupTasteRating() {
   const bar = $('#ds-bar');
@@ -566,15 +568,17 @@ async function saveDiscovery() {
     const street = st.shopRef ? JSON.stringify({ v: st.shopRef.v, cur: st.shopRef.cur, date: todayISO(), src: st.offer ? st.offer.shop : 'Sommelier', conf: st.offer ? 'high' : 'medium' }) : '';
     // what was loaded with More about this wine is kept, so the AI is not asked twice
     const pv = previewOf(x) || {};
-    w = normWine({ id: newId('w'), producer: x.producer, name: x.name, vintage: x.vintage, type: x.type || pv.type, region: x.region || pv.region, grapes: x.grapes || pv.grapes, origin: 'discovery', stock: '[]', myRating: st.rating, street, offer: st.offer ? JSON.stringify(st.offer) : '',
+    w = normWine({ id: newId('w'), producer: x.producer, name: x.name, vintage: x.vintage, type: x.type || pv.type, region: x.region || pv.region, grapes: x.grapes || pv.grapes, origin: 'discovery', stock: '[]', myRating: st.rating, myFav: !!st.fav, street, offer: st.offer ? JSON.stringify(st.offer) : '',
       taste: pv.taste || '', tasteTags: (pv.tasteTags || []).join(', '), pairings: (pv.pairings || []).join(', '), drinkFrom: pv.drinkFrom, drinkUntil: pv.drinkUntil, peakFrom: pv.peakFrom, peakUntil: pv.peakUntil,
       profile: pv.profile ? JSON.stringify(pv.profile) : '' });
   }
   const entry = Object.assign({ id: st.id || newId('t'), wineId: w.id, wineName: fullName(w) }, fields);
   const rated = st.rating !== st.ratingInit;
-  const prev = { rating: w.myRating, entries: S.removals.slice() };
+  const favCh = !!st.fav !== !!st.favInit;
+  const prev = { rating: w.myRating, fav: w.myFav, entries: S.removals.slice() };
   if (isNew) S.wines.push(w);
   if (rated) w.myRating = st.rating;
+  if (favCh) w.myFav = !!st.fav;
   S.removals = S.removals.filter(r => r.id !== entry.id).concat([normRemoval(entry)]);
   persist();
   if (st.mode === 'add') go('#/wine/' + encodeURIComponent(w.id)); else refreshView();
@@ -584,14 +588,17 @@ async function saveDiscovery() {
       upsertWine(normWine(d.wine));
       (d.entries || []).forEach(e => { S.removals = S.removals.filter(r => r.id !== e.id).concat([normRemoval(e)]); });
     } else {
-      if (rated) upsertWine(normWine(await api('update', { id: w.id, fields: { myRating: st.rating === null ? '' : st.rating } })));
+      const upd = {};
+      if (rated) upd.myRating = st.rating === null ? '' : st.rating;
+      if (favCh) upd.myFav = st.fav ? true : '';
+      if (rated || favCh) upsertWine(normWine(await api('update', { id: w.id, fields: upd })));
       const saved = normRemoval(await api('saveEntry', { entry }));
       S.removals = S.removals.filter(r => r.id !== saved.id).concat([saved]);
     }
     persist();
     refreshView();
   } catch (e) {
-    if (isNew) S.wines = S.wines.filter(x => x.id !== w.id); else w.myRating = prev.rating;
+    if (isNew) S.wines = S.wines.filter(x => x.id !== w.id); else { w.myRating = prev.rating; w.myFav = prev.fav; }
     S.removals = prev.entries;
     persist();
     if (isNew && location.hash.includes(w.id)) history.back(); else refreshView();

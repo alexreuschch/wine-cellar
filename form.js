@@ -26,6 +26,7 @@ function newDraft(mode, w) {
     stock: mode === 'add' ? [{ loc: defaultLocation(), shelf: null, pos: '', n: 1 }] : src.stock.map(e => Object.assign({}, e)),
     addLoc: false, move: null,
     myRating: src.myRating,
+    myFav: !!src.myFav,
     acq: mode === 'add' ? { type: 'Purchase', pp: newPicker('people', ''), rp: newPicker('retailers', '', { single: true }), website: '', websiteInit: '' } : null,
     ratings: src.ratings.map(r => ({ sys: r.sys, score: String(r.score) })),
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
@@ -173,6 +174,7 @@ function formBody() {
       <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
       <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
+      ${rateExtrasHtml('form')}
       <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
     </div>
     <div class="box"><span class="box-title">External ratings</span>
@@ -252,7 +254,10 @@ function openRatingSheet(i) {
 function renderRatingSheet() {
   const root = $('#sheet-root');
   if (!RT) { root.innerHTML = ''; return; }
-  const used = D.ratings.map((r, j) => (j === RT.i ? '' : r.sys));
+  // from a rating hint the sheet works on the wine itself, else on the edit form
+  const list = RT.wineId ? (wineById(RT.wineId) || { ratings: [] }).ratings : D.ratings;
+  const used = list.map((r, j) => (j === RT.i ? '' : r.sys));
+  const h = RT.hint;
   const free = SYSTEMS.filter(x => !used.includes(x.key));
   const info = RT.sys ? sysInfo(RT.sys) : null;
   const scale = info ? (info.max === 5 ? '1 to 5, for example 4.2' : `0 to ${info.max}, for example ${info.max === 20 ? '17.5' : '92'}`) : '';
@@ -260,6 +265,7 @@ function renderRatingSheet() {
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rt-title">
     <div class="grab"></div>
     <div class="between"><h2 id="rt-title" style="font-size:18px;font-weight:600">${RT.i >= 0 ? 'Edit rating' : 'Add external rating'}</h2><button class="icon-btn" data-act="ers-close" aria-label="Close">${ICON.x}</button></div>
+    ${h ? `<div class="card rh-note"><p class="small" style="margin:0">Hint from <a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.source || 'the web')}${ICON.link}</a>${h.vintage ? ` for vintage ${esc(h.vintage)}` : ''}. Check it at the source, then save. Only what you save is kept.</p></div>` : ''}
     <div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">Rating system</span>
       <div class="grid2" style="gap:8px">${free.map(x => `<button class="btn sys-btn${x.key === RT.sys ? ' primary' : ''}" data-act="ers-sys" data-v="${esc(x.key)}"><span>${esc(x.key)}</span><small>of ${x.max}</small></button>`).join('')}</div></div>
     ${info ? `<label class="field">Score (${scale})<input id="rt-score" data-input="ers-score" inputmode="decimal" placeholder="${info.max === 5 ? '4.2' : info.max === 20 ? '17.5' : '92'}" value="${esc(RT.score)}"></label>
@@ -280,6 +286,7 @@ function saveRatingSheet() {
   const max = sysInfo(RT.sys).max;
   if (String(RT.score).trim() === '' || isNaN(v) || v < 0 || v > max) { toast(`${RT.sys} scores go from 0 to ${max}.`); return; }
   const r = { sys: RT.sys, score: String(v) };
+  if (RT.wineId) { const id = RT.wineId, back = RT.back; RT = null; renderRatingSheet(); saveWineRating(id, r, back); return; }
   if (RT.i >= 0) D.ratings[RT.i] = r; else D.ratings.push(r);
   RT = null;
   renderRatingSheet();
@@ -711,6 +718,7 @@ async function saveWineForm() {
     ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => ({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })),
     thumb: D.thumb || (base ? base.thumb : ''),
     myRating: D.myRating,
+    myFav: !!D.myFav,
     profile: (() => { const p = profileFromDraft(); if (p && D.touched.has('grapes')) p.typical = false; return p; })()
   }));
   const entries = [];

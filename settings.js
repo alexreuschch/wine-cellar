@@ -248,7 +248,7 @@ async function exportExcel() {
         Producer: w.producer, Wine: w.name, Vintage: w.vintage, Type: w.type, 'Bottle size cl': w.size, Region: w.region, Grapes: w.grapes, Bottles: w.count,
         Storage: w.stock.map(e => `${e.n} × ${placeLabel(e)}`).join('; '), Status: w.count ? statusOf(w) : 'Finished',
         'Drink from': w.drinkFrom ?? '', 'Peak from': w.peakFrom ?? '', 'Peak until': w.peakUntil ?? '', 'Drink until': w.drinkUntil ?? '',
-        'My rating %': w.myRating ?? '', 'External ratings': w.ratings.map(r => `${r.sys} ${r.score}`).join(', '),
+        'My rating %': w.myRating ?? '', 'My favorite': w.myFav ? 'Yes' : '', 'External ratings': w.ratings.map(r => `${r.sys} ${r.score}`).join(', '),
         [`Ø Cost (${c})`]: money2(a), [`Street (${c})`]: money2(st), [`Total Street (${c})`]: st !== null ? money2(st * w.count) : '',
         'Best offer shop': w.offer ? w.offer.shop : '', 'Best offer price': w.offer ? `${w.offer.v} ${w.offer.cur}` : '', 'Best offer link': w.offer ? w.offer.url : '',
         Taste: w.taste, Style: w.tasteTags.join(', '), 'Pairs with': w.pairings.join(', '), 'Food': foodsOf(w).map(k => FOODS[k][0]).join(', '),
@@ -299,6 +299,7 @@ function viewSettings(first) {
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
       <p class="muted tiny" style="margin:0">AI looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
+    ${first ? '' : ttSettingsHtml()}
     ${first ? '' : locationsHtml()}
     ${first ? '' : retailersHtml()}
     ${first ? '' : peopleHtml()}

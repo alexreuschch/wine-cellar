@@ -99,8 +99,8 @@ const CTX = {
     },
     items: () => topPool(),
     text: () => true,
-    extra: () => (finishedWines().length ? switchHtml('top-finished', U.topFinished, `Include finished wines (${finishedWines().length})`) : '') + (discWines().length ? switchHtml('top-disc', U.topDisc, `Include discoveries (${discWines().length})`) : ''),
-    badges: () => (U.topFinished ? offChip('top-finished-off', 'Incl. finished') : '') + (U.topDisc ? offChip('top-disc-off', 'Incl. discoveries') : '')
+    extra: () => switchHtml('top-fav', !!U.f.top.fav, `Only my favorites<span class="heart-on">${HEART_SM}</span>`) + (finishedWines().length ? switchHtml('top-finished', U.topFinished, `Include finished wines (${finishedWines().length})`) : '') + (discWines().length ? switchHtml('top-disc', U.topDisc, `Include discoveries (${discWines().length})`) : ''),
+    badges: () => (U.f.top.fav ? offChip('top-fav-off', 'My favorites') : '') + (U.topFinished ? offChip('top-finished-off', 'Incl. finished') : '') + (U.topDisc ? offChip('top-disc-off', 'Incl. discoveries') : '')
   }
 };
 
@@ -110,7 +110,7 @@ const isRange = def => def.kind === 'range';
 const rng = (ctx, k) => { const st = U.f[ctx]; return (st.range || (st.range = {}))[k] || null; };
 const isRating = def => def.kind === 'rating';
 const rflt = ctx => U.f[ctx].rating || null;
-const facetN = (ctx, k) => { const def = CTX[ctx].facets[k]; return isRange(def) ? (rng(ctx, k) ? 1 : 0) : isRating(def) ? (rflt(ctx) ? 1 : 0) : sel(ctx, k).length; };
+const facetN = (ctx, k) => { const def = CTX[ctx].facets[k]; return isRange(def) ? (rng(ctx, k) ? 1 : 0) : isRating(def) ? (rflt(ctx) ? 1 : 0) + (U.f[ctx].fav ? 1 : 0) : sel(ctx, k).length; };
 const activeCount = ctx => Object.keys(CTX[ctx].facets).reduce((a, k) => a + facetN(ctx, k), 0);
 
 /* rating filter: one system, at least a value on its own scale */
@@ -126,10 +126,12 @@ function ratingSystems(ctx) {
 }
 function passes(ctx, item, except) {
   const fs = CTX[ctx].facets;
+  if (ctx === 'top' && U.f.top.fav && !isFavWine(item, favThreshold())) return false;
   return Object.keys(fs).every(k => {
     if (k === except) return true;
     const def = fs[k];
     if (isRating(def)) {
+      if (U.f[ctx].fav && !isFavWine(item, favThreshold())) return false;
       const r = rflt(ctx);
       if (!r) return true;
       const v = ratingOf(item, r.sys);
@@ -295,7 +297,8 @@ function ratingHtml(ctx) {
   // My rating is chosen from the start; the filter only starts working when the slider moves
   const pre = !r0 && systems.includes('mine');
   const r = r0 || (pre ? { sys: 'mine', min: 0 } : null);
-  const chips = systems.map(sys => `<button class="chip${r && r.sys === sys ? ' on' : ''}" data-act="rt-sys" data-ctx="${ctx}" data-v="${esc(sys)}">${esc(rSysName(sys))}${r0 && r0.sys === sys ? ICON.x : ''}</button>`).join('');
+  const favChip = `<button class="chip${U.f[ctx].fav ? ' on' : ''}" data-act="rt-fav" data-ctx="${ctx}">${ICON.heart}My favorites${U.f[ctx].fav ? ICON.x : ''}</button>`;
+  const chips = favChip + systems.map(sys => `<button class="chip${r && r.sys === sys ? ' on' : ''}" data-act="rt-sys" data-ctx="${ctx}" data-v="${esc(sys)}">${esc(rSysName(sys))}${r0 && r0.sys === sys ? ICON.x : ''}</button>`).join('');
   if (!r) return `<div style="display:flex;flex-direction:column;gap:8px"><div class="chips">${chips}</div><p class="muted tiny" style="margin:0">Choose one rating system, then set the lowest rating to show.</p></div>`;
   const sc = rScale(r.sys);
   return `<div style="display:flex;flex-direction:column;gap:8px"><div class="chips">${chips}</div>
@@ -357,13 +360,13 @@ function viewCellar() {
     <div class="top-actions"><a class="icon-btn magic-btn" href="#/sommelier" aria-label="AI Sommelier">${ICON.magic}</a><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>`;
   const notice = S.version && S.version < 15 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
-    return `<main class="screen has-nav">${head}${notice}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
+    return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
   const filters = filterArea('cellar');
   const btn = filterButton('cellar');
   const cs = cellarSpace();
   const space = cs.cap ? `<a class="space-card" href="#/settings" aria-label="Cellar space, set in Settings">${fillBarHtml(cs, 'Cellar space')}</a>` : '';
-  return `<main class="screen has-nav">${head}${notice}${statsHtml()}${space}
+  return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${statsHtml()}${space}
     <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search wine, grape or food" value="${esc(U.search)}"></label>${btn}</div>
     ${filters}
     <div id="drink-soon">${drinkSoonHtml()}</div>

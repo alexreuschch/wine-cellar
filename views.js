@@ -290,7 +290,9 @@ function topMoreHtml() {
   return `${fin ? `<button class="btn ghost" data-act="top-toggle-finished">${U.topFinished ? 'Hide' : 'Show'} finished wines (${fin})</button>` : ''}${disc ? `<button class="btn ghost" data-act="top-toggle-disc">${U.topDisc ? 'Hide' : 'Show'} discoveries (${disc})</button>` : ''}`;
 }
 function topBody() {
-  return topList() + topMoreHtml();
+  // in External, the check for published scores of the wines in the current selection
+  const bar = U.topMode === 'ext' ? rhBarHtml(topPool().filter(w => passes('top', w)).map(w => w.id)) : '';
+  return bar + topList() + topMoreHtml();
 }
 function topList() {
   const pool = topPool().filter(w => passes('top', w));
@@ -587,11 +589,14 @@ function viewWine(id) {
     <section>
       <div class="rating-head"><h2>My rating</h2>${w.myRating === null ? `<a class="small" href="${editHref}">Rate in Edit</a>` : `<span class="rating-val">${w.myRating}%</span>`}</div>
       ${w.myRating === null ? '' : segsHtml(w.myRating, 22, 'lg')}
+      ${w.myRating === null ? '' : `<p class="rate-word">${esc(rateWordText(w.myRating))}</p>`}
+      <button class="rate-fav${w.myFav ? ' on' : ''}" data-act="wine-fav" data-id="${esc(w.id)}" aria-pressed="${w.myFav}">${ICON.heart}One of my favorites</button>
     </section>
     <section>
       <h2>External ratings</h2>
       ${w.ratings.length ? `<div class="info-list">${w.ratings.map(r => infoRow(esc(r.sys), `<span class="rate-val">${ratingVisual(r)}</span>`)).join('')}</div>`
         : `<p class="muted small" style="margin:0">No external ratings yet. <a href="${editHref}">Add them in Edit</a></p>`}
+      ${rhDetailHtml(w)}
     </section>
     ${valueHtml(w)}
     ${offerHtml(w)}
@@ -644,4 +649,15 @@ function setRating(v) {
   if (val) { val.textContent = v === null ? 'Not rated' : v + '%'; val.classList.toggle('none', v === null); }
   const bar = $('#rating-bar');
   if (bar) bar.innerHTML = segsHtml(v, 30, 'lg');
+  rateRefresh('form');
+}
+
+/* the heart on the wine page: one of my favorites, saved right away */
+async function toggleWineFav(id) {
+  const w = wineById(id);
+  if (!w) return;
+  w.myFav = !w.myFav;
+  persist(); refreshView();
+  try { upsertWine(normWine(await api('update', { id, fields: { myFav: w.myFav ? true : '' } }))); persist(); }
+  catch (e) { w.myFav = !w.myFav; persist(); refreshView(); toast('Not saved: ' + e.message); }
 }

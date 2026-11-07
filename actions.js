@@ -17,7 +17,8 @@ const ACTS = {
   'f-tab': el => { U.f[el.dataset.ctx].tab = el.dataset.v; refreshView(); },
   'f-more': el => { U.f[el.dataset.ctx].all[el.dataset.k] = true; refreshView(); },
   'f-less': el => { U.f[el.dataset.ctx].all[el.dataset.k] = false; refreshView(); },
-  'f-clear': el => { const st = U.f[el.dataset.ctx]; st.sel = {}; st.range = {}; st.rating = null; refreshView(); },
+  'f-clear': el => { const st = U.f[el.dataset.ctx]; st.sel = {}; st.range = {}; st.rating = null; st.fav = false; refreshView(); },
+  'rt-fav': el => { const st = U.f[el.dataset.ctx]; st.fav = !st.fav; refreshView(); },
   'rating-clear': el => { U.f[el.dataset.ctx].rating = null; refreshView(); },
   'rt-sys': el => {
     const st = U.f[el.dataset.ctx], v = el.dataset.v;
@@ -37,6 +38,7 @@ const ACTS = {
   'j-fav-off': () => { U.jFav = false; refreshView(); },
   'top-finished-off': () => { U.topFinished = false; refreshView(); },
   'top-disc-off': () => { U.topDisc = false; refreshView(); },
+  'top-fav-off': () => { U.f.top.fav = false; refreshView(); },
   'top-toggle-finished': () => { U.topFinished = !U.topFinished; refreshView(); },
   'top-toggle-disc': () => { U.topDisc = !U.topDisc; refreshView(); },
   'loc-add': async () => {
@@ -204,6 +206,7 @@ const ACTS = {
     setRating(clamp(base + Number(el.dataset.d), 0, 100));
   },
   'rate-clear': () => setRating(null),
+  'wine-fav': el => toggleWineFav(el.dataset.id),
   'open-add-rating': () => { U.addRatingOpen = true; refreshView(); const s = $('#new-score'); if (s) s.focus(); },
   'close-add-rating': () => { U.addRatingOpen = false; refreshView(); },
   'save-rating': async () => {
@@ -341,7 +344,7 @@ const ACTS = {
   },
   rrm: el => { D.ratings.splice(Number(el.dataset.i), 1); render(); },
   'ers-open': el => openRatingSheet(Number(el.dataset.i)),
-  'ers-close': () => { RT = null; renderRatingSheet(); },
+  'ers-close': () => { const back = RT && RT.back; RT = null; renderRatingSheet(); if (back && hintCount()) { RH.view = 'list'; rhRender(); } },
   'ers-sys': el => { RT.sys = el.dataset.v; renderRatingSheet(); },
   'ers-save': () => saveRatingSheet(),
   'tg-rm': el => { const k = el.dataset.k, t = tagList(k); t.splice(Number(el.dataset.i), 1); D.fields[k] = t.join(', '); D.touched.add(k); renderTagBox(k); },
@@ -366,13 +369,15 @@ const ACTS = {
     if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { toast('The script URL starts with https://script.google.com/'); return; }
     if (!token) { toast('Paste your token.'); return; }
     busy(true, 'Connecting…');
+    const first = !CFG;
     try {
       await api('ping', {}, { url, token });
       CFG = { url, token };
       store.set('wc-config', CFG);
       busy(false);
       await sync(true);
-      go('#/cellar', true);
+      // the first setup goes on with the taste test, as its last step
+      go(first && S.version >= 34 && !S.tasteTest ? '#/taste' : '#/cellar', true);
       render();
       toast('Connected');
     } catch (e) { busy(false); toast(e.message); }
@@ -467,6 +472,7 @@ const CHANGES = {
   'show-finished': el => { U.showFinished = el.checked; refreshView(); },
   'top-finished': el => { U.topFinished = el.checked; refreshView(); },
   'top-disc': el => { U.topDisc = el.checked; refreshView(); },
+  'top-fav': el => { U.f.top.fav = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },
   'qty-in': el => setQty(el, true),
   'size-sel': el => { if (!D) return; D.touched.add('size'); if (el.value === 'other') { D.sizeOther = true; D.fields.size = ''; } else { D.sizeOther = false; D.fields.size = el.value; } renderSizeBox(); refreshSpaceNotes(); if (D.sizeOther) { const i = $('[name="size"]'); if (i) i.focus(); } },
@@ -516,6 +522,10 @@ const CHANGES = {
     } catch (e) { busy(false); toast(e.message); }
   }
 };
+
+Object.assign(ACTS, TQ_ACTS, RH_ACTS);
+Object.assign(INPUTS, TQ_INPUTS);
+Object.assign(CHANGES, TQ_CHANGES);
 
 /* ------------------------------------------------------------ start */
 
@@ -598,8 +608,11 @@ function init() {
     navTrack();
     jumpCheck();
     if (SOMM.listening && route().p !== 'sommelier') sommStopVoice();
+    if (TQ.listening && route().p !== 'taste') ttStopVoice();
+    if (TQ.edit && route().p !== 'taste') tqStart();
     if (RS) closeSheet();
     if (RT) { RT = null; renderRatingSheet(); }
+    if (RH.view) { RH.view = ''; rhRender(); }
     render();
   });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && CFG && !isFormRoute()) sync(true); });

@@ -623,7 +623,8 @@ function tasteProfile() {
   const qty = r => Number(r.qty) || 1;
   // bottles ever owned per wine: purchases and gifts in, otherwise the stock plus what went out
   const owned = w => { const ins = inEntries(w).reduce((a, r) => a + qty(r), 0); return ins || w.count + S.removals.filter(r => r.wineId === w.id && r.dir === 'out').reduce((a, r) => a + qty(r), 0); };
-  const all = S.wines.map(w => ({ w, n: owned(w) })).filter(x => x.n > 0);
+  // a discovery counts as one bottle: you tasted it, even if you never owned it
+  const all = S.wines.map(w => ({ w, n: owned(w) || (isDisc(w) ? 1 : 0) })).filter(x => x.n > 0);
   const totalOwned = all.reduce((a, x) => a + x.n, 0) || 1;
   const byType = TYPES.map(t => ({ t, n: all.filter(x => x.w.type === t).reduce((a, x) => a + x.n, 0) })).filter(x => x.n).sort((a, b) => b.n - a.n);
   const tallyTop = (keyOf, k) => { const m = new Map(); all.forEach(x => keyOf(x.w).forEach(v => { const key = lc(v); const e = m.get(key) || { v, n: 0 }; e.n += x.n; m.set(key, e); })); return [...m.values()].sort((a, b) => b.n - a.n).slice(0, k).map(e => e.v); };
@@ -635,10 +636,11 @@ function tasteProfile() {
   prices.sort((a, b) => a - b);
   const p25 = quantile(prices, 0.25), p50 = quantile(prices, 0.5), p75 = quantile(prices, 0.75);
   const rated = S.wines.filter(w => w.myRating !== null).sort((a, b) => b.myRating - a.myRating);
-  const top = rated.filter(w => w.myRating >= 85).slice(0, 4);
-  const low = rated.filter(w => w.myRating < 75).slice(-3);
+  const favTh = favThreshold(), lowTh = lowThreshold();
+  const top = rated.filter(w => isFavWine(w, favTh)).slice(0, 4);
+  const low = rated.filter(w => w.myRating < lowTh && !w.myFav).slice(-3);
   const tagM = new Map();
-  rated.filter(w => w.myRating >= 85).forEach(w => w.tasteTags.forEach(t => { const k = lc(t); tagM.set(k, (tagM.get(k) || 0) + 1); }));
+  rated.filter(w => isFavWine(w, favTh)).forEach(w => w.tasteTags.forEach(t => { const k = lc(t); tagM.set(k, (tagM.get(k) || 0) + 1); }));
   const tags = [...tagM.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
   const perMonth = recent.reduce((a, r) => a + qty(r), 0) / 12;
   const occ = tally(recent, r => [entryType(r)], qty).sort((a, b) => b.n - a.n).slice(0, 2).map(e => e.k);
@@ -655,6 +657,8 @@ function tasteProfile() {
   if (p50 !== null) lines.push(['Usual price', `${cur()} ${fmtP(p25)} to ${fmtP(p75)} per bottle, median ${fmtP(p50)}`]);
   if (top.length) lines.push(['Rated highest', top.map(w => `${wineTitle(w)} ${w.vintage} ${w.myRating}%`).join(', ')]);
   if (tags.length) lines.push(['Style you like', tags.join(', ')]);
+  const tw = ttWeight();
+  if (tw) lines.push(['Taste test', `counts about ${Math.round(tw * 100)}% until you have rated more wines`]);
   lines.push(['Drinking', perMonth ? `about ${fmtNum(perMonth, 1)} bottles per month${occ.length ? `, mostly ${occ.join(' and ').toLowerCase()}` : ''}` : 'no bottles opened in the last 12 months']);
   const cs = cellarSpace();
   const totalStock = stock.reduce((x, w) => x + w.count, 0);
@@ -721,9 +725,10 @@ function viewDiscover() {
   return `<main class="screen has-nav discover">
     <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Consultant</h1></header>
+    ${ttOfferHtml()}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The consultant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <section class="ins-sec" style="border-top:0;padding-top:0"><div class="sec-head"><h2>Your profile</h2></div>
-      <p class="small muted" style="margin:0">Calculated in the app from your stock, finished wines, ratings, journal and purchase prices. The consultant bases its suggestions on it.</p>
+      <p class="small muted" style="margin:0">Calculated in the app from your stock, finished wines, discoveries, ratings, journal and purchase prices${ttWeight() ? ', plus your taste test' : ''}. The consultant bases its suggestions on it.</p>
       <div class="info-list">${prof.lines.map(l => infoRowWide(l[0], l[1])).join('')}</div>
       <p class="small muted" style="margin:6px 0 0">Stock compared with what you drank in the last 12 months</p>${cover}
     </section>

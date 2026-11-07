@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 33;
+var API_VERSION = 35;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -19,8 +19,9 @@ var WINE_COLS = [
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom',
-  'stock', 'street', 'offer', 'profile', 'origin', 'size'
+  'stock', 'street', 'offer', 'profile', 'origin', 'size', 'myFav'
 ];
+// myFav: TRUE when the owner marked the wine with a heart as one of their favorites
 // size: the bottle size in cl, empty means a standard bottle of 75 cl
 // origin "discovery": a wine tasted out, for example in a restaurant, never in the cellar
 // The Removals tab is the journal: bottles going out (dir "out"), coming in (dir "in") and discoveries tasted out (dir "taste", no bottle).
@@ -46,7 +47,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '17';
+var SCHEMA_VERSION = '18';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -94,7 +95,10 @@ var ACTIONS = {
   renamePerson: actionRenamePerson_,
   savePersonInfo: actionSavePersonInfo_,
   journalAsk: actionJournalAsk_,
-  setSettings: actionSetSettings_
+  setSettings: actionSetSettings_,
+  setTasteTest: actionSetTasteTest_,
+  tasteAnchor: actionTasteAnchor_,
+  ratingHints: actionRatingHints_
 };
 
 // ---------------------------------------------------------------- setup
@@ -280,7 +284,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background', journalAsk: 'Journal' };
+var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background', journalAsk: 'Journal', tasteAnchor: 'Taste test', ratingHints: 'Rating hints' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -389,6 +393,124 @@ function actionSetSettings_(req) {
     props_().setProperty('COUNTRY', String(s.country));
   }
   return settings_();
+}
+
+// ---------------------------------------------------------------- taste test
+// Six quick questions for a first taste profile. It counts as much as two rated wines, so it fades with every wine
+// the owner rates (discoveries included), but never below 5%. Stored as JSON in the script property TASTE_TEST.
+var TT_TYPES = ['Red', 'White', 'Rosé', 'Sparkling', 'Dessert', 'Fortified'];
+var TT_COFFEE = ['', 'sweet, with milk', 'with milk, no sugar', 'black', 'strong espresso'];
+var TT_CHOC = ['', 'milk chocolate', 'dark chocolate around 60%', 'dark chocolate 70 to 75%', 'very dark chocolate, 85% and more'];
+var TT_FRUIT = { green: 'green apple and lemon', stone: 'ripe peach and apricot', red: 'red berries and cherries', dark: 'dark plums and blackberries' };
+
+function normTasteTest_(t) {
+  if (!t || typeof t !== 'object') return null;
+  var lvl = function (v) { var n = Math.round(Number(v)); return n >= 1 && n <= 4 ? n : null; };
+  var txt = function (v, m) { return String(v === null || v === undefined ? '' : v).trim().slice(0, m || 120); };
+  var out = {
+    v: 1, date: txt(t.date, 10),
+    types: (Array.isArray(t.types) ? t.types : []).map(String).filter(function (x, i, a) { return TT_TYPES.indexOf(x) >= 0 && a.indexOf(x) === i; }),
+    coffee: lvl(t.coffee), choc: lvl(t.choc), fruit: TT_FRUIT[t.fruit] ? String(t.fruit) : null,
+    oak: t.oak === true ? true : t.oak === false ? false : null, anchor: null
+  };
+  var a = t.anchor;
+  if (a && typeof a === 'object' && a.wine && typeof a.wine === 'object') {
+    var w = a.wine, p = normProfile_(a.profile);
+    out.anchor = {
+      wine: { producer: txt(w.producer), name: txt(w.name), vintage: txt(w.vintage, 8), type: TT_TYPES.indexOf(String(w.type)) >= 0 ? String(w.type) : '', region: txt(w.region), grapes: txt(w.grapes) },
+      profile: p ? { body: p.body, acid: p.acid, tannin: p.tannin, sweet: p.sweet, aromas: p.aromas } : null,
+      tags: txt(a.tags, 160)
+    };
+    if (!out.anchor.wine.name && !out.anchor.wine.producer && !out.anchor.wine.region) out.anchor = null;
+  }
+  return out;
+}
+
+function tasteTest_() {
+  var raw = props_().getProperty('TASTE_TEST');
+  if (!raw) return null;
+  try { return normTasteTest_(JSON.parse(raw)); } catch (e) { return null; }
+}
+
+/** How much the taste test counts next to the own ratings: like two rated wines, so 100% without any, half at 2, 9% at 20, never below 5%. */
+function tasteWeight_(rated) { return Math.max(0.05, 2 / (2 + rated)); }
+
+function actionSetTasteTest_(req) {
+  if (req.test === null) { props_().deleteProperty('TASTE_TEST'); return { tasteTest: null }; }
+  var t = normTasteTest_(req.test);
+  if (!t) throw new Error('The taste test could not be saved');
+  if (!t.date) t.date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var json = JSON.stringify(t);
+  if (json.length > 8000) throw new Error('The taste test is too large');
+  props_().setProperty('TASTE_TEST', json);
+  return { tasteTest: t };
+}
+
+var RATING_SCALE = 'The owner rates on a scale from 0 to 100%: 90 and more unforgettable, 80s excellent, 70s very good, 60s good, 50s OK, below 50 not for me.';
+/** The personal rating scale of the owner, so the AI reads every rating against it. */
+function ratingScaleText_(wines) {
+  var r = wines.map(function (w) { return Number(w.myRating); }).filter(function (v, i) { var x = wines[i].myRating; return x !== '' && x !== null && x !== undefined && !isNaN(v); }).sort(function (a, b) { return a - b; });
+  var favs = wines.filter(isFavFlag_).length;
+  var out = RATING_SCALE;
+  if (r.length >= 3) {
+    var q = function (p) { var pos = (r.length - 1) * p, lo = Math.floor(pos), hi = Math.ceil(pos); return Math.round(r[lo] + (r[hi] - r[lo]) * (pos - lo)); };
+    out += ' Their own ' + r.length + ' ratings range from ' + r[0] + ' to ' + r[r.length - 1] + '%, median ' + q(0.5) + '%, their top quarter starts at ' + q(0.75) + '%. Read every rating against this personal scale.';
+  }
+  if (favs) out += ' Wines marked "one of my favorites" were chosen with a heart by the owner and count as favorites in any case.';
+  return out + ' External ratings are only context; the owner\'s own taste counts.';
+}
+function isFavFlag_(w) { return w.myFav === true || String(w.myFav).toUpperCase() === 'TRUE'; }
+
+/** The taste test as text for the AI, with its current weight. Empty when there is none or it no longer counts. */
+function tasteTestText_(wines) {
+  var t = tasteTest_();
+  if (!t) return '';
+  var rated = wines.filter(function (w) { return w.id && w.myRating !== '' && w.myRating !== null && w.myRating !== undefined; }).length;
+  var wt = tasteWeight_(rated);
+  var lines = [];
+  if (t.types.length) lines.push('Likes to drink: ' + t.types.join(', ') + '.');
+  if (t.coffee) lines.push('Coffee: ' + TT_COFFEE[t.coffee] + '.');
+  if (t.choc) lines.push('Chocolate: ' + TT_CHOC[t.choc] + '.');
+  if (t.fruit) lines.push('Fruit they enjoy most: ' + TT_FRUIT[t.fruit] + '.');
+  if (t.oak !== null) lines.push('Vanilla, toast and butter from oak: ' + (t.oak ? 'likes it' : 'rather not') + '.');
+  if (t.anchor) {
+    var w = t.anchor.wine;
+    lines.push('A wine they really enjoyed: ' + [[w.producer, w.name, w.vintage].filter(String).join(' '), w.type, w.region, w.grapes].filter(String).join(' | ') +
+      (t.anchor.tags ? ' | style: ' + t.anchor.tags : '') + '. Treat it like a wine they rated 90%.');
+  }
+  if (!lines.length) return '';
+  return '\n\nTASTE TEST (a short quiz the owner took to start; coffee, chocolate and fruit are only rough hints for tannin, bitterness, body and acidity. ' +
+    'It counts about ' + Math.round(wt * 100) + '% next to their ' + rated + ' rated wines. Their own ratings always win where they show something else):\n' + lines.join('\n');
+}
+
+function anchorPrompt_() {
+  return [
+  'You are an experienced sommelier. Someone sets up a wine app and tells you about one wine they really enjoyed, as a photo of the label or in their own words.',
+  'The words may be spoken and transcribed, vague or in any language, for example "a Rioja, I think Reserva, with gold letters, last summer at friends".',
+  'Identify the wine as well as you can. Return ONLY a JSON object, no other text:',
+  '{"found": true, "sure": true or false, "wine": {"producer": "", "name": "", "vintage": "", "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "main grapes"}, "tags": "three style words, for example elegant, medium body, fresh acidity", "profile": {...}, "message": ""}',
+  'Rules:',
+  '1. "sure" is true only when producer and wine are clear. If only a style, grape or region is clear, fill what you can, leave the rest empty and set "sure" to false.',
+  '2. "vintage" only when it is stated or visible, otherwise "".',
+  '3. "profile" has "body", "sweet", "acid" (numbers 1 to 5: body light to bold, sweet dry to sweet, acid soft to fresh), "tannin" (1 smooth to 5 tannic, or null for wines without noticeable tannin) and "aromas" (the three main aroma groups, each {"g": one of ' + AROMA_KEYS.join(', ') + ', "n": "two or three notes"}). Use what is typical for this wine or style.',
+  '4. Set "found" to false only when no wine at all can be recognized; then "message" is one short, friendly sentence in English asking for a clearer photo or a few more details.',
+  '5. Write in English. Do not use dashes as punctuation.'
+  ].join('\n');
+}
+
+function actionTasteAnchor_(req) {
+  var text = String(req.text || '').trim().slice(0, 1000);
+  var image = req.image ? String(req.image) : '';
+  if (image && image.length > 1500000) throw new Error('The photo is too large');
+  if (!text && !image) throw new Error('Add a photo or tell us about the wine');
+  var content = [];
+  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } });
+  content.push({ type: 'text', text: anchorPrompt_() + (text ? '\n\nWhat they said: ' + text : '\n\nThe photo shows the label.') });
+  var res = callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1200, messages: [{ role: 'user', content: content }] });
+  var d = parseJson_(textOf_(res), 'The AI could not read this. Please try again.');
+  var t = normTasteTest_({ anchor: { wine: d.wine || {}, profile: d.profile, tags: d.tags } });
+  if (d.found === false || !t || !t.anchor) return { found: false, message: String(d.message || 'We could not recognize this wine. Try a clearer photo or a few more details.').slice(0, 300) };
+  return { found: true, sure: d.sure === true, wine: t.anchor.wine, profile: t.anchor.profile, tags: t.anchor.tags };
 }
 
 /** Exchange rates with CHF as base (1 CHF = rates[X] X). From Google Finance, cached for 12 hours. */
@@ -510,6 +632,7 @@ function actionLoad_() {
     history: readAll_(SHEETS.history).filter(function (r) { return r.month; }),
     usage: usageSummary_(),
     settings: settings_(),
+    tasteTest: tasteTest_(),
     fx: fxRates_()
   };
 }
@@ -1263,6 +1386,51 @@ function actionStreetPrice_(req) {
   });
 }
 
+// ---------------------------------------------------------------- rating hints
+// Published scores of other rating systems, found on the web as hints for the owner. Nothing is stored here:
+// the app shows the hints on the phone, and only a rating the owner enters by hand is saved with the wine.
+var RATING_SYSTEMS = { 'Vivino': 5, 'Robert Parker': 100, 'Falstaff': 100, 'James Suckling': 100, 'Wine Spectator': 100, 'Decanter': 100, 'Jancis Robinson': 20, 'Vinum': 20 };
+
+function actionRatingHints_(req) {
+  if (!req.id) throw new Error('Missing wine id');
+  var systems = (Array.isArray(req.systems) ? req.systems : []).map(String).filter(function (x, i, a) { return RATING_SYSTEMS[x] && a.indexOf(x) === i; });
+  if (!systems.length) throw new Error('Choose at least one rating system');
+  var t = table_(SHEETS.wines);
+  var idx = findIndex_(t, req.id);
+  if (idx < 0) throw new Error('Wine not found');
+  var w = toObj_(t.headers, t.rows[idx]);
+  var wine = [w.producer, w.name, w.vintage].filter(String).join(' ') + sizeText_(w.size);
+  var prompt = [
+    'Search the web for published ratings of this wine: ' + wine + (w.region ? ' (' + w.region + ')' : '') + '.',
+    'Rating systems to look for, with their scale: ' + systems.map(function (x) { return x + ' (out of ' + RATING_SYSTEMS[x] + ')'; }).join(', ') + '.',
+    'Critic scores are often quoted by wine shops, for example "Robert Parker 92 points". Vivino shows an average out of 5 on its wine pages.',
+    'Rules:',
+    '1. Report only a score you actually saw on a web page, with the URL of that page. Never estimate, never guess, never use a score of another wine.',
+    '2. Prefer this exact vintage. If a system only has a score for another vintage of the same wine, you may report it with that vintage.',
+    '3. At most one score per system, the most reliable one: from the rating system itself, otherwise from a shop that quotes it.',
+    '4. Leave out every system you did not find.',
+    'Return ONLY a JSON object, no other text: {"hints": [{"sys": "system name exactly as in the list", "score": number on its scale, "vintage": "year or NV", "url": "https://...", "source": "name of the website"}]}. If you found nothing, return {"hints": []}.'
+  ].join('\n');
+  var res = callClaude_({
+    model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL,
+    max_tokens: 2000,
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(5, 2 + systems.length) }],
+    messages: [{ role: 'user', content: prompt }]
+  });
+  var d;
+  try { d = parseJson_(textOf_(res), 'none'); } catch (e) { d = { hints: [] }; }
+  var seen = {};
+  var hints = (Array.isArray(d.hints) ? d.hints : []).map(function (h) {
+    if (!h || systems.indexOf(String(h.sys)) < 0 || seen[h.sys]) return null;
+    var v = Number(String(h.score).replace(',', '.'));
+    var url = String(h.url || '').trim();
+    if (!(v > 0) || v > RATING_SYSTEMS[h.sys] || !/^https?:\/\/[^\s]+\.[^\s]+/.test(url)) return null;
+    seen[h.sys] = true;
+    return { sys: String(h.sys), score: Math.round(v * 10) / 10, vintage: String(h.vintage || '').slice(0, 8), url: url.slice(0, 500), source: String(h.source || '').slice(0, 80) };
+  }).filter(Boolean);
+  return { id: String(req.id), vintage: String(w.vintage || ''), hints: hints };
+}
+
 /**
  * Run this once from the editor after adding ANTHROPIC_API_KEY.
  * The execution log then shows either "Claude API works" or the exact problem.
@@ -1595,7 +1763,7 @@ var SOMMELIER_RULES = [
   'Rules:',
   '1. Pick up to 3 wines that fit best, only from the cellar list, referenced by their id. Fewer is fine.',
   '2. When wines fit equally well, prefer those at their peak or to drink soon, and those the owner rated highly or marked as a favorite.',
-  '3. Use the journal to understand the taste of the owner and the people mentioned.',
+  '3. Use the journal, the taste history and the taste test (if given) to understand the taste of the owner and the people mentioned. The taste history shows wines the owner finished or tasted elsewhere; they are not in the cellar and can never be picked.',
   '4. If nothing in the cellar fits well, say so honestly and suggest in "buy" what style or wine to buy instead. Otherwise leave "buy" empty.',
   '5. Answer in the language of the question. Keep "answer" to two to four sentences and each "why" to one sentence. Do not use dashes as punctuation.',
   '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty"}.'
@@ -1632,6 +1800,7 @@ function cellarContext_() {
     var ratings = [];
     try { (JSON.parse(w.ratings || '[]') || []).forEach(function (r) { ratings.push(r.sys + ' ' + r.score); }); } catch (e) { /* ignore */ }
     if (w.myRating !== '' && w.myRating !== null && w.myRating !== undefined) ratings.unshift('my rating ' + w.myRating + '%');
+    if (isFavFlag_(w)) ratings.unshift('one of my favorites');
     var where = parseStock_(w.stock).map(function (e) { return e.n + ' in ' + [e.loc, e.shelf === null || e.shelf === '' ? '' : shelfName(e.loc, e.shelf), e.pos].filter(String).join(', '); }).join('; ');
     var win = [w.drinkFrom, w.drinkUntil].every(function (x) { return x !== '' && x !== null; }) ? ' (drink ' + w.drinkFrom + ' to ' + w.drinkUntil + (w.peakFrom !== '' && w.peakUntil !== '' ? ', peak ' + w.peakFrom + ' to ' + w.peakUntil : '') + ')' : '';
     return [
@@ -1642,13 +1811,13 @@ function cellarContext_() {
   });
   var names = {};
   all.forEach(function (w) { names[w.id] = [w.producer, w.name, w.vintage].filter(String).join(' '); });
-  var journal = readAll_(SHEETS.removals).filter(function (r) { return r.dir === 'out'; })
+  var journal = readAll_(SHEETS.removals).filter(function (r) { return r.dir === 'out' || r.dir === 'taste'; })
     .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 40)
     .map(function (r) {
-      return [r.date, r.wineName || names[r.wineId] || r.wineId, r.type, r.occasion, r.people ? 'with ' + r.people : '', r.food ? 'food: ' + r.food : '', r.note ? 'note: ' + r.note : '', r.hearts ? 'favorite of ' + r.hearts : ''].filter(String).join(' | ');
+      return [r.date, r.wineName || names[r.wineId] || r.wineId, r.dir === 'taste' ? 'tasted elsewhere' + (r.venue ? ' (' + r.venue + ')' : '') : r.type, r.occasion, r.people ? 'with ' + r.people : '', r.food ? 'food: ' + r.food : '', r.note ? 'note: ' + r.note : '', r.hearts ? 'favorite of ' + r.hearts : ''].filter(String).join(' | ');
     });
-  return { wines: wines, text: 'Today is ' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '. The owner uses ' + settings_().currency + '.\n\nCELLAR (wines in stock):\n' + (lines.join('\n') || 'The cellar is empty.') +
-    '\n\nJOURNAL (recent bottles opened, given or sold):\n' + (journal.join('\n') || 'No entries yet.') };
+  return { wines: wines, text: 'Today is ' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '. The owner uses ' + settings_().currency + '.\n' + ratingScaleText_(all) + '\n\nCELLAR (wines in stock):\n' + (lines.join('\n') || 'The cellar is empty.') +
+    '\n\nJOURNAL (recent bottles opened, given, sold or tasted elsewhere):\n' + (journal.join('\n') || 'No entries yet.') + tasteTestText_(all) };
 }
 
 /** The usual restaurant markup over shop prices, as [low, high], or null. */
@@ -1677,7 +1846,7 @@ function actionSommelier_(req) {
       (where === 'restaurant' ? ' The owner is in a restaurant, so a price they mention is a restaurant price.'
         : where === 'shop' ? ' The owner is in a shop, so a price they mention is a shop price.'
         : where === 'other' ? ' The owner is neither in a shop nor in a restaurant, for example at a friend or a tasting; a price they mention is what the wine costs in a shop.' : '') + '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
-    : SOMMELIER_RULES + '\n\n' + ctx.text;
+    : SOMMELIER_RULES + '\n\n' + ctx.text + '\n\nTASTE HISTORY (finished wines and discoveries tasted elsewhere, not in the cellar, never pick them):\n' + (finishedContext_().join('\n') || 'None yet.');
   var messages = [];
   (req.history || []).slice(-6).forEach(function (h) {
     if (!h || !h.q || !h.a) return;
@@ -1887,7 +2056,7 @@ function finishedContext_() {
     return w.id && !n;
   }).map(function (w) {
     return [[w.producer, w.name, w.vintage].filter(String).join(' '), w.origin === 'discovery' ? 'discovery, tasted out, never in the cellar' : '', w.type, w.region, w.grapes,
-      w.myRating !== '' && w.myRating !== null && w.myRating !== undefined ? 'my rating ' + w.myRating + '%' : '',
+      w.myRating !== '' && w.myRating !== null && w.myRating !== undefined ? 'my rating ' + w.myRating + '%' : '', isFavFlag_(w) ? 'one of my favorites' : '',
       buys[w.id] ? 'paid ' + buys[w.id].join(', ') : ''].filter(String).join(' | ');
   });
 }

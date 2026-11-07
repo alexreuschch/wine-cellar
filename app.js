@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.0.2';
+const APP_VERSION = '3.2.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -116,7 +116,7 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [], shelfNames: {}, locInfo: {}, retailers: [], people: [], peopleInfo: [], wishlist: [], history: [], usage: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
+const S = { wines: [], removals: [], locations: [], shelfNames: {}, locInfo: {}, retailers: [], people: [], peopleInfo: [], wishlist: [], history: [], usage: [], settings: { currency: 'CHF' }, tasteTest: null, fx: null, version: 0 };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
@@ -226,6 +226,7 @@ function normWine(w) {
     street: parseStreet(w),
     offer: parseOffer(w),
     myRating: numOrNull(w.myRating),
+    myFav: w.myFav === true || String(w.myFav).toUpperCase() === 'TRUE',
     ratings: parseRatings(w.ratings),
     labelFileId: str(w.labelFileId),
     thumb: str(w.thumb),
@@ -315,6 +316,7 @@ function serialWine(w) {
   o.offer = w.offer ? JSON.stringify(w.offer) : '';
   o.profile = w.profile ? JSON.stringify(w.profile) : '';
   ['drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'myRating'].forEach(k => { if (o[k] === null) o[k] = ''; });
+  o.myFav = w.myFav ? true : '';
   return o;
 }
 
@@ -383,11 +385,12 @@ function loadCache() {
   if (Array.isArray(c.history)) S.history = c.history;
   if (Array.isArray(c.usage)) S.usage = c.usage;
   if (c.settings) S.settings = Object.assign({ currency: 'CHF' }, c.settings);
+  if (c.tasteTest !== undefined) S.tasteTest = c.tasteTest;
   if (c.fx) S.fx = c.fx;
   if (c.version) S.version = c.version;
 }
 function persist() {
-  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, locInfo: S.locInfo, retailers: S.retailers, people: S.people, peopleInfo: S.peopleInfo, wishlist: S.wishlist, history: S.history, usage: S.usage, settings: S.settings, fx: S.fx, version: S.version });
+  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, locInfo: S.locInfo, retailers: S.retailers, people: S.people, peopleInfo: S.peopleInfo, wishlist: S.wishlist, history: S.history, usage: S.usage, settings: S.settings, tasteTest: S.tasteTest, fx: S.fx, version: S.version });
 }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
@@ -621,6 +624,7 @@ async function sync(silent) {
     S.history = Array.isArray(d.history) ? d.history.map(normHistory).filter(h => h.month) : [];
     S.usage = Array.isArray(d.usage) ? d.usage : [];
     if (d.settings) S.settings = Object.assign({ currency: 'CHF' }, d.settings);
+    S.tasteTest = d.tasteTest && typeof d.tasteTest === 'object' ? d.tasteTest : null;
     if (d.fx) S.fx = d.fx;
     persist();
     if (!isFormRoute()) render();
@@ -712,7 +716,7 @@ const go = (hash, replace) => { if (replace) { NAV.replacing = true; location.re
 
 /* where you came from: the screens of this session in order, and how far down each was scrolled */
 const NAV = { stack: [location.hash || '#/cellar'], scroll: {}, replacing: false, restore: null };
-const NAV_LABEL = { cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', 'journal-ai': 'Journal Assistant', settings: 'Settings', wine: 'Back' };
+const NAV_LABEL = { cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back' };
 const hashRoute = h => { const [p, id] = String(h || '').replace(/^#\/?/, '').split('/'); return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null }; };
 /* called on every change of the screen, before it is drawn */
 function navTrack() {
@@ -752,6 +756,7 @@ function render() {
     case 'discover': html = viewDiscover(); break;
     case 'journal': html = viewJournal(); break;
     case 'journal-ai': html = viewJournalAI(); break;
+    case 'taste': html = viewTaste(); break;
     case 'wine': html = viewWine(r.id); break;
     case 'add': html = viewForm('add', null); break;
     case 'edit': html = viewForm('edit', r.id); break;

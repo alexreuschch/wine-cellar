@@ -215,14 +215,29 @@ function grapeRingHtml(w) {
   return `<div class="tp-block"><p class="tp-lead">Grapes${w.profile && w.profile.typical ? ' · typical blend' : ''}</p>${donut(rows, 100, { label: 'Grapes', pctOnly: true, center, wrap: true })}</div>`;
 }
 
-/* where your favorites of this type lie on each axis: the average of wines you rated 85% or more, from three wines on */
+/* where your favorites of this type lie on each axis: the average of your favorites (a heart, or your own top quarter), from three wines on.
+   Until then the taste test fills in, with the wine you named there counting like a favorite; it drops out from 20 rated wines on. */
 function favAxes(type) {
-  const fav = S.wines.filter(x => x.type === type && x.myRating !== null && x.myRating >= 85 && x.profile);
+  const th = favThreshold();
+  const fav = S.wines.filter(x => x.type === type && isFavWine(x, th) && x.profile);
+  const tt = ttWeight() ? S.tasteTest : null;
+  const anc = tt && tt.anchor && tt.anchor.profile && tt.anchor.wine && tt.anchor.wine.type === type ? tt.anchor.profile : null;
+  const start = tt ? starterAxes(type, tt) : {};
+  const avg = a => Math.round(a.reduce((x, v) => x + v, 0) / a.length);
   const out = {};
+  let fromTest = false;
   AXES.forEach(([k]) => {
     const vals = fav.map(x => Number(x.profile[k]) || 0).filter(v => v >= 1 && v <= 5);
-    if (vals.length >= 3) out[k] = Math.round(vals.reduce((a, v) => a + v, 0) / vals.length);
+    if (vals.length >= 3) { out[k] = avg(vals); return; }
+    if (!tt) return;
+    const all = vals.concat(anc && Number(anc[k]) >= 1 ? [Number(anc[k])] : []);
+    if (all.length >= 3) out[k] = avg(all);
+    else if (start[k]) out[k] = avg(all.concat([start[k]]));
+    else if (all.length > vals.length) out[k] = avg(all);
+    else return;
+    fromTest = true;
   });
+  if (fromTest) Object.defineProperty(out, 'fromTest', { value: true });
   return out;
 }
 
@@ -239,7 +254,7 @@ function axesHtml(w) {
     return `<div class="tt" role="img" aria-label="${name}: ${word}${fav[k] ? `, your favorites: ${words[fav[k] - 1]}` : ''}"><span class="tt-name">${name}</span><b class="tt-word${v ? '' : ' muted'}">${word}</b>
       <div class="tt-segs">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= v ? 'on' : ''}"></i>`).join('')}</div>${heart}</div>`;
   });
-  const legend = Object.keys(fav).length ? `<p class="tt-legend">${ICON.heart}Your favorites of this type</p>` : '';
+  const legend = Object.keys(fav).length ? `<p class="tt-legend">${ICON.heart}${fav.fromTest ? 'Your taste, partly from the taste test' : 'Your favorites of this type'}</p>` : '';
   return `<div class="tt-wrap" style="--wc:${color}"><div class="tt-grid">${tiles.join('')}</div>${legend}</div>`;
 }
 
