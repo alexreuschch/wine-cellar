@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.28.1';
+const APP_VERSION = '3.0.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -546,11 +546,11 @@ const thumbHtml = (w, sm) => (w.thumb
 const chip = (label, on, act, v, extra = '') => `<button class="chip${on ? ' on' : ''}" data-act="${act}" data-v="${esc(v)}">${extra}${esc(label)}</button>`;
 const segsHtml = (v, h = 7, cls = '') => {
   const n = v === null ? 0 : Math.round(v / 5);
-  return `<div class="segs ${cls}">${SEG_COLORS.map((c, i) => `<div style="height:${h}px;background:${i < n ? c : '#3A3034'}"></div>`).join('')}</div>`;
+  return `<div class="segs ${cls}">${SEG_COLORS.map((c, i) => `<div style="height:${h}px;background:${i < n ? c : '#45232F'}"></div>`).join('')}</div>`;
 };
 const starsHtml = v => `<div class="stars" aria-label="${esc(v)} of 5">${[0, 1, 2, 3, 4].map(i => {
   const wpx = (clamp(v - i, 0, 1) * 14).toFixed(1);
-  return `<span class="star"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="#3A3034"/></svg><span class="fill" style="width:${wpx}px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="#C9A15B"/></svg></span></span>`;
+  return `<span class="star"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="#45232F"/></svg><span class="fill" style="width:${wpx}px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}" fill="#E6CB98"/></svg></span></span>`;
 }).join('')}</div>`;
 const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gift given</span>`
   : t === 'Received' ? `<span class="badge received">${ICON.gift}Gift received</span>`

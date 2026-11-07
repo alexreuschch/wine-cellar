@@ -370,8 +370,8 @@ function drawCropOverlay() {
   const W = D.src.width, H = D.src.height, r = Math.max(W, H) * 0.022;
   const pts = D.corners.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
   svgEl.innerHTML = `<path d="M0 0H${W}V${H}H0Z M${D.corners.map(c => `${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' L')}Z" fill="rgba(0,0,0,0.45)" fill-rule="evenodd"/>
-    <polygon points="${pts}" fill="none" stroke="#C9A15B" stroke-width="${(r / 4).toFixed(1)}"/>
-    ${D.corners.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#C9A15B" stroke="#1A1410" stroke-width="${(r / 5).toFixed(1)}"/>`).join('')}`;
+    <polygon points="${pts}" fill="none" stroke="#E6CB98" stroke-width="${(r / 4).toFixed(1)}"/>
+    ${D.corners.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#E6CB98" stroke="#1A0C12" stroke-width="${(r / 5).toFixed(1)}"/>`).join('')}`;
 }
 
 const setHint = t => { const h = $('#crop-hint'); if (h) h.textContent = t; };

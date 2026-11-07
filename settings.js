@@ -274,7 +274,7 @@ async function exportExcel() {
     const wb = XLSX.utils.book_new();
     const add = (rows, name) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Info: 'No entries' }]), name);
     add(wines, 'Wines'); add(journal, 'Journal'); add(locations, 'Locations'); add(retailers, 'Retailers'); add(people, 'People'); add(wish, 'Wishlist');
-    XLSX.writeFile(wb, `wine-cellar-${todayISO()}.xlsx`);
+    XLSX.writeFile(wb, `vintary-${todayISO()}.xlsx`);
     toast('Export ready');
   } catch (e) {
     toast('Export failed. Check your connection and try again.');
@@ -288,7 +288,7 @@ function viewSettings(first) {
   const inStock = S.wines.filter(w => w.count > 0);
   const priced = inStock.filter(w => w.street).length;
   return `<main class="screen${first ? '' : ' has-nav'}" style="gap:16px">
-    ${first ? '' : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}
+    ${first ? `<div class="brand-hero"><img src="icon-192.png" alt="" width="88" height="88"><b>Vintary</b><span>Your Personal Wine Companion</span><em>Wine, made personal.</em></div>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}
     <h1 class="title">${first ? 'Connect your cellar' : 'Settings'}</h1>
     ${first ? '' : `<section class="box"><span class="box-title">General</span>
       <div class="field">Currency<button class="pick-btn" data-act="pick-open" data-k="currency"><span class="ellipsis">${esc(cur())} · ${esc(GEO_CURRENCIES[cur()] || cur())}</span>${ICON.chevron}</button></div>
@@ -314,7 +314,7 @@ function viewSettings(first) {
     <button class="btn primary big block" data-act="connect">${first ? 'Connect' : 'Save and reconnect'}</button>
     ${first ? '' : `<button class="btn block" data-act="reload">Reload data from Google Drive</button>
       <button class="btn danger block" data-act="disconnect">Disconnect this device</button>`}
-    <p class="muted tiny center">Wine Cellar ${APP_VERSION}${S.version ? ` · script ${S.version}` : ''}</p>
+    ${first ? `<p class="muted tiny center">Vintary ${APP_VERSION}</p>` : `<div class="brand-foot"><img src="icon-192.png" alt="" width="40" height="40"><span><b>Vintary</b> · Wine, made personal.</span><span class="muted tiny">Vintary ${APP_VERSION}${S.version ? ` · script ${S.version}` : ''}</span></div>`}
   </main>${first ? '' : nav(null)}`;
 }
 

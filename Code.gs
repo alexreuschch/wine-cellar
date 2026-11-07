@@ -1,6 +1,6 @@
 /**
- * Wine Cellar API, version 2
- * Google Apps Script bound to the "Wine Cellar" Google Sheet.
+ * Vintary API (formerly Wine Cellar), version 2
+ * Google Apps Script bound to the Vintary Google Sheet. The name of the sheet and its folder do not matter, the tabs inside do.
  *
  * One-time setup: select the function "setup" above and click Run.
  * Script properties used:
@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 32;
+var API_VERSION = 33;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -238,7 +238,7 @@ function labelFolder_() {
     try { return DriveApp.getFolderById(id); } catch (e) { /* recreate below */ }
   }
   var parents = DriveApp.getFileById(ss_().getId()).getParents();
-  var folder = parents.hasNext() ? parents.next().createFolder('Labels') : DriveApp.createFolder('Wine Cellar Labels');
+  var folder = parents.hasNext() ? parents.next().createFolder('Labels') : DriveApp.createFolder('Vintary Labels');
   p.setProperty('LABEL_FOLDER_ID', folder.getId());
   return folder;
 }
@@ -246,7 +246,7 @@ function labelFolder_() {
 // ---------------------------------------------------------------- web entry points
 
 function doGet() {
-  return json_({ ok: true, service: 'wine-cellar', version: API_VERSION, hint: 'Use POST from the Wine Cellar app.' });
+  return json_({ ok: true, service: 'wine-cellar', version: API_VERSION, hint: 'Use POST from the Vintary app.' });
 }
 
 var T0_ = Date.now();
@@ -2145,6 +2145,8 @@ function monthlyDigest() {
     return '<h3 style="margin:16px 0 4px">' + title + '</h3><p style="margin:0 0 6px;color:#666">' + note + '</p><ul>' + list.map(line).join('') + '</ul>';
   };
   var html = '<div style="font-family:Arial,sans-serif;font-size:14px">' +
+    '<p style="margin:0 0 2px;font-family:Georgia,serif;font-size:22px;color:#620018">Vintary</p>' +
+    '<p style="margin:0 0 14px;color:#888;font-style:italic">Wine, made personal.</p>' +
     '<p>Here is your monthly drinking window update.</p>' +
     block('Past peak', past, 'Open these first.') +
     block('Drink soon', soon, 'Past their peak, still drinking well.') +
@@ -2152,7 +2154,8 @@ function monthlyDigest() {
     '</div>';
   MailApp.sendEmail({
     to: Session.getEffectiveUser().getEmail(),
-    subject: 'Wine Cellar: ' + (past.length + soon.length) + ' wines to drink soon',
+    subject: 'Vintary: ' + (past.length + soon.length) + ' wines to drink soon',
+    name: 'Vintary',
     htmlBody: html
   });
 }

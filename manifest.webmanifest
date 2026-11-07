@@ -1,14 +1,14 @@
 {
-  "name": "Wine Cellar",
-  "short_name": "Wine Cellar",
-  "description": "Your private wine cellar: stock, drinking windows, ratings and journal.",
+  "name": "Vintary",
+  "short_name": "Vintary",
+  "description": "Your Personal Wine Companion. Wine, made personal.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#161214",
-  "theme_color": "#161214",
+  "background_color": "#620018",
+  "theme_color": "#1A0C12",
   "icons": [
     {
       "src": "icon-192.png",

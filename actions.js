@@ -603,7 +603,15 @@ function init() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ });
   loadCache();
   render();
+  hideSplash();
   if (CFG) sync(true);
+}
+
+/* the start picture fades out once the first screen is drawn */
+function hideSplash() {
+  const s = document.getElementById('splash');
+  if (!s) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => { s.classList.add('out'); setTimeout(() => s.remove(), 600); }));
 }
 
 if (typeof document !== 'undefined') init();

@@ -385,7 +385,7 @@ function priceLine(w) {
   const a = avgPrice(w), s = streetOf(w);
   const cls = a === null || s === null || a === s ? '' : a < s ? 'up' : 'down';
   const part = (label, v, c = '') => `<span class="pp">${label} <b class="${c}">${v}</b></span>`;
-  return `<span class="price-row">${part('Ø Cost', a !== null ? fmtNum(a) : 'N/A', cls)}${part('Street', s !== null ? fmtNum(s) : 'N/A')}${w.count > 0 ? part('Total', s !== null ? fmtNum(s * w.count) : 'N/A') : ''}${w.count > 0 ? pill(w) : ''}</span>`;
+  return `<span class="price-row">${part('Ø Cost', a !== null ? fmtNum(a) : 'N/A', cls)}${part('Street', s !== null ? fmtNum(s) : 'N/A')}${w.count > 0 ? pill(w) : ''}</span>`;
 }
 
 function wineRow(w) {
