@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.5.2';
+const APP_VERSION = '3.5.3';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -589,7 +589,7 @@ function busy(on, label = 'Saving…') {
 
 /* ------------------------------------------------------------ API */
 
-async function api(action, payload = {}, cfg = CFG) {
+async function api(action, payload = {}, cfg = CFG, tries = 0) {
   if (!cfg) throw new Error('Not connected');
   let res;
   const t0 = Date.now();
@@ -603,7 +603,15 @@ async function api(action, payload = {}, cfg = CFG) {
   try { out = await res.json(); } catch (e) {
     throw new Error('Could not reach your script. Check the script URL and that access is set to Anyone.');
   }
-  if (!out.ok) throw new Error(out.error || 'Unknown error');
+  if (!out.ok) {
+    const err = str(out.error) || 'Unknown error';
+    // the sheet was busy with another write: nothing was written, so the same call is sent again
+    if (/lock timeout|holding the lock/i.test(err)) {
+      if (tries < 3) { await new Promise(r => setTimeout(r, 2000 + tries * 3000)); return api(action, payload, cfg, tries + 1); }
+      throw new Error('Your Google Sheet is very busy right now. Nothing was saved, please try again in a minute.');
+    }
+    throw new Error(err);
+  }
   return out.data;
 }
 

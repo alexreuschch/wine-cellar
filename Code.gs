@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 40;
+var API_VERSION = 41;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -641,20 +641,23 @@ function actionLoad_() {
 function actionSaveWine_(req) {
   var wine = req.wine || {};
   if (!wine.id) throw new Error('Missing wine id');
-  return withLock_(function () {
-    var t = table_(SHEETS.wines);
+  // the label photo goes to Drive before the lock, so the sheet is blocked only for the short write
+  var newFile = null, oldFile = '';
+  if (req.image) {
+    var blob = Utilities.newBlob(Utilities.base64Decode(req.image), 'image/jpeg', 'label-' + wine.id + '.jpg');
+    newFile = labelFolder_().createFile(blob).getId();
+  }
+  var out;
+  try {
+    out = withLock_(function () {
+    var t = ltable_(SHEETS.wines);
     var idx = findIndex_(t, wine.id);
     var existing = idx >= 0 ? toObj_(t.headers, t.rows[idx]) : null;
     var now = new Date().toISOString();
 
-    if (req.image) {
-      var folder = labelFolder_();
-      var blob = Utilities.newBlob(Utilities.base64Decode(req.image), 'image/jpeg', 'label-' + wine.id + '.jpg');
-      var file = folder.createFile(blob);
-      if (existing && existing.labelFileId) {
-        try { DriveApp.getFileById(existing.labelFileId).setTrashed(true); } catch (e) { /* ignore */ }
-      }
-      wine.labelFileId = file.getId();
+    if (newFile) {
+      if (existing && existing.labelFileId && existing.labelFileId !== newFile) oldFile = existing.labelFileId;
+      wine.labelFileId = newFile;
     } else if (existing && !wine.labelFileId) {
       wine.labelFileId = existing.labelFileId;
     }
@@ -673,13 +676,20 @@ function actionSaveWine_(req) {
     var saved = [];
     (req.entries || []).forEach(function (e) { saved.push(saveEntryRow_(Object.assign({}, e, { wineId: merged.id }))); });
     return { wine: merged, entries: saved };
-  });
+    });
+  } catch (err) {
+    // not saved: the new photo is not needed, the app sends it again
+    if (newFile) { try { DriveApp.getFileById(newFile).setTrashed(true); } catch (e) { /* ignore */ } }
+    throw err;
+  }
+  if (oldFile) { try { DriveApp.getFileById(oldFile).setTrashed(true); } catch (e) { /* ignore */ } }
+  return out;
 }
 
 function actionUpdate_(req) {
   if (!req.id) throw new Error('Missing wine id');
   return withLock_(function () {
-    var t = table_(SHEETS.wines);
+    var t = ltable_(SHEETS.wines);
     var idx = findIndex_(t, req.id);
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
@@ -698,7 +708,7 @@ function actionUpdate_(req) {
 function actionAdjust_(req) {
   if (!req.id) throw new Error('Missing wine id');
   return withLock_(function () {
-    var t = table_(SHEETS.wines);
+    var t = ltable_(SHEETS.wines);
     var idx = findIndex_(t, req.id);
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
@@ -720,7 +730,7 @@ function actionRemoveBottle_(req) {
   var r = req.removal || {};
   if (!r.wineId) throw new Error('Missing wine id');
   return withLock_(function () {
-    var t = table_(SHEETS.wines);
+    var t = ltable_(SHEETS.wines);
     var idx = findIndex_(t, r.wineId);
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
@@ -737,7 +747,7 @@ function actionAddBottles_(req) {
   var e = req.entry || {};
   if (!e.wineId) throw new Error('Missing wine id');
   return withLock_(function () {
-    var t = table_(SHEETS.wines);
+    var t = ltable_(SHEETS.wines);
     var idx = findIndex_(t, e.wineId);
     if (idx < 0) throw new Error('Wine not found');
     var obj = toObj_(t.headers, t.rows[idx]);
@@ -757,7 +767,7 @@ function actionSaveEntry_(req) {
 }
 
 function saveEntryRow_(e) {
-  var t = table_(SHEETS.removals);
+  var t = ltable_(SHEETS.removals);
   var idx = e.id ? findIndex_(t, e.id) : -1;
   var obj = {};
   REMOVAL_COLS.forEach(function (c) { obj[c] = ''; });
@@ -776,22 +786,22 @@ function saveEntryRow_(e) {
 }
 
 function actionDeleteWine_(req) {
-  return withLock_(function () {
-    var t = table_(SHEETS.wines);
+  var label = '';
+  var out = withLock_(function () {
+    var t = ltable_(SHEETS.wines);
     var idx = findIndex_(t, req.id);
     if (idx < 0) return { deleted: false };
-    var obj = toObj_(t.headers, t.rows[idx]);
-    if (obj.labelFileId) {
-      try { DriveApp.getFileById(obj.labelFileId).setTrashed(true); } catch (e) { /* ignore */ }
-    }
+    label = toObj_(t.headers, t.rows[idx]).labelFileId || '';
     t.sh.deleteRow(idx + 2);
     return { deleted: true };
   });
+  if (label) { try { DriveApp.getFileById(label).setTrashed(true); } catch (e) { /* ignore */ } }
+  return out;
 }
 
 function actionDeleteRemoval_(req) {
   return withLock_(function () {
-    var t = table_(SHEETS.removals);
+    var t = ltable_(SHEETS.removals);
     var idx = findIndex_(t, req.id);
     if (idx < 0) return { deleted: false };
     t.sh.deleteRow(idx + 2);
@@ -1240,7 +1250,7 @@ function actionProfiles_(req) {
   var rows = ids.map(function (id) { var i = findIndex_(t, id); return i < 0 ? null : toObj_(t.headers, t.rows[i]); }).filter(Boolean);
   var got = profilesFor_(rows);
   return withLock_(function () {
-    var t2 = table_(SHEETS.wines), out = [], failed = [];
+    var t2 = ltable_(SHEETS.wines), out = [], failed = [];
     rows.forEach(function (w, i) {
       var r = got.res[i];
       if (!r) { failed.push({ id: w.id, error: got.err[i] }); return; }
@@ -1313,7 +1323,7 @@ function actionComplete_(req) {
     });
   }
   return withLock_(function () {
-    var t2 = table_(SHEETS.wines), out = [], failed = [];
+    var t2 = ltable_(SHEETS.wines), out = [], failed = [];
     rows.forEach(function (w, i) {
       var d = res[i];
       if (!d) { failed.push({ id: w.id, error: err[i] }); return; }
@@ -1377,7 +1387,7 @@ function actionStreetPrice_(req) {
   var c = CURRENCIES.indexOf(String(d.currency)) >= 0 ? String(d.currency) : cur;
   var street = { v: Math.round(Number(d.price) * 100) / 100, cur: c, date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'), src: String(d.source || ''), conf: String(d.confidence || '') };
   return withLock_(function () {
-    var t2 = table_(SHEETS.wines);
+    var t2 = ltable_(SHEETS.wines);
     var i2 = findIndex_(t2, req.id);
     var obj = toObj_(t2.headers, t2.rows[i2]);
     obj.street = JSON.stringify(street);
@@ -1438,7 +1448,7 @@ function actionRatingHints_(req) {
   // remember when each system was searched, so a new check can skip it for a while; only the date is kept, never a score
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   var checks = withLock_(function () {
-    var t2 = table_(SHEETS.wines);
+    var t2 = ltable_(SHEETS.wines);
     var i2 = findIndex_(t2, req.id);
     if (i2 < 0) return {};
     var obj = toObj_(t2.headers, t2.rows[i2]);
@@ -1485,7 +1495,7 @@ function actionBestOffer_(req) {
   var w = toObj_(t.headers, t.rows[idx]);
   var offer = findOffer_([w.producer, w.name, w.vintage].filter(String).join(' ') + sizeText_(w.size), w.region, !!req.fresh);
   return withLock_(function () {
-    var t2 = table_(SHEETS.wines);
+    var t2 = ltable_(SHEETS.wines);
     var i2 = findIndex_(t2, req.id);
     var obj = toObj_(t2.headers, t2.rows[i2]);
     obj.offer = JSON.stringify(offer);
@@ -1600,17 +1610,16 @@ function offerMemory_(keys, allowMissing) {
 function rememberOffers_(pairs) {
   if (!pairs.length) return;
   withLock_(function () {
-    var t = table_(SHEETS.offers);
-    var kc = t.headers.indexOf('key');
+    var t = ltable_(SHEETS.offers, 'key');
     var now = new Date().toISOString();
     pairs.forEach(function (p) {
-      var idx = -1;
-      for (var i = 0; i < t.rows.length; i++) { if (String(t.rows[i][kc]) === p[0]) { idx = i; break; } }
-      writeRow_(t, idx, { key: p[0], offer: p[1] ? JSON.stringify(p[1]) : '', date: now });
+      writeRow_(t, keyIndex_(t, p[0]), { key: p[0], offer: p[1] ? JSON.stringify(p[1]) : '', date: now });
     });
-    var dc = t.headers.indexOf('date');
-    for (var j = t.rows.length - 1; j >= 0; j--) {
-      if (Date.now() - new Date(String(t.rows[j][dc])).getTime() > 30 * 86400000) t.sh.deleteRow(j + 2);
+    var dc = t.headers.indexOf('date'), n = t.sh.getLastRow() - 1;
+    if (dc < 0 || n < 1) return;
+    var ds = t.sh.getRange(2, dc + 1, n, 1).getValues();
+    for (var j = n - 1; j >= 0; j--) {
+      if (Date.now() - new Date(String(ds[j][0])).getTime() > 30 * 86400000) t.sh.deleteRow(j + 2);
     }
   });
 }
@@ -1717,12 +1726,9 @@ function checkSites_(infos) {
 function storeInfos_(entries) {
   if (!entries.length) return;
   withLock_(function () {
-    var t = table_(SHEETS.info);
-    var kc = t.headers.indexOf('key');
+    var t = ltable_(SHEETS.info, 'key');
     entries.forEach(function (e) {
-      var idx = -1;
-      for (var i = 0; i < t.rows.length; i++) { if (String(t.rows[i][kc]) === e.key) { idx = i; break; } }
-      writeRow_(t, idx, { key: e.key, kind: e.kind, name: e.name, data: JSON.stringify(e.info), date: new Date().toISOString() });
+      writeRow_(t, keyIndex_(t, e.key), { key: e.key, kind: e.kind, name: e.name, data: JSON.stringify(e.info), date: new Date().toISOString() });
     });
   });
 }
@@ -2178,7 +2184,7 @@ function actionOfferFor_(req) {
   var offer = findOffer_(wine.slice(0, 200), String(req.region || '').slice(0, 100), !!req.fresh);
   if (req.wishId) {
     withLock_(function () {
-      var t = table_(SHEETS.wishlist);
+      var t = ltable_(SHEETS.wishlist);
       var idx = findIndex_(t, req.wishId);
       if (idx < 0) return;
       var obj = toObj_(t.headers, t.rows[idx]);
@@ -2193,7 +2199,7 @@ function actionSaveWish_(req) {
   var w = req.wish || {};
   if (!w.id) throw new Error('Missing id');
   return withLock_(function () {
-    var t = table_(SHEETS.wishlist);
+    var t = ltable_(SHEETS.wishlist);
     var idx = findIndex_(t, w.id);
     var obj = idx >= 0 ? toObj_(t.headers, t.rows[idx]) : {};
     WISH_COLS.forEach(function (c) { if (w[c] !== undefined) obj[c] = typeof w[c] === 'object' && w[c] !== null ? JSON.stringify(w[c]) : w[c]; });
@@ -2205,7 +2211,7 @@ function actionSaveWish_(req) {
 
 function actionDeleteWish_(req) {
   return withLock_(function () {
-    var t = table_(SHEETS.wishlist);
+    var t = ltable_(SHEETS.wishlist);
     var idx = findIndex_(t, req.id);
     if (idx < 0) return { deleted: false };
     t.sh.deleteRow(idx + 2);
@@ -2422,7 +2428,27 @@ function toObj_(headers, row) {
   return o;
 }
 
+/** A table for a quick write under the lock: only the headers and the key column are read.
+ *  A full row is read when it is used, so a save no longer reads every wine with its label preview. */
+function ltable_(name, key) {
+  var sh = sheet_(name);
+  var lr = sh.getLastRow(), lc = sh.getLastColumn();
+  var headers = lc ? sh.getRange(1, 1, 1, lc).getValues()[0].map(String) : [];
+  var n = Math.max(0, lr - 1), kc = headers.indexOf(key || 'id');
+  var ids = n && kc >= 0 ? sh.getRange(2, kc + 1, n, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+  var cache = {}, rows = [];
+  for (var i = 0; i < n; i++) (function (i) {
+    Object.defineProperty(rows, i, { configurable: true, enumerable: true,
+      get: function () { if (!cache[i]) cache[i] = sh.getRange(i + 2, 1, 1, lc).getValues()[0]; return cache[i]; },
+      set: function (v) { cache[i] = v; } });
+  })(i);
+  return { sh: sh, headers: headers, rows: rows, ids: ids, key: key || 'id' };
+}
+/** Row of a key in a table from ltable_, -1 when missing. */
+function keyIndex_(t, k) { return k === '' || k === null || k === undefined ? -1 : t.ids.indexOf(String(k)); }
+
 function findIndex_(t, id) {
+  if (t.ids && t.key === 'id') return keyIndex_(t, id);
   var col = t.headers.indexOf('id');
   if (col < 0 || !id) return -1;
   for (var i = 0; i < t.rows.length; i++) {
@@ -2445,12 +2471,13 @@ function writeRow_(t, idx, obj) {
   } else {
     t.sh.appendRow(row);
     t.rows.push(row);
+    if (t.ids) t.ids.push(String(obj[t.key] === undefined || obj[t.key] === null ? '' : obj[t.key]));
   }
 }
 
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  lock.waitLock(30000);
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
