@@ -177,10 +177,7 @@ function formBody() {
       ${rateExtrasHtml('form')}
       <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
     </div>
-    <div class="box"><span class="box-title">External ratings</span>
-      ${D.ratings.length ? `<div class="rec-list">${D.ratings.map((r, i) => `<div class="rec-row"><button class="rec-btn" data-act="ers-open" data-i="${i}" aria-label="Edit ${esc(r.sys)} rating"><span class="rec-text"><span class="rec-main">${esc(r.sys)}</span></span><span class="rate-val">${str(r.score).trim() === '' ? '<span class="muted">No score</span>' : ratingVisual({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })}</span>${ICON.chevron}</button><button class="icon-btn" data-act="rrm" data-i="${i}" aria-label="Remove ${esc(r.sys)} rating">${ICON.x}</button></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">No external ratings yet.</p>'}
-      ${D.ratings.length < SYSTEMS.length ? '<button class="btn dashed" data-act="ers-open" data-i="-1">Add rating</button>' : ''}
-    </div>
+    <div class="box" id="ext-box">${extRatingsHtml()}</div>
     <div id="stock-box">${stockEditorHtml()}</div>
 `;
   return `
@@ -244,6 +241,14 @@ function addTag(key, raw) {
   renderTagBox(key, true);
 }
 
+/* the external ratings in Edit, with the rating hints: only here, so the wine page stays calm */
+function extRatingsHtml() {
+  return `<span class="box-title">External ratings</span>
+      ${D.ratings.length ? `<div class="rec-list">${D.ratings.map((r, i) => `<div class="rec-row"><button class="rec-btn" data-act="ers-open" data-i="${i}" aria-label="Edit ${esc(r.sys)} rating"><span class="rec-text"><span class="rec-main">${esc(r.sys)}</span></span><span class="rate-val">${str(r.score).trim() === '' ? '<span class="muted">No score</span>' : ratingVisual({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })}</span>${ICON.chevron}</button><button class="icon-btn" data-act="rrm" data-i="${i}" aria-label="Remove ${esc(r.sys)} rating">${ICON.x}</button></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">No external ratings yet.</p>'}
+      ${D.ratings.length < SYSTEMS.length ? '<button class="btn dashed" data-act="ers-open" data-i="-1">Add rating</button>' : ''}
+      ${D.mode === 'edit' && D.id ? rhFormHtml() : ''}`;
+}
+
 /* sheet for adding or editing one external rating */
 let RT = null;
 function openRatingSheet(i) {
@@ -290,6 +295,7 @@ function saveRatingSheet() {
   const r = { sys: RT.sys, score: String(v), date: old && old.sys === RT.sys && Number(old.score) === v ? old.date || '' : todayISO() };
   if (RT.wineId) { const id = RT.wineId, back = RT.back; RT = null; renderRatingSheet(); saveWineRating(id, r, back); return; }
   if (RT.i >= 0) D.ratings[RT.i] = r; else D.ratings.push(r);
+  if (RT.hint && D.id) rhDismiss(D.id, RT.sys);
   RT = null;
   renderRatingSheet();
   render();

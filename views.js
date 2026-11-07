@@ -598,7 +598,6 @@ function viewWine(id) {
       <h2>External ratings</h2>
       ${w.ratings.length ? `<div class="info-list">${w.ratings.map(r => infoRow(esc(r.sys), `<span class="rate-val">${ratingVisual(r)}</span>`)).join('')}</div>`
         : `<p class="muted small" style="margin:0">No external ratings yet. <a href="${editHref}">Add them in Edit</a></p>`}
-      ${rhDetailHtml(w)}
     </section>
     ${valueHtml(w)}
     ${offerHtml(w)}

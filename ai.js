@@ -241,7 +241,7 @@ function sommRefresh(scroll) {
   if (scroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
-const sommHint = () => (SOMM.listening ? 'Speak now. Tap the microphone again to stop.' : SOMM.voiced ? (SOMM.mode === 'list' ? 'Check the text and correct it if needed, then tap Find the best wines.' : 'Check the text and correct it if needed, then tap send.') : '');
+const sommHint = () => (SOMM.listening ? 'Listening. Take your time, tap stop when you are done.' : SOMM.voiced ? (SOMM.mode === 'list' ? 'Check the text and correct it if needed, then tap Find the best wines.' : 'Check the text and correct it if needed, then tap send.') : '');
 
 function listGuideHtml() {
   return `<div class="somm-guide">
@@ -489,72 +489,38 @@ function sommLoad() {
 }
 
 function sommStartVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); $('#somm-text').focus(); return; }
-  const rec = new SR();
-  rec.lang = navigator.language || 'en-US';
-  rec.interimResults = true;
-  rec.continuous = false;
-  const base = SOMM.draft ? SOMM.draft.trim() + ' ' : '';
-  rec.onresult = e => {
-    let txt = '';
-    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
-    SOMM.draft = base + txt.trim();
-    SOMM.voiced = true;
-    sommRefresh(false);
-  };
-  rec.onerror = e => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak your question.', 5000);
-    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type your question.');
-  };
-  rec.onend = () => { SOMM.listening = false; SOMM.rec = null; sommRefresh(false); const ta = $('#somm-text'); if (ta && SOMM.draft) ta.focus(); };
-  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
-  SOMM.rec = rec;
-  SOMM.listening = true;
-  sommRefresh(false);
+  const ta = $('#somm-text');
+  if (ta) SOMM.draft = ta.value;
+  if (!voiceStart({
+    get: () => SOMM.draft,
+    set: t => { SOMM.draft = t; SOMM.voiced = true; sommRefresh(false); },
+    ui: on => { SOMM.listening = on; sommRefresh(false); if (!on) { const t = $('#somm-text'); if (t && SOMM.draft) t.focus(); } }
+  })) { if (ta) ta.focus(); }
 }
 
 /* the wishes for the consultant by voice: the text lands in the field, where you can check and correct it before sending */
 function consVoiceUi() {
   const b = $('#cons-mic'), h = $('#cons-mic-hint');
   if (b) { b.classList.toggle('on', CONS.listening); b.setAttribute('aria-label', CONS.listening ? 'Stop listening' : 'Speak'); }
-  if (h) h.textContent = CONS.listening ? 'Listening. Speak your wishes, then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.';
+  if (h) h.textContent = CONS.listening ? 'Listening. Take your time, tap stop when you are done. Then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.';
 }
 function consStopVoice() {
-  if (CONS.rec) { try { CONS.rec.stop(); } catch (e) { /* already stopped */ } }
+  if (CONS.listening) voiceCancel();
   CONS.listening = false;
   consVoiceUi();
 }
 function consStartVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); const ta = $('#cons-note'); if (ta) ta.focus(); return; }
-  const rec = new SR();
-  rec.lang = navigator.language || 'en-US';
-  rec.interimResults = true;
-  rec.continuous = false;
   const ta0 = $('#cons-note');
   if (ta0) CONS.note = ta0.value;
-  const base = CONS.note.trim() ? CONS.note.trim() + ' ' : '';
-  rec.onresult = e => {
-    let txt = '';
-    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
-    CONS.note = base + txt.trim();
-    const ta = $('#cons-note');
-    if (ta) ta.value = CONS.note;
-  };
-  rec.onerror = e => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak your wishes.', 5000);
-    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type your wishes.');
-  };
-  rec.onend = () => { CONS.listening = false; CONS.rec = null; consVoiceUi(); const ta = $('#cons-note'); if (ta && CONS.note) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } };
-  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
-  CONS.rec = rec;
-  CONS.listening = true;
-  consVoiceUi();
+  if (!voiceStart({
+    get: () => CONS.note,
+    set: t => { CONS.note = t; const ta = $('#cons-note'); if (ta) ta.value = t; },
+    ui: on => { CONS.listening = on; consVoiceUi(); if (!on) { const ta = $('#cons-note'); if (ta && CONS.note) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } } }
+  })) { if (ta0) ta0.focus(); }
 }
 
 function sommStopVoice() {
-  if (SOMM.rec) { try { SOMM.rec.stop(); } catch (e) { /* already stopped */ } }
+  if (SOMM.listening) voiceCancel();
   SOMM.listening = false;
 }
 
@@ -760,7 +726,7 @@ function viewDiscover() {
       <div class="chips">${CONS_FOCUS.map(f => `<button class="chip${CONS.focus === f ? ' on' : ''}" data-act="cons-focus" data-v="${esc(f)}">${esc(f)}</button>`).join('')}</div>
       <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
       <div class="field"><label for="cons-note">Anything else? (optional)</label><div class="note-voice"><textarea id="cons-note" data-input="cons-note" rows="2" placeholder="Type or speak, for example more whites for summer, wines for guests">${esc(CONS.note)}</textarea><button class="somm-mic${CONS.listening ? ' on' : ''}" id="cons-mic" data-act="cons-mic" aria-label="${CONS.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div>
-        <span class="tiny muted" id="cons-mic-hint">${CONS.listening ? 'Listening. Speak your wishes, then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.'}</span></div>
+        <span class="tiny muted" id="cons-mic-hint">${CONS.listening ? 'Listening. Take your time, tap stop when you are done. Then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.'}</span></div>
       <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Choosing wines and checking shops…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
       <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops for ' + esc(shopCountryName()) + ', so you only get wines you can buy.' : 'You only get wines that an online shop for ' + esc(shopCountryName()) + ' sells right now, with price and link. One round takes about a minute and costs about 15 to 20 cents, less when offers from the last 14 days can be reused.'}</p>
     </section>
@@ -1107,7 +1073,7 @@ function jaThreadHtml() {
 }
 
 const jaTopHtml = () => `<a class="back" href="#/journal">${ICON.back}Journal</a>${JA.thread.length ? `<button class="btn ghost" style="height:40px" data-act="ja-clear">New question</button>` : ''}`;
-const jaHint = () => (JA.listening ? 'Speak now. Tap the microphone again to stop.' : JA.voiced ? 'Check the text and correct it if needed, then send.' : 'Type or tap the microphone to speak.');
+const jaHint = () => (JA.listening ? 'Listening. Take your time, tap stop when you are done.' : JA.voiced ? 'Check the text and correct it if needed, then send.' : 'Type or tap the microphone to speak.');
 
 function viewJournalAI() {
   const old = S.version && S.version < 31;
@@ -1187,33 +1153,15 @@ function jaLoad() {
 jaLoad();
 
 function jaStartVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); const ta = $('#ja-text'); if (ta) ta.focus(); return; }
-  const rec = new SR();
-  rec.lang = navigator.language || 'en-US';
-  rec.interimResults = true;
-  rec.continuous = false;
   const ta0 = $('#ja-text');
   if (ta0) JA.draft = ta0.value;
-  const base = JA.draft.trim() ? JA.draft.trim() + ' ' : '';
-  rec.onresult = e => {
-    let txt = '';
-    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
-    JA.draft = base + txt.trim();
-    JA.voiced = true;
-    jaRefresh(false);
-  };
-  rec.onerror = e => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak your question.', 5000);
-    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type your question.');
-  };
-  rec.onend = () => { JA.listening = false; JA.rec = null; jaRefresh(false); const ta = $('#ja-text'); if (ta && JA.draft) ta.focus(); };
-  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
-  JA.rec = rec;
-  JA.listening = true;
-  jaRefresh(false);
+  if (!voiceStart({
+    get: () => JA.draft,
+    set: t => { JA.draft = t; JA.voiced = true; jaRefresh(false); },
+    ui: on => { JA.listening = on; jaRefresh(false); if (!on) { const ta = $('#ja-text'); if (ta && JA.draft) ta.focus(); } }
+  })) { if (ta0) ta0.focus(); }
 }
 function jaStopVoice() {
-  if (JA.rec) { try { JA.rec.stop(); } catch (e) { /* already stopped */ } }
+  if (JA.listening) voiceCancel();
   JA.listening = false;
 }

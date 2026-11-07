@@ -444,6 +444,8 @@ function refreshView() {
     if (box && D && D.id) box.innerHTML = purchasesHtml(wineById(D.id) || { id: D.id }, true);
     const ob = $('#offer-box');
     if (ob && D && D.id) ob.innerHTML = offerBoxHtml();
+    const eb = $('#ext-box');
+    if (eb && D) eb.innerHTML = extRatingsHtml();
     return;
   }
   const y = window.scrollY;

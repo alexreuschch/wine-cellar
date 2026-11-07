@@ -922,3 +922,7 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .rh-n { position: absolute; top: 4px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--gold); color: var(--on-gold); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .rh-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 0; }
 .rh-actions { display: flex; align-items: center; gap: 12px; }
+
+/* while listening the microphone becomes a stop square */
+.somm-mic.on svg { display: none; }
+.somm-mic.on::before { content: ''; width: 14px; height: 14px; border-radius: 3px; background: currentColor; }

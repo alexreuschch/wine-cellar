@@ -69,7 +69,7 @@ function tqAnchorHtml() {
       <div class="grid2"><button class="btn primary" data-act="tq-yes">Yes, that's it</button><button class="btn" data-act="tq-no">No</button></div>`;
   }
   const talk = TQ.mode === 'talk' ? `<div class="field" id="tq-talk"><div class="note-voice"><textarea id="tq-text" data-input="tq-text" rows="3" placeholder="${TQ.listening ? 'Listening…' : 'For example: a Rioja, I think Reserva, with gold letters, last summer at friends'}">${esc(TQ.draft)}</textarea><button class="somm-mic${TQ.listening ? ' on' : ''}" data-act="tq-mic" aria-label="${TQ.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div>
-      <span class="tiny muted">${TQ.listening ? 'Listening. Just talk, the name does not have to be exact.' : 'Type or tap the microphone and just talk. The name does not have to be exact.'}</span>
+      <span class="tiny muted">${TQ.listening ? 'Listening. Take your time, tap stop when you are done. The name does not have to be exact.' : 'Type or tap the microphone and just talk. The name does not have to be exact.'}</span>
       <button class="btn primary block" data-act="tq-find"${TQ.busy ? ' disabled' : ''}>${ICON.magic}${TQ.busy ? 'Looking for the wine…' : 'Find this wine'}</button></div>` : '';
   return `${TQ.msg ? `<p class="small" style="margin:0;color:var(--gold)">${esc(TQ.msg)}</p>` : ''}
     <label class="btn block big${TQ.busy ? ' disabled' : ''}">${ICON.camera}${TQ.busy && TQ.mode === 'photo' ? 'Reading the label…' : 'Take a photo'}<input type="file" accept="image/*" capture="environment" data-change="tq-photo" hidden${TQ.busy ? ' disabled' : ''}></label>
@@ -188,34 +188,16 @@ async function ttDelete() {
 }
 
 function ttStartVoice() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); const ta = $('#tq-text'); if (ta) ta.focus(); return; }
-  const rec = new SR();
-  rec.lang = navigator.language || 'en-US';
-  rec.interimResults = true;
-  rec.continuous = false;
   const ta0 = $('#tq-text');
   if (ta0) TQ.draft = ta0.value;
-  const base = TQ.draft.trim() ? TQ.draft.trim() + ' ' : '';
-  rec.onresult = e => {
-    let txt = '';
-    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
-    TQ.draft = base + txt.trim();
-    const ta = $('#tq-text'); if (ta) ta.value = TQ.draft;
-  };
-  rec.onerror = e => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak.', 5000);
-    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type.');
-  };
-  rec.onend = () => { TQ.listening = false; TQ.rec = null; if (route().p === 'taste') render(); };
-  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
-  TQ.rec = rec;
-  TQ.listening = true;
-  render();
+  if (!voiceStart({
+    get: () => TQ.draft,
+    set: t => { TQ.draft = t; const ta = $('#tq-text'); if (ta) ta.value = t; },
+    ui: on => { TQ.listening = on; if (route().p === 'taste') render(); }
+  })) { if (ta0) ta0.focus(); }
 }
 function ttStopVoice() {
-  if (TQ.rec) { try { TQ.rec.stop(); } catch (e) { /* already stopped */ } }
-  TQ.rec = null;
+  if (TQ.listening) voiceCancel();
   TQ.listening = false;
 }
 
@@ -240,7 +222,7 @@ const TQ_ACTS = {
     setTimeout(() => { if (route().p === 'taste' && TQ.step <= TT_Q) tqGo(TQ.step + 1); }, 220);
   },
   'tq-talk': () => { TQ.mode = 'talk'; TQ.msg = ''; render(); const ta = $('#tq-text'); if (ta) ta.focus(); },
-  'tq-mic': () => { if (TQ.listening) { ttStopVoice(); render(); } else ttStartVoice(); },
+  'tq-mic': () => { if (TQ.listening) voiceStop(); else ttStartVoice(); },
   'tq-find': () => { const ta = $('#tq-text'); if (ta) TQ.draft = ta.value; tqFind(null); },
   'tq-yes': () => { const f = TQ.found; TQ.a.anchor = { wine: f.wine, profile: f.profile, tags: f.tags || '' }; TQ.found = null; if (TQ.edit) tqSaveEdit(); else tqGo(3); },
   'tq-save-edit': () => tqSaveEdit(),

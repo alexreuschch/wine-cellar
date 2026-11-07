@@ -158,14 +158,25 @@ function rhBarHtml() {
   if (!RH.busy || RH.total < 2) return '';
   return `<div class="rh-line"><span class="small muted">Checking ${Math.min(RH.done + 1, RH.total)} of ${RH.total}…</span><button class="link-btn" data-act="rh-stop">Stop</button></div>`;
 }
-function rhDetailHtml(w) {
-  const hs = hintsOf(w);
+/* in Edit: the open hints of this wine against the ratings in the form, and the two searches */
+const rhFormWine = () => ({ id: D.id, vintage: D.fields.vintage, ratings: D.ratings.filter(r => str(r.score).trim() !== '').map(r => ({ sys: r.sys, score: Number(String(r.score).replace(',', '.')) })) });
+function rhFormHtml() {
+  const w = rhFormWine(), hs = hintsOf(w);
   return `${hs.length ? `<div class="rh-wine">${hs.map(h => hintRowHtml(w, h)).join('')}</div>` : ''}
     ${RH.busy && RH.ids.length === 1 && RH.ids[0] === w.id ? `<p class="small muted" style="margin:0">${ICON.refresh}Looking for published scores…</p>` : `<div class="rh-actions"><button class="btn ghost" style="height:36px;font-size:13px" data-act="rh-open" data-ids="${esc(w.id)}" data-force="1"${RH.busy ? ' disabled' : ''}>${ICON.magic}Find rating hints</button><button class="link-btn small" data-act="rh-open" data-ids="${esc(w.id)}" data-force="1" data-deep="1"${RH.busy ? ' disabled' : ''}>Search deeper</button></div>`}`;
 }
 
 /* Add: the rating sheet with the hint filled in; your Save stores it */
 function rhAdd(id, sys) {
+  // in Edit the hint goes into the form, and Save wine stores it
+  if (isFormRoute() && D && D.id === id) {
+    const fh = hintsOf(rhFormWine()).find(x => x.sys === sys);
+    if (!fh) return;
+    RH.view = '';
+    RT = { i: D.ratings.findIndex(r => r.sys === sys), sys, score: String(fh.score), hint: fh };
+    renderRatingSheet();
+    return;
+  }
   const w = wineById(id), h = hintsOf(w).find(x => x.sys === sys);
   if (!w || !h) return;
   const back = RH.view === 'list';

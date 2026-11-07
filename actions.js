@@ -142,11 +142,11 @@ const ACTS = {
   'pe-save': el => savePersonInfo(el.dataset.v, ($('#pe-aliases') || {}).value || '', ($('#pe-note') || {}).value || ''),
   'ja-send': () => { const ta = $('#ja-text'); jaAsk(ta ? ta.value : JA.draft); },
   'ja-example': el => jaAsk(el.dataset.v),
-  'ja-mic': () => { if (JA.listening) { jaStopVoice(); jaRefresh(false); } else jaStartVoice(); },
+  'ja-mic': () => { if (JA.listening) voiceStop(); else jaStartVoice(); },
   'ja-clear': () => { if (JA.listening) jaStopVoice(); JA.thread = []; JA.draft = ''; JA.voiced = false; jaSave(); render(); },
   'ja-retry': el => { const t = JA.thread[Number(el.dataset.i)]; if (t && !JA.busy) jaRun(t); },
   'cons-preview': el => consPreview(Number(el.dataset.i)),
-  'cons-mic': () => { if (CONS.listening) consStopVoice(); else consStartVoice(); },
+  'cons-mic': () => { if (CONS.listening) voiceStop(); else consStartVoice(); },
   'cons-save': el => { const p = CONS.result && CONS.result.picks[Number(el.dataset.i)]; if (p) consSave(p); },
   'wish-offer': el => { const x = S.wishlist.find(w => w.id === el.dataset.id); if (x) consOffer(x, 'wish:' + x.id, x.id); },
   'wish-del': el => wishDelete(el.dataset.id),
@@ -190,7 +190,7 @@ const ACTS = {
   'ds-rate': el => { if (RS && RS.kind === 'taste') setTasteRating((RS.rating === null ? 80 : RS.rating) + Number(el.dataset.d)); },
   'wl-save': el => { const p = WL.result && WL.result.picks[Number(el.dataset.i)]; if (p) listSave(p); },
   'somm-example': el => sommAsk(el.dataset.v),
-  'somm-mic': () => { if (SOMM.listening) { sommStopVoice(); sommRefresh(false); } else sommStartVoice(); },
+  'somm-mic': () => { if (SOMM.listening) voiceStop(); else sommStartVoice(); },
   'somm-tips': () => { SOMM.tips = !SOMM.tips; render(); },
   'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.redo = ''; SOMM.threads[SOMM.mode] = []; SOMM.draft = ''; SOMM.voiced = false; SOMM.photo = null; sommSave(); render(); },
   'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = ['check', 'list'].includes(el.dataset.v) ? el.dataset.v : 'cellar'; SOMM.tips = false; SOMM.photo = null; sommSave(); history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
@@ -607,6 +607,7 @@ function init() {
   window.addEventListener('hashchange', () => {
     navTrack();
     jumpCheck();
+    if (VOICE.on) voiceCancel();
     if (SOMM.listening && route().p !== 'sommelier') sommStopVoice();
     if (TQ.listening && route().p !== 'taste') ttStopVoice();
     if (TQ.edit && route().p !== 'taste') tqStart();

@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.4.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -705,6 +705,73 @@ async function cacheLabel(fileId, b64) {
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     await cache.put(new Request(location.origin + '/__label/' + encodeURIComponent(fileId)), new Response(new Blob([bytes], { type: 'image/jpeg' })));
   } catch (e) { /* ignore */ }
+}
+
+/* ------------------------------------------------------------ voice input for every AI field */
+/* Tap the microphone to start, tap stop to end: pauses do not end it. The speech recognition of the phone stops by
+   itself after a short pause, so it is started again at once and the text so far is kept. After 30 seconds without
+   speech or 3 minutes in all it stops by itself, so the microphone never stays open unnoticed. */
+const VOICE = { on: false, rec: null, o: null, base: '', done: '', sess: '', t0: 0, last: 0, timer: null, fails: 0 };
+const voiceJoin = (...a) => a.map(x => String(x || '').trim()).filter(Boolean).join(' ');
+function voiceStart(o) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); return false; }
+  if (VOICE.on) voiceStop();
+  Object.assign(VOICE, { on: true, o, base: String(o.get() || '').trim(), done: '', sess: '', t0: Date.now(), last: Date.now(), fails: 0 });
+  clearInterval(VOICE.timer);
+  VOICE.timer = setInterval(() => { const n = Date.now(); if (VOICE.on && (n - VOICE.last > 30000 || n - VOICE.t0 > 180000)) voiceStop(); }, 1000);
+  o.ui(true);
+  voiceListen();
+  return true;
+}
+function voiceListen() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SR();
+  rec.lang = navigator.language || 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.onresult = e => {
+    let t = '';
+    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+    VOICE.sess = t;
+    VOICE.last = Date.now();
+    VOICE.fails = 0;
+    if (VOICE.o) VOICE.o.set(voiceJoin(VOICE.base, VOICE.done, t));
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('Allow the microphone for this app to speak.', 5000); VOICE.on = false; }
+    else if (e.error !== 'no-speech' && e.error !== 'aborted') VOICE.fails++;
+  };
+  rec.onend = () => {
+    VOICE.done = voiceJoin(VOICE.done, VOICE.sess);
+    VOICE.sess = '';
+    VOICE.rec = null;
+    // a pause ends the recognition of the phone: listen again until you tap stop
+    if (VOICE.on && VOICE.fails < 3) { setTimeout(() => { if (VOICE.on && !VOICE.rec) { try { voiceListen(); } catch (err) { voiceEnd(); } } }, 120); return; }
+    voiceEnd();
+  };
+  try { rec.start(); VOICE.rec = rec; } catch (e) { toast('Voice input could not start.'); voiceEnd(); }
+}
+function voiceEnd() {
+  const o = VOICE.o;
+  VOICE.on = false;
+  clearInterval(VOICE.timer);
+  VOICE.o = null;
+  if (o) { o.set(voiceJoin(VOICE.base, VOICE.done)); o.ui(false); }
+}
+/* stop: the text stays in the field */
+function voiceStop() {
+  VOICE.on = false;
+  if (VOICE.rec) { try { VOICE.rec.stop(); } catch (e) { voiceEnd(); } } else voiceEnd();
+}
+/* when the question is sent or the screen changes: stop without writing the text back */
+function voiceCancel() {
+  const o = VOICE.o;
+  VOICE.o = null;
+  VOICE.on = false;
+  clearInterval(VOICE.timer);
+  if (VOICE.rec) { try { VOICE.rec.abort(); } catch (e) { /* already stopped */ } }
+  if (o) o.ui(false);
 }
 
 /* ------------------------------------------------------------ router */
