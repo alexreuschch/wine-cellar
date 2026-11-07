@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.5.1';
+const APP_VERSION = '3.5.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -42,7 +42,7 @@ const svg = (d, size = 20, sw = 1.9) => `<svg width="${size}" height="${size}" v
 const ICON = {
   plus: svg('<path d="M5 12h14M12 5v14"/>', 18, 2.2),
   bookmark: svg('<path d="M7 4h10v16l-5-3.5L7 20z"/>', 20, 1.8),
-  share: svg('<path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6"/>', 20, 1.8),
+  share: svg('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.7l7.4-4.4M8.3 13.3l7.4 4.4"/>', 20, 1.8),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', 16, 2),
   sort: svg('<path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/>', 16, 1.8),
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', 22, 1.8),
