@@ -335,7 +335,8 @@ function journalTextMatch(r) {
   const q = lc(U.jSearch.trim());
   if (!q) return true;
   const w = wineById(r.wineId);
-  const hay = lc([r.people, r.retailer, entryType(r), w ? fullName(w) : r.wineName].join(' '));
+  const alias = namesOf(r.people).map(n => personInfo(n).aliases).join(' ');
+  const hay = lc([r.people, alias, r.retailer, entryType(r), w ? fullName(w) : r.wineName].join(' '));
   return q.split(/\s+/).every(p => hay.includes(p));
 }
 
@@ -371,6 +372,24 @@ function journalList() {
   return html;
 }
 
+/* other names and a note of a person, saved in the People tab */
+async function savePersonInfo(name, aliases, note) {
+  const prev = S.peopleInfo.slice();
+  const x = { name, aliases: splitList(aliases).filter(a => lc(a) !== lc(name)).join(', '), note: str(note).trim() };
+  S.peopleInfo = S.peopleInfo.filter(y => lc(y.name) !== lc(name)).concat(x.aliases || x.note ? [x] : []);
+  U.personEdit = null;
+  persist();
+  refreshView();
+  try {
+    const d = await api('savePersonInfo', x);
+    if (d && Array.isArray(d.peopleInfo)) { S.peopleInfo = d.peopleInfo.map(normPersonInfo).filter(y => y.name); S.people = Array.isArray(d.people) ? d.people : S.people; persist(); refreshView(); }
+    toast('Saved');
+  } catch (e) {
+    S.peopleInfo = prev; persist(); refreshView();
+    toast(/Unknown action/i.test(e.message) ? 'Other names and notes need the new Code.gs.' : 'Not saved: ' + e.message);
+  }
+}
+
 function personSummary(p) {
   const all = allEntries().filter(r => namesOf(r.people).map(lc).includes(p));
   const person = knownPeople().find(x => lc(x.name) === p);
@@ -385,11 +404,22 @@ function personSummary(p) {
   const favIds = [...new Set(all.filter(r => namesOf(r.hearts).map(lc).includes(p)).map(r => r.wineId))];
   const favs = favIds.map(id => wineById(id)).filter(Boolean);
   const fromThem = [...new Set(all.filter(r => r.type === 'Received').map(r => r.wineId))].map(id => wineById(id)).filter(Boolean);
+  const toThem = [...new Set(all.filter(r => r.type === 'Gift').map(r => r.wineId))].map(id => wineById(id)).filter(Boolean);
+  const info = personInfo(name);
+  const editing = U.personEdit === p;
+  const details = editing
+    ? `<div class="person-edit"><label class="field">Also called<input id="pe-aliases" placeholder="For example Tom, Tommy" value="${esc(info.aliases)}"></label>
+        <label class="field">Note<textarea id="pe-note" rows="2" placeholder="For example loves Barolo, no oaky whites">${esc(info.note)}</textarea></label>
+        <div class="grid2"><button class="btn" data-act="pe-cancel">Cancel</button><button class="btn primary" data-act="pe-save" data-v="${esc(name)}">Save</button></div></div>`
+    : `${info.aliases ? `<p class="small" style="margin:0"><span class="muted">Also called</span> ${esc(info.aliases)}</p>` : ''}${info.note ? `<p class="small" style="margin:0">${esc(info.note)}</p>` : ''}
+      <button class="link-btn" data-act="pe-edit" data-v="${esc(p)}">${ICON.edit || ''}${info.aliases || info.note ? 'Edit other names and note' : 'Add other names and a note'}</button>`;
   return `<div class="card" style="display:flex;flex-direction:column;gap:8px">
     <div class="between"><h2 style="font-size:17px;font-weight:600">${esc(name)}</h2><button class="icon-btn" data-act="f-chip" data-ctx="journal" data-k="person" data-v="${esc(p)}" aria-label="Remove person filter">${ICON.x}</button></div>
     <p class="muted small" style="margin:-8px 0 0">${stats}${sales.length ? ` · <span class="up">${money(saleSum)} from sales</span>` : ''}</p>
+    ${details}
     ${favs.length ? `<span class="tiny muted">Favorite wines</span><div class="tags">${favs.map(w => `<a class="tag fav" href="#/wine/${encodeURIComponent(w.id)}">${HEART_SM}${esc(wineTitle(w))} ${esc(w.vintage)}</a>`).join('')}</div>` : ''}
     ${fromThem.length ? `<span class="tiny muted">Gifts from ${esc(name)}</span><div class="tags">${fromThem.map(w => `<a class="tag gifted" href="#/wine/${encodeURIComponent(w.id)}">${ICON.gift}${esc(wineTitle(w))} ${esc(w.vintage)}</a>`).join('')}</div>` : ''}
+    ${toThem.length ? `<span class="tiny muted">Gifts to ${esc(name)}</span><div class="tags">${toThem.map(w => `<a class="tag gifted" href="#/wine/${encodeURIComponent(w.id)}">${ICON.gift}${esc(wineTitle(w))} ${esc(w.vintage)}</a>`).join('')}</div>` : ''}
   </div>`;
 }
 
@@ -400,7 +430,7 @@ function viewJournal() {
   const filters = filterArea('journal');
   const btn = filterButton('journal');
   const ppl = sel('journal', 'person');
-  return `<main class="screen has-nav"><h1 class="title">Journal</h1>
+  return `<main class="screen has-nav"><header class="top"><h1 class="title">Journal</h1><div class="top-actions"><a class="icon-btn magic-btn" href="#/journal-ai" aria-label="Journal Assistant">${ICON.magic}</a></div></header>
     <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="jsearch" aria-label="Search the journal" placeholder="Person, wine, type or retailer" value="${esc(U.jSearch)}"></label>${btn}</div>
     ${filters}
     ${ppl.length === 1 ? personSummary(ppl[0]) : ''}
@@ -515,7 +545,7 @@ function viewWine(id) {
   const label = w.thumb || w.labelFileId
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
-  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type].filter(Boolean).join(' · ');
+  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
     <div class="detail-top">${isDisc(w) ? `<a class="back" href="#/top">${ICON.back}Top rated</a>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}

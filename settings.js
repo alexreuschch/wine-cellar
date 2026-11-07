@@ -130,6 +130,7 @@ function renameLocal(kind, from, to) {
     const swap = v => { const out = []; namesOf(v).forEach(n => { const x = eq(n) ? to : n; if (!out.some(y => lc(y) === lc(x))) out.push(x); }); return out.join(', '); };
     S.removals.forEach(r => { r.people = swap(r.people); r.hearts = swap(r.hearts); });
     S.people = S.people.filter(n => !eq(n)).concat(S.people.some(n => lc(n) === lc(to)) ? [] : [to]);
+    if (!S.peopleInfo.some(x => lc(x.name) === lc(to))) S.peopleInfo.forEach(x => { if (eq(x.name)) x.name = to; });
   }
 }
 
@@ -168,7 +169,7 @@ async function saveEdit() {
       }
     }
     else if (ed.kind === 'ret') S.retailers = (await api('renameRetailer', { from: ed.name, to, website: site })).map(x => ({ name: str(x.name), website: str(x.website) })).filter(x => x.name);
-    else S.people = await api('renamePerson', { from: ed.name, to });
+    else { S.people = await api('renamePerson', { from: ed.name, to }); sync(true); }
     persist();
     refreshView();
     toast('Saved');

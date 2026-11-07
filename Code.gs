@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 30;
+var API_VERSION = 31;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -28,7 +28,8 @@ var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food'
 // venue of a discovery: "restaurant", "shop" or "other"; shopRef: the shop price it was compared with, as JSON {v, cur}
 var LOCATION_COLS = ['name', 'shelves'];
 var RETAILER_COLS = ['name', 'website'];
-var PEOPLE_COLS = ['name'];
+var PEOPLE_COLS = ['name', 'aliases', 'note'];
+// aliases: other names of the same person, comma separated; note: what is worth knowing about them, for example what they like
 var OFFER_COLS = ['key', 'offer', 'date'];
 var INFO_COLS = ['key', 'kind', 'name', 'data', 'date'];
 var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
@@ -43,7 +44,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '15';
+var SCHEMA_VERSION = '16';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -88,6 +89,8 @@ var ACTIONS = {
   savePerson: actionSavePerson_,
   deletePerson: actionDeletePerson_,
   renamePerson: actionRenamePerson_,
+  savePersonInfo: actionSavePersonInfo_,
+  journalAsk: actionJournalAsk_,
   setSettings: actionSetSettings_
 };
 
@@ -274,7 +277,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background' };
+var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background', journalAsk: 'Journal' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -499,6 +502,7 @@ function actionLoad_() {
     locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(function (r) { return { name: String(r.name), shelves: parseShelves_(r.shelves) }; }),
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
     people: peopleList_(),
+    peopleInfo: peopleInfo_(),
     wishlist: readAll_(SHEETS.wishlist).filter(function (r) { return r.id; }),
     history: readAll_(SHEETS.history).filter(function (r) { return r.month; }),
     usage: usageSummary_(),
@@ -804,9 +808,45 @@ function actionRenamePerson_(req) {
       o.people = a.v; o.hearts = b.v;
       return true;
     });
-    deleteRowsWhere_(SHEETS.people, 'name', from);
-    if (!peopleList_().some(function (n) { return lower_(n) === lower_(to); })) sheet_(SHEETS.people).appendRow([to]);
+    var info = readAll_(SHEETS.people), old = info.filter(function (r) { return lower_(r.name) === lower_(from); })[0];
+    var target = info.filter(function (r) { return lower_(r.name) === lower_(to) && lower_(r.name) !== lower_(from); })[0];
+    if (target) {
+      // merging into a person who exists: keep their details and add what only the old name had
+      deleteRowsWhere_(SHEETS.people, 'name', from);
+      updateRows_(SHEETS.people, function (o) {
+        if (lower_(o.name) !== lower_(to) || !old) return false;
+        var al = names_(o.aliases).concat(names_(old.aliases)).concat([from]).filter(function (x, i, a) { return lower_(x) !== lower_(to) && a.map(lower_).indexOf(lower_(x)) === i; });
+        o.aliases = al.join(', ');
+        if (!String(o.note || '').trim()) o.note = String(old.note || '');
+        return true;
+      });
+    } else if (old) {
+      updateRows_(SHEETS.people, function (o) { if (lower_(o.name) !== lower_(from)) return false; o.name = to; return true; });
+    } else {
+      sheet_(SHEETS.people).appendRow([to]);
+    }
     return peopleList_();
+  });
+}
+
+/** Other names and a note for each person, for the journal assistant and the person card. */
+function peopleInfo_() {
+  return readAll_(SHEETS.people).filter(function (r) { return r.name && (String(r.aliases || '').trim() || String(r.note || '').trim()); })
+    .map(function (r) { return { name: String(r.name).trim(), aliases: String(r.aliases || '').trim(), note: String(r.note || '').trim() }; });
+}
+
+function actionSavePersonInfo_(req) {
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('Missing name');
+  var aliases = names_(String(req.aliases || '')).filter(function (x) { return lower_(x) !== lower_(name); }).join(', ').slice(0, 200);
+  var note = String(req.note || '').trim().slice(0, 500);
+  return withLock_(function () {
+    var n = updateRows_(SHEETS.people, function (o) { if (lower_(o.name) !== lower_(name)) return false; o.aliases = aliases; o.note = note; return true; });
+    if (!n) {
+      var t = table_(SHEETS.people);
+      sheet_(SHEETS.people).appendRow(t.headers.map(function (h) { return h === 'name' ? name : h === 'aliases' ? aliases : h === 'note' ? note : ''; }));
+    }
+    return { people: peopleList_(), peopleInfo: peopleInfo_() };
   });
 }
 
@@ -1753,6 +1793,42 @@ function actionWineList_(req) {
   });
   return { country: sc.code, count: Number(d.count) > 0 ? Math.round(Number(d.count)) : null, pages: pages.length,
     avgMarkup: num(d.avgMarkup), note: String(d.note || ''), food: food, min: min, max: max, picks: picks, currency: listCur, restaurant: String(d.restaurant || '').slice(0, 80), typical: markupRange_(d.typicalMarkup) };
+}
+
+// ---------------------------------------------------------------- journal assistant
+
+var JOURNAL_RULES = [
+  'You are the memory of a private wine cellar. You answer questions about the journal of the owner: bottles bought, received as gifts, opened, given away, sold and tasted out, with whom, where, what was eaten and how the owner rated the wines.',
+  'You get the people the owner knows, the wines with rating and current shop price, and the journal entries. Each entry and each wine has a short reference like e12 or w5.',
+  'Rules:',
+  '1. Answer only from these data. If the journal does not contain the answer, say so plainly and say what is missing. Never invent entries, dates, people or prices.',
+  '2. A person may be named differently in the question: use the other names given for each person. "With" means the person shared the bottle; "favorite of" means the person loved it; "from" on a gift received names who gave it; "to" on a gift given names who got it.',
+  '3. Values like paid price, current shop price and the change since purchase are calculated already. Use them as they are, do not recalculate. For the best purchase in hindsight, weigh the rating of the owner against the price paid.',
+  '4. For gift ideas for a person, use what they loved and what you drank together, the note about them, and wines in stock the owner has several bottles of. You may also suggest a wine to buy.',
+  '5. Dates are ISO dates. Today is given. "Last year" means the previous calendar year.',
+  '6. Write in English, short and concrete, two to five sentences, with dates written like "June 12, 2025". Do not use dashes as punctuation. Do not list the entries again in the text in detail, the app shows them as cards.',
+  '7. Return ONLY a JSON object, no other text: {"answer": "text", "entries": ["e12", "e40"], "wines": ["w5"]}. "entries": up to 8 journal entries that answer the question, best first. "wines": up to 4 wines, only when you recommend or name wines that are not covered by the entries. Use only references that exist.'
+].join('\n');
+
+/** The app sends the journal in short lines with references; the answer points back to them. */
+function actionJournalAsk_(req) {
+  var q = String(req.question || '').trim();
+  if (!q) throw new Error('Ask a question first');
+  var ctx = String(req.context || '');
+  if (!ctx) throw new Error('The journal is empty');
+  if (ctx.length > 400000) ctx = ctx.slice(0, 400000);
+  var system = JOURNAL_RULES + '\n\nToday: ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '. The owner shows prices in ' + settings_().currency + '.\n\n' + ctx;
+  var messages = [];
+  (req.history || []).slice(-6).forEach(function (h) {
+    if (!h || !h.q || !h.a) return;
+    messages.push({ role: 'user', content: String(h.q).slice(0, 1000) });
+    messages.push({ role: 'assistant', content: String(h.a).slice(0, 2000) });
+  });
+  messages.push({ role: 'user', content: q.slice(0, 1000) });
+  var res = callClaude_({ model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 1500, system: system, messages: messages });
+  var d = parseJson_(textOf_(res), 'The journal assistant gave no answer. Please try again.');
+  var refs = function (v, re, n) { return (Array.isArray(v) ? v : []).map(String).filter(function (x) { return re.test(x); }).filter(function (x, i, a) { return a.indexOf(x) === i; }).slice(0, n); };
+  return { answer: String(d.answer || ''), entries: refs(d.entries, /^e\d+$/, 8), wines: refs(d.wines, /^w\d+$/, 4) };
 }
 
 // ---------------------------------------------------------------- AI consultant and wishlist

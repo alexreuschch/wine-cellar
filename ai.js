@@ -57,17 +57,10 @@ const whereRowHtml = () => { const w = sommWhere(); const b = (v, ic, label) => 
   // in a shop the shelf price is a must, in a restaurant the menu price is optional, elsewhere there is none
   const c = countryCur(travelCountry());
   const price = w === 'shop' || w === 'restaurant' ? `<label class="where-price${w === 'shop' && !sommPrice() ? ' need' : ''}"><span>${w === 'shop' ? 'Price on the shelf' : 'Price on the menu <small>optional</small>'}</span><input id="somm-price" data-input="somm-price" inputmode="decimal" placeholder="${w === 'shop' ? 'Required' : 'If you know it'}" value="${esc(SOMM.price)}"><em>${esc(c)}</em></label>` : '';
-  return `<div class="where-row${w ? '' : ' need'}" id="where-row"><span>${w ? 'You are' : 'Where are you? Choose first'}</span><div class="toggle three">${b('shop', ICON.cart, 'Shop')}${b('restaurant', ICON.dining, 'Restaurant')}${b('other', ICON.pin, 'Elsewhere')}</div>${countryBtnHtml('in')}${tzHintHtml()}${price}${redoHtml('check')}</div>`; };
+  return `<div class="where-row${w ? '' : ' need'}" id="where-row"><span>${w ? 'You are' : 'Where are you? Choose first'}</span><div class="toggle three">${b('shop', ICON.cart, 'Shop')}${b('restaurant', ICON.dining, 'Restaurant')}${b('other', ICON.pin, 'Elsewhere')}</div>${countryBtnHtml('in')}${price}${redoHtml('check')}</div>`; };
 const sommPrice = () => { const v = parseMoney(SOMM.price); return v && v > 0 ? v : null; };
 /* the country prices are checked in, shown where you start the analysis */
 const countryBtnHtml = lead => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>${lead} ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
-/* the phone's time zone points to another country: offer it with one tap */
-const tzHintHtml = () => {
-  const c = tzMismatch();
-  if (!c) return '';
-  const t = travelCountry();
-  return `<div class="tz-hint"><p>Your phone's time zone is in ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b>. Check prices there?</p><div class="tz-acts"><button class="btn accent" data-act="tz-use" data-v="${esc(c)}">Use ${esc(SHOP_COUNTRIES[c])}</button><button class="btn ghost" data-act="tz-keep" data-v="${esc(c)}">Keep ${esc(SHOP_COUNTRIES[t])}</button></div></div>`;
-};
 /* after the country was changed, offer to run the last analysis again for it */
 const redoHtml = mode => {
   if (SOMM.redo !== mode) return '';
@@ -307,7 +300,7 @@ function listHtml() {
       <p class="small muted" style="margin:-4px 0 0">How much you want to spend on one bottle, in ${esc(countryCur(travelCountry()))} as on the list. The best wine within it becomes your first pick, <b>Best in your range</b>. Leave it empty for no limit.</p>
       <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
       <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
-      <div class="wl-country">${countryBtnHtml('Restaurant in')}${tzHintHtml()}${redoHtml('list')}</div>
+      <div class="wl-country">${countryBtnHtml('Restaurant in')}${redoHtml('list')}</div>
       ${wait}
       <button class="btn accent big block" data-act="wl-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}${res ? 'Analyze again' : 'Find the best wines'}</button>
     </section>`;
@@ -911,7 +904,7 @@ function renderPreview() {
   const wished = S.wishlist.some(x => wishKey(x) === wishKey(PREV.base));
   const buttons = `<div class="grid2">${k === 'wish' ? `<button class="btn" data-act="prev-cellar">${ICON.plus}Add to cellar</button>` : `<button class="btn" data-act="prev-wish"${wished ? ' disabled' : ''}>${wished ? `${ICON.check}On your wishlist` : `${ICON.plus}Save to wishlist`}</button>`}<button class="btn primary" data-act="prev-taste">${ICON.spark}I'm tasting this</button></div>`;
   const inner = `<div class="between" style="align-items:flex-start;gap:12px">
-      <div class="info-head"><span class="ab-ic">${c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : ICON.glass}</span><div><span class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em">${esc([w.type, w.vintage].filter(Boolean).join(' · ') || 'Wine')}</span><h2>${esc(wineTitle(w))}</h2><p class="small muted" style="margin:2px 0 0">${esc([w.producer !== wineTitle(w) ? w.producer : '', w.region].filter(Boolean).join(' · '))}</p></div></div>
+      <div class="info-head"><span class="ab-ic">${c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : ICON.glass}</span><div><span class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em">${esc([w.type, w.vintage, alcText(w)].filter(Boolean).join(' · ') || 'Wine')}</span><h2>${esc(wineTitle(w))}</h2><p class="small muted" style="margin:2px 0 0">${esc([w.producer !== wineTitle(w) ? w.producer : '', w.region].filter(Boolean).join(' · '))}</p></div></div>
       <button class="icon-btn" data-act="prev-close" aria-label="Close">${ICON.x}</button>
     </div>
     ${PREV.note ? `<p class="small" style="margin:0">${PREV.note}</p>` : ''}
@@ -982,3 +975,206 @@ async function checkSave(i) {
 }
 
 sommLoad();
+
+/* ------------------------------------------------------------ journal assistant: questions about the journal, the people and the purchases */
+
+const JA = { thread: [], draft: '', busy: false, listening: false, rec: null, voiced: false };
+const jaExamples = () => {
+  const top = knownPeople().filter(p => p.n > 0)[0];
+  const who = top ? top.name : 'a friend';
+  return ['Which wines did I drink last year, and with whom?', 'Which wines did I receive as gifts, and from whom?', 'Show me the five best wines I drank with friends',
+    `What could I give ${who}, based on what we enjoyed together?`, 'Which wines did I buy last year, and where?', 'Which purchase was my best buy in hindsight?'];
+};
+
+/* the journal in short lines with references e1, w1 for the AI; the references point back to entries and wines */
+function jaContext(q) {
+  const refs = {}, wref = new Map();
+  const wineRef = w => { if (!wref.has(w.id)) { const k = 'w' + (wref.size + 1); wref.set(w.id, k); refs[k] = { wine: w.id }; } return wref.get(w.id); };
+  const c0 = cur();
+  const amt = v => (v === null || v === undefined ? '' : `${c0} ${fmtNum(v, v >= 100 ? 0 : 2)}`);
+  let list = allEntries().slice().sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map((r, i) => ({ r, ref: 'e' + (i + 1) }));
+  // a very large journal: the entries that match words of the question, plus the most recent ones
+  if (list.length > 1200) {
+    const words = lc(q).split(/[^\p{L}\p{N}]+/u).filter(x => x.length >= 4);
+    const recent = new Set(list.slice(-400));
+    const hit = x => {
+      const w = wineById(x.r.wineId);
+      const hay = lc([x.r.people, x.r.hearts, x.r.retailer, x.r.occasion, x.r.food, x.r.note, w ? `${fullName(w)} ${w.region} ${w.grapes}` : x.r.wineName, namesOf(x.r.people).map(n => personInfo(n).aliases).join(' ')].join(' '));
+      return words.some(k => hay.includes(k));
+    };
+    list = list.filter(x => recent.has(x) || hit(x));
+  }
+  const lines = list.map(({ r, ref }) => {
+    refs[ref] = { entry: r.id };
+    const w = wineById(r.wineId);
+    const wine = w ? `${wineRef(w)} ${fullName(w)}` : r.wineName || 'unknown wine';
+    const ppl = namesOf(r.people).join(', ');
+    const n = r.qty > 1 ? `${r.qty} btl` : '1 btl';
+    const paid = r.price !== null ? conv(r.price, r.priceCur) : null;
+    let what;
+    if (r.dir === 'in') {
+      if (r.type === 'Purchase') {
+        const now = w ? streetOf(w) : null;
+        what = `bought ${n}${r.retailer ? ` from ${r.retailer}` : ''}${paid ? `, paid ${amt(paid)} per btl` : ''}${paid && now ? `, shop price now ${amt(now)} (${now >= paid ? '+' : ''}${Math.round((now / paid - 1) * 100)}%)` : ''}`;
+      } else if (r.type === 'Received') what = `gift received${ppl ? ` from ${ppl}` : ''}, ${n}`;
+      else what = `added ${n}`;
+    } else if (r.dir === 'taste') {
+      what = `tasted out${r.venue ? ` (${r.venue})` : ''}${paid ? `, paid ${amt(paid)}` : ''}${ppl ? `, with ${ppl}` : ''}`;
+    } else if (r.type === 'Gift') what = `gift given${ppl ? ` to ${ppl}` : ''}, ${n}`;
+    else if (r.type === 'Sale') what = `sold ${n}${ppl ? ` to ${ppl}` : ''}${paid ? ` for ${amt(paid)} per btl` : ''}`;
+    else what = `opened ${n} (${lc(entryType(r))})${ppl ? `, with ${ppl}` : ''}`;
+    return [ref, r.date, what, wine, r.hearts ? `favorite of ${namesOf(r.hearts).join(', ')}` : '', r.occasion ? `occasion: ${r.occasion}` : '', r.food ? `food: ${r.food}` : '', r.note ? `note: ${r.note}` : ''].filter(Boolean).join(' | ');
+  });
+  // wines in stock are there for gift ideas, even without a journal entry in the list
+  S.wines.filter(w => w.count > 0).forEach(wineRef);
+  const wines = [...wref.entries()].map(([id, k]) => {
+    const w = wineById(id);
+    const now = streetOf(w);
+    return [k, fullName(w), w.type, w.region, w.grapes, w.myRating !== null ? `my rating ${w.myRating}%` : 'not rated', now ? `shop price now ${amt(now)}` : '', w.count ? `in stock ${w.count} btl` : 'none left', isDisc(w) ? 'discovery, tasted out' : ''].filter(Boolean).join(' | ');
+  });
+  const people = S.people.map(n => { const i = personInfo(n); return [n, i.aliases ? `also called ${i.aliases}` : '', i.note ? `note: ${i.note}` : ''].filter(Boolean).join(' | '); });
+  const text = `PEOPLE:\n${people.join('\n') || 'None yet.'}\n\nWINES:\n${wines.join('\n') || 'None.'}\n\nJOURNAL (oldest first${list.length < allEntries().length ? `, ${list.length} of ${allEntries().length} entries that match the question or are recent` : ''}):\n${lines.join('\n')}`;
+  return { text, refs };
+}
+
+function jaCardsHtml(a) {
+  const entries = (a.entries || []).map(id => S.removals.find(r => r.id === id)).filter(Boolean).map(r => {
+    const w = wineById(r.wineId);
+    const ppl = namesOf(r.people).join(', ');
+    const hearts = namesOf(r.hearts);
+    const sub = [fmtDate(r.date), entryType(r), ppl ? (r.type === 'Received' ? `from ${ppl}` : r.type === 'Gift' ? `to ${ppl}` : `with ${ppl}`) : '', r.dir === 'in' && r.retailer ? r.retailer : ''].filter(Boolean).join(' · ');
+    const inner = `${w ? thumbHtml(w, true) : ''}<span class="somm-pick-text"><span class="row-title">${esc(w ? `${wineTitle(w)} ${w.vintage}` : r.wineName)}</span>
+      <span class="row-sub">${w ? flagOf(w) : ''}${esc(sub)}</span>${hearts.length ? `<span class="tiny muted">${HEART_SM}${esc(hearts.join(', '))}</span>` : ''}${w && w.myRating !== null ? `<span class="tiny muted">Rated ${w.myRating}%</span>` : ''}</span>`;
+    return `<div class="somm-pick">${w ? `<a class="somm-pick-link" href="#/wine/${encodeURIComponent(w.id)}">${inner}</a>` : `<div class="somm-pick-link">${inner}</div>`}</div>`;
+  });
+  const wines = (a.wines || []).map(id => wineById(id)).filter(Boolean).map(w => `<div class="somm-pick"><a class="somm-pick-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w, true)}<span class="somm-pick-text">
+      <span class="row-title">${esc(wineTitle(w))} ${esc(w.vintage)}</span><span class="row-sub">${flagOf(w)}${esc(w.producer)}${w.count ? ` · ${w.count} btl` : ''}${w.myRating !== null ? ` · rated ${w.myRating}%` : ''}</span></span>${pill(w)}</a></div>`);
+  const all = entries.concat(wines);
+  return all.length ? `<div class="somm-picks">${all.join('')}</div>` : '';
+}
+
+function jaAnswerHtml(t, i) {
+  if (t.error) return `<div class="somm-a error"><p>${esc(t.error)}</p><button class="link-btn" data-act="ja-retry" data-i="${i}">${ICON.refresh}Try again</button></div>`;
+  if (!t.a) return `<div class="somm-a"><p class="somm-wait">Looking through your journal<span>.</span><span>.</span><span>.</span></p></div>`;
+  return `<div class="somm-a">${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${jaCardsHtml(t.a)}</div>`;
+}
+
+function jaThreadHtml() {
+  if (!JA.thread.length) {
+    return `<div class="somm-intro"><p class="muted">Ask about the wines you bought, opened, gave and received, and the people you shared them with. Tap an example to try it.</p>
+      <div class="somm-examples">${jaExamples().map(x => `<button class="somm-ex" data-act="ja-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div></div>`;
+  }
+  return JA.thread.map((t, i) => `<div class="somm-q">${esc(t.q)}</div>${jaAnswerHtml(t, i)}`).join('');
+}
+
+const jaTopHtml = () => `<a class="back" href="#/journal">${ICON.back}Journal</a>${JA.thread.length ? `<button class="btn ghost" style="height:40px" data-act="ja-clear">New question</button>` : ''}`;
+const jaHint = () => (JA.listening ? 'Speak now. Tap the microphone again to stop.' : JA.voiced ? 'Check the text and correct it if needed, then send.' : 'Type or tap the microphone to speak.');
+
+function viewJournalAI() {
+  const old = S.version && S.version < 31;
+  return `<main class="screen somm">
+    <div class="detail-top" id="ja-top">${jaTopHtml()}</div>
+    <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Journal Assistant</h1></header>
+    <p class="small muted" style="margin:-4px 0 0">Your journal, people and purchases, answered by AI.</p>
+    ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The journal assistant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
+    <div id="ja-thread" class="somm-thread">${jaThreadHtml()}</div>
+  </main>
+  <div class="somm-bar">
+    <div class="somm-input${JA.listening ? ' listening' : ''}">
+      <textarea id="ja-text" data-input="ja-text" rows="1" placeholder="${JA.listening ? 'Listening…' : 'Ask about your journal'}" aria-label="Your question">${esc(JA.draft)}</textarea>
+      <button class="somm-mic${JA.listening ? ' on' : ''}" data-act="ja-mic" aria-label="${JA.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
+      <button class="somm-send" data-act="ja-send" aria-label="Send"${JA.busy ? ' disabled' : ''}>${ICON.send}</button>
+    </div>
+    <p id="ja-hint" class="tiny muted somm-hint">${jaHint()}</p>
+  </div>`;
+}
+
+function jaRefresh(scroll) {
+  const th = $('#ja-thread');
+  if (th) th.innerHTML = jaThreadHtml();
+  const top = $('#ja-top');
+  if (top) top.innerHTML = jaTopHtml();
+  const ta = $('#ja-text');
+  if (ta && ta.value !== JA.draft) { ta.value = JA.draft; autosize(ta); }
+  if (ta) ta.placeholder = JA.listening ? 'Listening…' : 'Ask about your journal';
+  const send = $('[data-act="ja-send"]');
+  if (send) send.disabled = JA.busy;
+  const hint = $('#ja-hint');
+  if (hint) hint.textContent = jaHint();
+  const box = $('.somm-input');
+  if (box) box.classList.toggle('listening', JA.listening);
+  const mic = $('[data-act="ja-mic"]');
+  if (mic) { mic.classList.toggle('on', JA.listening); mic.setAttribute('aria-label', JA.listening ? 'Stop listening' : 'Speak'); }
+  if (scroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+async function jaRun(turn) {
+  const ctx = jaContext(turn.q);
+  const before = JA.thread.slice(0, JA.thread.indexOf(turn)).filter(t => t.a && t.a.raw).slice(-3);
+  const history = before.map(t => ({ q: t.q, a: JSON.stringify({ answer: t.a.answer, entries: t.a.raw.entries, wines: t.a.raw.wines }) }));
+  turn.a = null;
+  turn.error = '';
+  JA.busy = true;
+  jaRefresh(true);
+  try {
+    const a = await api('journalAsk', { question: turn.q, history, context: ctx.text });
+    const ent = (a.entries || []).filter(k => ctx.refs[k] && ctx.refs[k].entry), win = (a.wines || []).filter(k => ctx.refs[k] && ctx.refs[k].wine);
+    turn.a = { answer: str(a.answer), entries: ent.map(k => ctx.refs[k].entry), wines: win.map(k => ctx.refs[k].wine), raw: { entries: ent, wines: win } };
+  } catch (e) {
+    turn.error = /Unknown action/i.test(e.message) ? 'The journal assistant needs the new Code.gs. Update the script, then try again.' : aiErr(e.message);
+  }
+  JA.busy = false;
+  jaSave();
+  jaRefresh(true);
+}
+
+function jaAsk(text) {
+  const q = str(text).trim();
+  if (!q || JA.busy) return;
+  if (JA.listening) jaStopVoice();
+  const turn = { q, a: null, error: '' };
+  JA.thread.push(turn);
+  JA.draft = '';
+  JA.voiced = false;
+  jaRun(turn);
+}
+
+function jaSave() {
+  try { localStorage.setItem('wc-journal-ai', JSON.stringify(JA.thread.filter(t => t.a || t.error).slice(-20))); } catch (e) { /* kept for this session */ }
+}
+function jaLoad() {
+  try { const t = JSON.parse(localStorage.getItem('wc-journal-ai') || '[]'); if (Array.isArray(t)) JA.thread = t; } catch (e) { JA.thread = []; }
+}
+jaLoad();
+
+function jaStartVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); const ta = $('#ja-text'); if (ta) ta.focus(); return; }
+  const rec = new SR();
+  rec.lang = navigator.language || 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  const ta0 = $('#ja-text');
+  if (ta0) JA.draft = ta0.value;
+  const base = JA.draft.trim() ? JA.draft.trim() + ' ' : '';
+  rec.onresult = e => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    JA.draft = base + txt.trim();
+    JA.voiced = true;
+    jaRefresh(false);
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak your question.', 5000);
+    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type your question.');
+  };
+  rec.onend = () => { JA.listening = false; JA.rec = null; jaRefresh(false); const ta = $('#ja-text'); if (ta && JA.draft) ta.focus(); };
+  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
+  JA.rec = rec;
+  JA.listening = true;
+  jaRefresh(false);
+}
+function jaStopVoice() {
+  if (JA.rec) { try { JA.rec.stop(); } catch (e) { /* already stopped */ } }
+  JA.listening = false;
+}

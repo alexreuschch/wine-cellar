@@ -57,12 +57,15 @@ const AB_ICON = {
   info: pi('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>')
 };
 
+/* the four taste axes, 1 to 5, with a word for every level */
 const AXES = [
-  ['body', 'Light', 'Bold'],
-  ['tannin', 'Smooth', 'Tannic'],
-  ['sweet', 'Dry', 'Sweet'],
-  ['acid', 'Soft', 'Fresh']
+  ['body', 'Body', ['Light', 'Light to medium', 'Medium', 'Medium to full', 'Full']],
+  ['acid', 'Acidity', ['Low', 'Mild', 'Medium', 'Fresh', 'Crisp']],
+  ['tannin', 'Tannin', ['Very smooth', 'Smooth', 'Medium', 'Firm', 'Grippy']],
+  ['sweet', 'Sweetness', ['Bone dry', 'Dry', 'Off-dry', 'Medium sweet', 'Sweet']]
 ];
+/* white, sparkling and dessert wines have no tannin worth naming */
+const NO_TANNIN = ['White', 'Sparkling', 'Dessert'];
 
 /* ---------------------------------------------------------------- data */
 
@@ -81,6 +84,8 @@ function parseProfile(v) {
     closure: t(p.closure), vineyard: t(p.vineyard), vintageNote: t(p.vintageNote), typical: p.typical === true
   };
 }
+/* the alcohol of a wine as shown under its name, or '' */
+const alcText = w => (w.profile && w.profile.alcohol ? `${fmtNum(w.profile.alcohol, w.profile.alcohol % 1 ? 1 : 0)}%` : '');
 const emptyProfile = () => parseProfile({ aromas: [], foods: [] });
 const hasProfile = w => !!(w.profile && (w.profile.body || w.profile.aromas.length || w.profile.foods.length || w.profile.style));
 
@@ -158,7 +163,7 @@ function aboutHtml(w) {
   if (p && p.style) rows.push(abRow(AB_ICON.style, p.style, p.styleDesc, likeHint('style', w, x => (x.profile && x.profile.style ? lc(x.profile.style) : '')), ['style', p.style, w.region]));
   if (w.producer) rows.push(abRow(AB_ICON.producer, w.producer, p ? p.producerLine : '', likeHint('producer', w, x => lc(x.producer)), ['producer', w.producer, w.region]));
   if (!rows.length) return '';
-  const more = p && (p.about || p.classification || p.alcohol || p.ageing || p.closure || p.vineyard || p.vintageNote);
+  const more = p && (p.about || p.classification || p.ageing || p.closure || p.vineyard || p.vintageNote);
   const open = U.aboutOpen === w.id;
   return `<section style="gap:12px"><h2>About this wine</h2>
     <div class="ab-list">${rows.join('')}
@@ -172,7 +177,6 @@ function moreHtml(w) {
   const fact = (k, label, val, wide) => (val ? `<div class="ab-fact${wide ? ' wide' : ''}">${AB_ICON[k]}<div><span>${esc(label)}</span><b>${esc(val)}</b></div></div>` : '');
   const facts = [
     fact('classification', 'Classification', p.classification),
-    fact('alcohol', 'Alcohol', p.alcohol ? `${fmtNum(p.alcohol, p.alcohol % 1 ? 1 : 0)}%` : ''),
     fact('ageing', 'Ageing', p.ageing),
     fact('closure', 'Closure', p.closure),
     fact('vineyard', 'Vineyard and soil', p.vineyard, true),
@@ -211,15 +215,32 @@ function grapeRingHtml(w) {
   return `<div class="tp-block"><p class="tp-lead">Grapes${w.profile && w.profile.typical ? ' · typical blend' : ''}</p>${donut(rows, 100, { label: 'Grapes', pctOnly: true, center, wrap: true })}</div>`;
 }
 
+/* where your favorites of this type lie on each axis: the average of wines you rated 85% or more, from three wines on */
+function favAxes(type) {
+  const fav = S.wines.filter(x => x.type === type && x.myRating !== null && x.myRating >= 85 && x.profile);
+  const out = {};
+  AXES.forEach(([k]) => {
+    const vals = fav.map(x => Number(x.profile[k]) || 0).filter(v => v >= 1 && v <= 5);
+    if (vals.length >= 3) out[k] = Math.round(vals.reduce((a, v) => a + v, 0) / vals.length);
+  });
+  return out;
+}
+
 function axesHtml(w) {
   const p = w.profile;
-  if (!p) return '';
+  if (!p || !AXES.some(([k]) => p[k])) return '';
   const color = TYPE_CHART[w.type] || TYPE_CHART.Red;
-  const rows = AXES.filter(([k]) => p[k]).map(([k, l, r]) => {
-    const v = p[k], pos = (v - 1) / 4 * 100;
-    return `<div class="tp-row" role="img" aria-label="${l} to ${r}: ${v} of 5"><span class="${v <= 2 ? 'on' : ''}">${l}</span><div class="tp-track">${[0, 1, 2, 3, 4].map(i => `<i class="tp-tick" style="left:${i * 25}%"></i>`).join('')}<i class="tp-fill" style="width:${pos}%"></i><i class="tp-dot" style="left:${pos}%"></i></div><span class="${v >= 4 ? 'on' : ''}">${r}</span></div>`;
+  const fav = favAxes(w.type);
+  const tiles = AXES.map(([k, name, words]) => {
+    const v = Number(p[k]) || 0;
+    const none = !v && k === 'tannin' && NO_TANNIN.includes(w.type);
+    const word = v ? words[v - 1] : none ? 'None' : 'Not set';
+    const heart = fav[k] ? `<div class="tt-fav">${[1, 2, 3, 4, 5].map(i => (i === fav[k] ? `<span>${ICON.heart}</span>` : '<span></span>')).join('')}</div>` : '';
+    return `<div class="tt" role="img" aria-label="${name}: ${word}${fav[k] ? `, your favorites: ${words[fav[k] - 1]}` : ''}"><span class="tt-name">${name}</span><b class="tt-word${v ? '' : ' muted'}">${word}</b>
+      <div class="tt-segs">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= v ? 'on' : ''}"></i>`).join('')}</div>${heart}</div>`;
   });
-  return rows.length ? `<div class="tp-scales" style="--wc:${color}">${rows.join('')}</div>` : '';
+  const legend = Object.keys(fav).length ? `<p class="tt-legend">${ICON.heart}Your favorites of this type</p>` : '';
+  return `<div class="tt-wrap" style="--wc:${color}"><div class="tt-grid">${tiles.join('')}</div>${legend}</div>`;
 }
 
 function aromasHtml(w) {
@@ -332,7 +353,7 @@ function wineInfoBoxHtml() {
 
 function profileEditorHtml() {
   const p = D.profile;
-  const axis = ([k, l, r]) => `<div class="tpe-row"><span>${l}</span><div class="tpe-dots">${[1, 2, 3, 4, 5].map(v => `<button class="${p[k] === v ? 'on' : ''}" data-act="tp-set" data-k="${k}" data-v="${v}" aria-label="${l} to ${r}: ${v} of 5"></button>`).join('')}</div><span>${r}</span></div>`;
+  const axis = ([k, name, words]) => `<div class="tpe-row"><span>${name}</span><div class="tpe-dots">${[1, 2, 3, 4, 5].map(v => `<button class="${p[k] === v ? 'on' : ''}" data-act="tp-set" data-k="${k}" data-v="${v}" aria-label="${name}: ${words[v - 1]}"></button>`).join('')}</div><span class="tpe-word">${p[k] ? words[p[k] - 1] : k === 'tannin' && NO_TANNIN.includes(D.fields && D.fields.type) ? 'None' : 'Not set'}</span></div>`;
   const aromaChips = Object.keys(AROMAS).map(g => { const i = p.aromas.findIndex(a => a.g === g); return `<button class="tpe-chip${i >= 0 ? ' on' : ''}" data-act="tp-aroma" data-v="${g}" style="--ac:${AROMAS[g][1]}">${AROMAS[g][2]}${esc(AROMAS[g][0])}</button>`; }).join('');
   const notes = p.aromas.map((a, i) => `<label class="field">${esc(AROMAS[a.g][0])}<input data-input="tp-note" data-i="${i}" value="${esc(a.n)}" placeholder="For example cherry, raspberry"></label>`).join('');
   const foods = Object.keys(FOODS).map(f => `<button class="tp-food${p.foods.includes(f) ? ' on' : ''}" data-act="tp-food" data-v="${f}">${FOODS[f][1]}<span>${esc(FOODS[f][0])}</span></button>`).join('');

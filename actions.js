@@ -133,6 +133,14 @@ const ACTS = {
   'cons-focus': el => { CONS.focus = CONS.focus === el.dataset.v ? '' : el.dataset.v; refreshView(); },
   'cons-run': () => consRun(),
   'cons-offer': el => { const p = CONS.result && CONS.result.picks[Number(el.dataset.i)]; if (p) consOffer(p, wishKey(p)); },
+  'pe-edit': el => { U.personEdit = el.dataset.v; refreshView(); const f = $('#pe-aliases'); if (f) f.focus(); },
+  'pe-cancel': () => { U.personEdit = null; refreshView(); },
+  'pe-save': el => savePersonInfo(el.dataset.v, ($('#pe-aliases') || {}).value || '', ($('#pe-note') || {}).value || ''),
+  'ja-send': () => { const ta = $('#ja-text'); jaAsk(ta ? ta.value : JA.draft); },
+  'ja-example': el => jaAsk(el.dataset.v),
+  'ja-mic': () => { if (JA.listening) { jaStopVoice(); jaRefresh(false); } else jaStartVoice(); },
+  'ja-clear': () => { if (JA.listening) jaStopVoice(); JA.thread = []; JA.draft = ''; JA.voiced = false; jaSave(); render(); },
+  'ja-retry': el => { const t = JA.thread[Number(el.dataset.i)]; if (t && !JA.busy) jaRun(t); },
   'cons-preview': el => consPreview(Number(el.dataset.i)),
   'cons-mic': () => { if (CONS.listening) consStopVoice(); else consStartVoice(); },
   'cons-save': el => { const p = CONS.result && CONS.result.picks[Number(el.dataset.i)]; if (p) consSave(p); },
@@ -159,8 +167,6 @@ const ACTS = {
   },
   'tp-food': el => { const f = el.dataset.v, a = D.profile.foods, i = a.indexOf(f); if (i >= 0) a.splice(i, 1); else if (a.length >= 6) { toast('Up to six kinds of food.'); return; } else a.push(f); D.touched.add('profile'); renderProfileEditor(); },
   'pick-open': el => openPicker(el.dataset.k),
-  'tz-use': el => { setTravelCountry(el.dataset.v); sommCountryChanged(); toast(`Prices are now checked in ${SHOP_COUNTRIES[el.dataset.v]}, in ${countryCur(el.dataset.v)}.`); refreshView(); },
-  'tz-keep': el => { try { localStorage.setItem('wc-tz-keep', el.dataset.v + ':' + travelCountry()); } catch (e) { /* asked again next time */ } refreshView(); },
   'somm-redo': () => { if (SOMM.redo === 'list') { SOMM.redo = ''; listAnalyze(WL.result ? WL.result.food || '' : ''); } else sommRedoCheck(); },
   'somm-redo-no': () => { SOMM.redo = ''; refreshView(); },
   'pick-close': () => closePicker(),
@@ -401,6 +407,7 @@ const INPUTS = {
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
+  'ja-text': el => { JA.draft = el.value; autosize(el); },
   'somm-price': el => { SOMM.price = el.value; const l = el.closest('.where-price'); if (l) l.classList.toggle('need', sommWhere() === 'shop' && !sommPrice()); },
   'wl-min': el => { WL.min = el.value; },
   'tp-note': el => { const a = D.profile.aromas[Number(el.dataset.i)]; if (a) a.n = el.value; D.touched.add('profile'); },
@@ -567,6 +574,7 @@ function init() {
     if (e.target && e.target.id === 'new-loc' && e.key === 'Enter') { e.preventDefault(); ACTS['loc-add'](); }
     if (e.target && e.target.dataset && e.target.dataset.input === 'tg-in' && e.key === 'Enter') { e.preventDefault(); addTag(e.target.dataset.k, e.target.value); }
     if (e.target && e.target.id === 'rt-score' && e.key === 'Enter') { e.preventDefault(); saveRatingSheet(); }
+    if (e.target && e.target.id === 'ja-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); jaAsk(e.target.value); return; }
     if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (SOMM.mode === 'list') listAnalyze(); else sommAsk(e.target.value); }
     if (e.target && e.target.id === 'new-person' && e.key === 'Enter') { e.preventDefault(); ACTS['person-add'](); }
     if (e.target && e.target.id === 'new-ret-site' && e.key === 'Enter') { e.preventDefault(); ACTS['ret-add'](); }

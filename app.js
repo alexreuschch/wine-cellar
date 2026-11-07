@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.26.1';
+const APP_VERSION = '2.27.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -116,12 +116,12 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [], people: [], wishlist: [], history: [], usage: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
+const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [], people: [], peopleInfo: [], wishlist: [], history: [], usage: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
   winFilter: 'All', topMode: 'mine', topSys: null, topFinished: false, topDisc: false, addRatingOpen: false,
-  jSearch: '', jFav: false, locMove: null
+  jSearch: '', jFav: false, locMove: null, personEdit: null
 };
 let D = null;   // add or edit draft
 let RS = null;  // bottom sheet state (bottles in or out, journal entries)
@@ -171,10 +171,6 @@ const shopCountry = () => (S.settings && SHOP_COUNTRIES[S.settings.country] ? S.
 /* the country where the sommelier checks prices on a trip; stays until it is changed by hand */
 const travelCountry = () => { let c = ''; try { c = localStorage.getItem('wc-travel') || ''; } catch (e) { c = ''; } return SHOP_COUNTRIES[c] ? c : shopCountry(); };
 const setTravelCountry = c => { try { localStorage.setItem('wc-travel', c); } catch (e) { /* kept for this session only */ } };
-/* the country of the phone's time zone, which follows the phone abroad; '' when unknown */
-const tzCountry = () => { let z = ''; try { z = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { z = ''; } const c = GEO_TZ[z] || ''; return SHOP_COUNTRIES[c] ? c : ''; };
-/* the time zone points to another country than the one set, and you have not chosen to keep it */
-const tzMismatch = () => { const c = tzCountry(), t = travelCountry(); if (!c || c === t) return ''; let keep = ''; try { keep = localStorage.getItem('wc-tz-keep') || ''; } catch (e) { keep = ''; } return keep === c + ':' + t ? '' : c; };
 const shopCountryName = () => SHOP_COUNTRIES[shopCountry()];
 const flagOfCode = code => (/^[A-Z]{2}$/.test(str(code)) ? `<span class="flag" title="${esc(SHOP_COUNTRIES[code] || code)}">${String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))}</span>` : '');
 /* shop name with the flag of the country where the shop is based, and one line of details */
@@ -333,6 +329,11 @@ function normRemoval(r) {
 }
 
 const lc = s => String(s).toLowerCase();
+const normPersonInfo = x => ({ name: str(x && x.name).trim(), aliases: str(x && x.aliases).trim(), note: str(x && x.note).trim() });
+/* the other names and the note of a person, if any */
+const personInfo = name => S.peopleInfo.find(x => lc(x.name) === lc(name)) || { name, aliases: '', note: '' };
+/* every name a person goes by, in lower case */
+const personNames = name => [lc(name)].concat(splitList(personInfo(name).aliases).map(lc));
 const namesOf = s => splitList(s).map(n => n.replace(/\s+/g, ' '));
 function rankAdd(m, name, date, extra) {
   const k = lc(name);
@@ -375,6 +376,7 @@ function loadCache() {
   if (c.shelfNames) S.shelfNames = c.shelfNames;
   if (Array.isArray(c.retailers)) S.retailers = c.retailers;
   if (Array.isArray(c.people)) S.people = c.people;
+  if (Array.isArray(c.peopleInfo)) S.peopleInfo = c.peopleInfo;
   if (Array.isArray(c.wishlist)) S.wishlist = c.wishlist;
   if (Array.isArray(c.history)) S.history = c.history;
   if (Array.isArray(c.usage)) S.usage = c.usage;
@@ -383,7 +385,7 @@ function loadCache() {
   if (c.version) S.version = c.version;
 }
 function persist() {
-  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, retailers: S.retailers, people: S.people, wishlist: S.wishlist, history: S.history, usage: S.usage, settings: S.settings, fx: S.fx, version: S.version });
+  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, retailers: S.retailers, people: S.people, peopleInfo: S.peopleInfo, wishlist: S.wishlist, history: S.history, usage: S.usage, settings: S.settings, fx: S.fx, version: S.version });
 }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
@@ -562,6 +564,7 @@ async function sync(silent) {
     (d.locationInfo || []).forEach(l => { if (l && l.name && l.shelves && Object.keys(l.shelves).length) S.shelfNames[lc(l.name)] = l.shelves; });
     S.retailers = Array.isArray(d.retailers) ? d.retailers.map(r => ({ name: str(r.name), website: str(r.website) })).filter(r => r.name) : [];
     S.people = Array.isArray(d.people) ? d.people.map(str).filter(Boolean) : [];
+    S.peopleInfo = Array.isArray(d.peopleInfo) ? d.peopleInfo.map(normPersonInfo).filter(x => x.name) : [];
     S.wishlist = Array.isArray(d.wishlist) ? d.wishlist.map(normWish) : [];
     S.history = Array.isArray(d.history) ? d.history.map(normHistory).filter(h => h.month) : [];
     S.usage = Array.isArray(d.usage) ? d.usage : [];
@@ -673,6 +676,7 @@ function render() {
     case 'sommelier': html = viewSommelier(); break;
     case 'discover': html = viewDiscover(); break;
     case 'journal': html = viewJournal(); break;
+    case 'journal-ai': html = viewJournalAI(); break;
     case 'wine': html = viewWine(r.id); break;
     case 'add': html = viewForm('add', null); break;
     case 'edit': html = viewForm('edit', r.id); break;
@@ -693,6 +697,7 @@ function afterRender(r) {
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
   if (r.p === 'sommelier') { const ta = $('#somm-text'); if (ta) autosize(ta); }
+  if (r.p === 'journal-ai') { const ta = $('#ja-text'); if (ta) autosize(ta); }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); document.querySelectorAll('textarea.autosize').forEach(autosize); if (D.ai) updateBanner(); }
 }

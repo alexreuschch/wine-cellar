@@ -803,3 +803,23 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .note-voice textarea { flex: 1; min-height: 64px; }
 .note-voice .somm-mic { border: 1px solid var(--line); margin-bottom: 4px; }
 .note-voice .somm-mic.on { border-color: transparent; }
+
+/* taste profile as four tiles: the word of the level, five segments and a heart where your favorites lie */
+.tt-wrap { display: flex; flex-direction: column; gap: 8px; }
+.tt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tt { display: flex; flex-direction: column; padding: 12px 12px 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.tt-name { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.tt-word { font-size: 16px; font-weight: 600; margin: 3px 0 10px; line-height: 1.25; }
+.tt-word.muted { color: var(--muted); font-weight: 500; }
+.tt-segs, .tt-fav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.tt-segs i { height: 8px; border-radius: 3px; background: var(--line); }
+.tt-segs i.on { background: var(--wc); }
+.tt-fav { margin-top: 3px; height: 14px; }
+.tt-fav span { display: flex; justify-content: center; color: #E8647A; }
+.tt-fav svg { width: 13px; height: 13px; fill: currentColor; stroke: currentColor; }
+.tt-legend { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--muted); }
+.tt-legend svg { width: 13px; height: 13px; fill: #E8647A; stroke: #E8647A; }
+.tpe-row { grid-template-columns: 1fr auto; grid-template-areas: "name word" "dots dots"; row-gap: 4px; }
+.tpe-row > span:first-child { grid-area: name; }
+.tpe-row .tpe-dots { grid-area: dots; }
+.tpe-row .tpe-word { grid-area: word; color: var(--text); font-size: 13px; font-weight: 500; }
