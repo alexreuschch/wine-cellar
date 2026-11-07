@@ -268,8 +268,9 @@ function listHtml() {
   const cur0 = res && res.currency ? res.currency : cur();
   const pages = WL.pages.map((pg, i) => `<div class="wl-page"><img src="${esc(pg.thumb)}" alt="Page ${i + 1}"><span>${i + 1}</span><button class="icon-btn" data-act="wl-page-rm" data-i="${i}" aria-label="Remove page ${i + 1}"${WL.busy ? ' disabled' : ''}>${ICON.x}</button></div>`).join('');
   const full = WL.pages.length >= 10;
-  const result = WL.busy
-    ? `<div class="somm-a"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'}, comparing the wines and checking shop prices<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes up to a minute. Keep the app open.</p></div>`
+  const wait = WL.busy
+    ? `<div class="somm-a wl-wait" id="wl-wait"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'}, comparing the wines and checking shop prices<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes up to a minute. Keep the app open.</p></div>` : '';
+  const result = WL.busy ? ''
     : WL.error ? `<div class="somm-a error"><p>${esc(WL.error)}</p></div>`
     : res ? `<div class="wl-result">
         <p class="small muted" style="margin:0">${res.restaurant ? `${esc(res.restaurant)} · ` : ''}${res.count ? `${res.count} wines read from ${res.pages} ${res.pages === 1 ? 'page' : 'pages'}` : `${res.pages} ${res.pages === 1 ? 'page' : 'pages'} read`}${res.food ? ` · food: ${esc(res.food)}` : ''}</p>
@@ -286,6 +287,7 @@ function listHtml() {
       <p class="small muted" style="margin:-4px 0 0">How much you want to spend on one bottle, in ${esc(countryCur(travelCountry()))} as on the list. The best wine within it becomes your first pick, <b>Best in your range</b>. Leave it empty for no limit.</p>
       <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
       <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
+      ${wait}
       <button class="btn accent big block" data-act="wl-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}${res ? 'Analyze again' : 'Find the best wines'}</button>
     </section>`;
   return `${result}${setup}${res || WL.busy ? '' : listGuideHtml()}`;
@@ -303,7 +305,8 @@ async function listAnalyze() {
   WL.result = null;
   SOMM.voiced = false;
   sommRefresh(false);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const w = $('#wl-wait');
+  if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' });
   try {
     WL.result = await api('winelist', { country: travelCountry(), pages: WL.pages.map(pg => pg.b64), min: Number(String(WL.min).replace(',', '.')) || 0, max: Number(String(WL.max).replace(',', '.')) || 0, food });
   } catch (e) {
