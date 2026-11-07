@@ -180,6 +180,7 @@ const ACTS = {
   'wl-taste': el => listTaste(Number(el.dataset.i)),
   'wl-preview': el => listPreview(Number(el.dataset.i)),
   'somm-preview': el => sommPreview(Number(el.dataset.i)),
+  'somm-vintage': el => sommVintage(Number(el.dataset.i)),
   'wish-preview': el => wishPreview(el.dataset.id),
   'prev-close': () => closePreview(),
   'prev-taste': () => previewTaste(),
@@ -422,6 +423,7 @@ const INPUTS = {
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
+  'somm-vin': el => { const t = sommThread()[Number(el.dataset.i)]; if (t) { t.vin = t.vin || {}; t.vin.draft = el.value.replace(/\D/g, '').slice(0, 4); } },
   'ja-text': el => { JA.draft = el.value; autosize(el); },
   'somm-price': el => { SOMM.price = el.value; const l = el.closest('.where-price'); if (l) l.classList.toggle('need', sommWhere() === 'shop' && !sommPrice()); },
   'wl-min': el => { WL.min = el.value; },
@@ -604,6 +606,7 @@ function init() {
     if (e.target && e.target.dataset && e.target.dataset.input === 'tg-in' && e.key === 'Enter') { e.preventDefault(); addTag(e.target.dataset.k, e.target.value); }
     if (e.target && e.target.id === 'rt-score' && e.key === 'Enter') { e.preventDefault(); saveRatingSheet(); }
     if (e.target && e.target.id === 'ja-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); jaAsk(e.target.value); return; }
+    if (e.target && e.target.dataset && e.target.dataset.input === 'somm-vin' && e.key === 'Enter') { e.preventDefault(); sommVintage(Number(e.target.dataset.i)); return; }
     if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (SOMM.mode === 'list') listAnalyze(); else sommAsk(e.target.value); }
     if (e.target && e.target.id === 'new-person' && e.key === 'Enter') { e.preventDefault(); ACTS['person-add'](); }
     if (e.target && e.target.id === 'new-ret-site' && e.key === 'Enter') { e.preventDefault(); ACTS['ret-add'](); }

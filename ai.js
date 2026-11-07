@@ -147,7 +147,7 @@ function sommAnswerHtml(t) {
   const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${hasFit ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
   const i = sommThread().indexOf(t);
-  const win = check ? checkWindowHtml(t.a) : '';
+  const win = check ? checkWindowHtml(t.a) || vintageAskHtml(t, i) : '';
   const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.magic}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div>` : '';
   return `<div class="somm-a">${fit}${win}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
@@ -164,6 +164,43 @@ function checkWindowHtml(a) {
   return `<div class="somm-win"><div class="between"><b>Drinking window</b><span class="small" style="color:${STATUS[s].c};font-weight:600">${esc(s)}</span></div>
     ${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>
     <p class="tiny muted" style="margin:0">${esc(windowText(w))}</p>${a.drinkNote ? `<p class="small" style="margin:2px 0 0;line-height:1.45">${esc(a.drinkNote)}</p>` : ''}</div>`;
+}
+
+/* no vintage on the label: ask for it, then the drinking window of that vintage */
+function vintageAskHtml(t, i) {
+  const a = t.a, x = a && a.info;
+  if (!x || !(str(x.producer).trim() || str(x.name).trim()) || str(x.vintage).trim() || i < 0) return '';
+  const v = t.vin || {};
+  return `<div class="somm-win"><b>Drinking window</b>
+    <p class="small" style="margin:0;line-height:1.45">The vintage is not visible on the photo. Which year is it? Then you see its drinking window.</p>
+    <div class="vin-ask"><input id="somm-vin-${i}" data-input="somm-vin" data-i="${i}" inputmode="numeric" maxlength="4" placeholder="Vintage, e.g. 2018" value="${esc(v.draft || '')}"${v.busy ? ' disabled' : ''}>
+    <button class="btn primary" data-act="somm-vintage" data-i="${i}"${v.busy ? ' disabled' : ''}>${v.busy ? 'Loading…' : 'Show'}</button></div>
+    ${v.error ? `<p class="small" style="margin:0;color:var(--danger)">${esc(v.error)}</p>` : ''}</div>`;
+}
+async function sommVintage(i) {
+  const t = sommThread()[i];
+  if (!t || !t.a || !t.a.info) return;
+  t.vin = t.vin || {};
+  const el = $('#somm-vin-' + i), y = Number(str(el ? el.value : t.vin.draft).trim()), now = new Date().getFullYear();
+  if (!(y >= 1900 && y <= now)) { t.vin.error = `Enter a year between 1900 and ${now}.`; render(); return; }
+  Object.assign(t.vin, { draft: String(y), busy: true, error: '' }); render();
+  const base = Object.assign({}, t.a.info, { vintage: String(y) });
+  try {
+    const d = (previewOf(base) ? { details: previewOf(base) } : await api('preview', { wine: { producer: base.producer, name: base.name, vintage: base.vintage, type: base.type, region: base.region, grapes: base.grapes } }));
+    const x = d.details || {};
+    prevRemember(base, x);
+    const f = Number(x.drinkFrom), u = Number(x.drinkUntil);
+    if (f && u && u >= f) {
+      const pf = Number(x.peakFrom) >= f && Number(x.peakFrom) <= u ? Number(x.peakFrom) : f, pu = Number(x.peakUntil) >= pf && Number(x.peakUntil) <= u ? Number(x.peakUntil) : u;
+      t.a.window = { drinkFrom: f, peakFrom: pf, peakUntil: pu, drinkUntil: u };
+      Object.assign(t.a.info, t.a.window, { vintage: String(y) });
+      t.a.wine = `${str(t.a.wine).replace(/\s*\([^)]*vintage[^)]*\)/i, '').trim()} ${y}`;
+      t.vin = null;
+    } else Object.assign(t.vin, { busy: false, error: `No drinking window is known for ${y}. Check the year on the back label or the capsule.` });
+  } catch (e) {
+    Object.assign(t.vin, { busy: false, error: aiErr(e.message) });
+  }
+  sommSave(); render();
 }
 
 function sommIntroHtml() {

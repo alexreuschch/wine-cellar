@@ -172,10 +172,10 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .rating-val.none { font-size: 15px; font-weight: 400; color: var(--muted); }
 .rating-bar { touch-action: pan-y; cursor: pointer; padding: 6px 0; }
 .rating-bar .segs > div { height: 30px; }
-.scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); }
+.scale { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .rating-ctl { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 4px; }
 .rating-ctl button { width: 52px; height: 44px; border: 1px solid var(--line); border-radius: 10px; background: transparent; display: flex; align-items: center; justify-content: center; }
-.rating-ctl span { font-size: 12px; color: var(--muted); width: 130px; text-align: center; }
+.rating-ctl span { font-size: 14px; line-height: 1.35; color: var(--text-2); width: 170px; text-align: center; }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
 .field input, .field select, .field textarea { width: 100%; min-width: 0; height: 46px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 15px; outline: none; }
@@ -874,27 +874,29 @@ label.btn.disabled { opacity: .5; pointer-events: none; }
 button.back { border: 0; background: transparent; padding: 0; color: var(--gold); }
 
 /* my rating: words, favorites, coach */
-.rate-word { margin: 2px 0 0; font-size: 13px; color: var(--gold); text-align: center; }
+.rate-word { margin: 4px 0 0; font-size: 16px; font-weight: 500; color: var(--gold); text-align: center; }
 section > .rate-word { text-align: left; }
-.rate-near { margin: 0; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
-.rate-near b { color: var(--text-2); font-weight: 500; }
-.rate-ext { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
-.rate-ext span { color: var(--faint); }
-.rate-help { height: 36px; align-self: center; font-size: 13px; }
-.rate-fav { align-self: center; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-2); font-size: 13px; }
-.rate-fav svg { width: 16px; height: 16px; }
+.rate-near { margin: 0; font-size: 15px; color: var(--text-2); text-align: center; line-height: 1.5; }
+.rate-near b { color: var(--text); font-weight: 600; }
+.rate-ext { margin: 0; font-size: 14px; color: var(--text-2); text-align: center; line-height: 1.5; }
+.rate-ext span { color: var(--muted); }
+.rate-help { height: 42px; align-self: center; font-size: 16px; }
+.rate-help svg { width: 20px; height: 20px; }
+.rate-fav { align-self: center; display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-2); font-size: 15px; }
+.rate-fav svg { width: 18px; height: 18px; }
 .rate-fav.on { border-color: #E8647A; color: #E8647A; }
 .rate-fav.on svg { fill: #E8647A; }
 section > .rate-fav { align-self: flex-start; margin-top: 4px; }
-.coach { border: 1px solid #5E3A47; border-radius: 12px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.coach { border: 1px solid #5E3A47; border-radius: 12px; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
 .coach-head { display: flex; align-items: center; gap: 8px; }
-.coach-head b { flex: 1; font-size: 14px; }
-.coach-head .magic-ic svg { width: 18px; height: 18px; }
+.coach-head b { flex: 1; font-size: 17px; }
+.coach-head .magic-ic svg { width: 20px; height: 20px; }
 .coach-head .icon-btn { width: 32px; height: 32px; }
-.coach-hint { margin: 0; font-size: 12px; color: var(--muted); font-style: italic; }
-.coach-q { margin: 0; font-size: 14px; line-height: 1.4; }
-.coach-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.coach-tip { margin: 0; font-size: 14px; line-height: 1.5; }
+.coach-hint { margin: 0; font-size: 15px; color: var(--text-2); font-style: italic; }
+.coach-q { margin: 0; font-size: 17px; line-height: 1.4; }
+.coach-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.coach-chips .chip { height: 42px; padding: 0 16px; font-size: 16px; }
+.coach-tip { margin: 0; font-size: 16px; line-height: 1.5; }
 .coach-tip b { color: var(--gold); font-weight: 600; }
 .tq-row .rec-text { display: flex; flex-direction: column; gap: 2px; }
 [id$="-coach"] { display: flex; flex-direction: column; }
@@ -917,6 +919,11 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 /* drinking window of a checked wine and of wine list picks */
 .somm-win { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .somm-win b { font-size: 14px; font-weight: 600; }
+.vin-ask { display: flex; gap: 8px; }
+.vin-ask input { flex: 1; min-width: 0; height: 46px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; font-size: 16px; outline: none; }
+.vin-ask input:focus { border-color: var(--gold); }
+.vin-ask .btn { height: 46px; }
+.vin-ask .btn { flex: none; padding: 0 18px; }
 .win-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--sc); color: var(--sc); }
 .rh-ic { position: relative; }
 .rh-ic.busy svg { animation: spin 1.4s linear infinite; }

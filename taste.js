@@ -360,7 +360,7 @@ function coachHtml(kind) {
   let body = '';
   if (RC.res) {
     body = `<p class="coach-tip"><b>My tip: ${esc(rateWord(RC.res.v)[1])}, about ${RC.res.v}%.</b>${RC.res.why ? ' ' + esc(RC.res.why) : ''} Feel free to fine-tune it with the bar, it is your rating.</p>
-      <button class="btn ghost" style="height:34px;font-size:13px;align-self:flex-start" data-act="coach-restart" data-k="${kind}">Start again</button>`;
+      <button class="btn ghost" style="height:40px;font-size:15px;align-self:flex-start" data-act="coach-restart" data-k="${kind}">Start again</button>`;
   } else if (!RC.enjoy) body = `<p class="coach-q">How much did you enjoy it?</p>${chips('coach-enjoy', COACH_ENJOY, RC.enjoy)}`;
   else if (!RC.again) body = `<p class="coach-q">If price didn't matter, would you drink it again?</p>${chips('coach-again', COACH_AGAIN, RC.again)}`;
   else if (RC.cmp && RC.cmp.kind === 'wow') body = `<p class="coach-q">Was there a wow moment?</p>${chips('coach-cmp', ['No', 'A small one', 'Yes, a real wow'], 0)}`;

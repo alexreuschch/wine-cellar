@@ -175,7 +175,7 @@ function formBody() {
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
       <div class="rating-ctl"><button data-act="rate" data-d="-1" aria-label="Minus 1 percent">${ICON.minus}</button><span>Drag the bar, fine-tune with minus and plus</span><button data-act="rate" data-d="1" aria-label="Plus 1 percent">${ICON.plus}</button></div>
       ${rateExtrasHtml('form')}
-      <button class="btn ghost" style="height:36px;align-self:center;font-size:13px" data-act="rate-clear">Clear rating</button>
+      <button class="btn ghost" style="height:40px;align-self:center;font-size:15px" data-act="rate-clear">Clear rating</button>
     </div>
     <div class="box" id="ext-box">${extRatingsHtml()}</div>
     <div id="stock-box">${stockEditorHtml()}</div>
