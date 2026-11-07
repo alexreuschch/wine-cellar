@@ -207,6 +207,11 @@ const ACTS = {
   },
   'rate-clear': () => setRating(null),
   'wine-fav': el => toggleWineFav(el.dataset.id),
+  'share-wine': el => shareOpen(el.dataset.id),
+  'share-go': el => shareGo(el.dataset.link === '1'),
+  'share-send': () => shareWine(SHARE.id, SHARE.offer),
+  'share-close': () => shareClose(),
+  'go-wishlist': () => { U.jumpTo = 'wishlist'; go('#/discover'); },
   'open-add-rating': () => { U.addRatingOpen = true; refreshView(); const s = $('#new-score'); if (s) s.focus(); },
   'close-add-rating': () => { U.addRatingOpen = false; refreshView(); },
   'save-rating': async () => {

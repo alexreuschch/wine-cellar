@@ -93,7 +93,8 @@ function grapeIsRed(name, wines) {
 const insSection = (title, sub, body) => `<section class="ins-sec"><div class="sec-head"><h2>${title}</h2>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>${body}</section>`;
 
 function viewInsights() {
-  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
+  const nw = S.wishlist.length;
+  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><button class="icon-btn magic-btn rh-ic" data-act="go-wishlist" aria-label="Wishlist${nw ? `, ${nw} wines` : ''}">${ICON.bookmark}${nw ? `<span class="rh-n">${nw}</span>` : ''}</button><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
   if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;
@@ -579,7 +580,7 @@ function viewWine(id) {
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w) || clText(w.size || 75), alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
-    <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
+    <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<span style="display:flex;gap:6px;align-items:center"><button class="icon-btn" data-act="share-wine" data-id="${esc(w.id)}" aria-label="Share this wine">${ICON.share}</button><a class="btn" style="height:40px" href="${editHref}">Edit</a></span></div>
     ${label}
     <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
     ${isDisc(w) ? discoveryHtml(w) : stockHtml(w)}
@@ -661,4 +662,174 @@ async function toggleWineFav(id) {
   persist(); refreshView();
   try { upsertWine(normWine(await api('update', { id, fields: { myFav: w.myFav ? true : '' } }))); persist(); }
   catch (e) { w.myFav = !w.myFav; persist(); refreshView(); toast('Not saved: ' + e.message); }
+}
+
+
+/* ------------------------------------------------------------ share a wine as a picture */
+/* The card is drawn here on the phone and handed to the share menu of the phone, for WhatsApp, iMessage and others.
+   It shows the wine and your own rating, never stock, prices, places or people, and nothing is stored anywhere. */
+function shareLoadImg(src) {
+  return new Promise(res => { if (!src) { res(null); return; } const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+}
+function shareWrap(ctx, text, maxW) {
+  const words = String(text).split(/\s+/), lines = [];
+  let line = '';
+  words.forEach(wd => { const t = line ? line + ' ' + wd : wd; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = wd; } else line = t; });
+  if (line) lines.push(line);
+  return lines;
+}
+function shareRound(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+async function shareCard(w) {
+  const W = 1080, H = 1350, P = 80;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  try { await document.fonts.ready; } catch (e) { /* draw with what is there */ }
+  const serif = '"DM Serif Display", Georgia, serif', sans = 'Inter, system-ui, sans-serif';
+  // background: dark aubergine with a soft light from the top
+  const g = x.createRadialGradient(W / 2, 260, 60, W / 2, 260, 900); g.addColorStop(0, '#3A1622'); g.addColorStop(1, '#1A0C12');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // the label: the photo shown on the wine page, else the small one
+  const shown = document.querySelector('#label-img');
+  const img = (shown && shown.complete && shown.naturalWidth ? shown : null) || await shareLoadImg(w.thumb);
+  let y = 90;
+  if (img) {
+    const mh = 520, mw = 440, sc = Math.min(mw / img.naturalWidth, mh / img.naturalHeight);
+    const iw = img.naturalWidth * sc, ih = img.naturalHeight * sc, ix = (W - iw) / 2;
+    x.save(); x.shadowColor = 'rgba(0,0,0,.55)'; x.shadowBlur = 50; x.shadowOffsetY = 20; shareRound(x, ix, y, iw, ih, 18); x.fillStyle = '#000'; x.fill(); x.restore();
+    x.save(); shareRound(x, ix, y, iw, ih, 18); x.clip(); x.drawImage(img, ix, y, iw, ih); x.restore();
+    y += ih + 70;
+  } else y += 40;
+  // type and region, name, producer and vintage
+  const co = countryOf(w);
+  x.textAlign = 'center';
+  x.fillStyle = '#C2ACA8'; x.font = `500 26px ${sans}`;
+  x.fillText([w.type, w.region].filter(Boolean).join(' · ').toUpperCase(), W / 2, y);
+  y += 78;
+  x.fillStyle = '#FFF8E9'; x.font = `62px ${serif}`;
+  const tl = shareWrap(x, wineTitle(w), W - 2 * P).slice(0, 2);
+  tl.forEach(l => { x.fillText(l, W / 2, y); y += 72; });
+  x.fillStyle = '#F0E4D8'; x.font = `400 32px ${sans}`;
+  x.fillText([w.producer !== wineTitle(w) ? w.producer : '', w.vintage, w.size && w.size !== 75 ? sizeName(w.size) : ''].filter(Boolean).join(' · '), W / 2, y);
+  y += 80;
+  // my rating with the colored bar and its word
+  if (w.myRating !== null) {
+    x.fillStyle = '#C2ACA8'; x.font = `500 24px ${sans}`; x.fillText('MY RATING', W / 2, y); y += 70;
+    x.fillStyle = '#E6CB98'; x.font = `72px ${serif}`; x.fillText(w.myRating + '%', W / 2, y); y += 50;
+    const n = Math.round(w.myRating / 5), bw = W - 2 * P - 120, gap = 6, sw = (bw - gap * 19) / 20, bx = (W - bw) / 2;
+    SEG_COLORS.forEach((col, i) => { x.fillStyle = i < n ? col : '#45232F'; shareRound(x, bx + i * (sw + gap), y, sw, 18, 4); x.fill(); });
+    y += 62;
+    const rw = rateWord(w.myRating);
+    if (rw) { x.fillStyle = '#F0E4D8'; x.font = `500 30px ${sans}`; x.fillText(rw[1] + (rw[2] ? ' · ' + rw[2] : ''), W / 2, y); y += 40; }
+    if (w.myFav) { x.fillStyle = '#E8647A'; x.font = `500 26px ${sans}`; x.fillText('\u2665 One of my favorites', W / 2, y + 10); y += 40; }
+  }
+  // the drinking window
+  const p = windowParts(w);
+  if (p && y < H - 300) {
+    const s = statusOf(w);
+    y += 40;
+    x.fillStyle = STATUS[s].c; x.font = `600 28px ${sans}`; x.fillText(s, W / 2, y); y += 40;
+    x.fillStyle = '#C2ACA8'; x.font = `400 26px ${sans}`; x.fillText(windowText(w), W / 2, y);
+  }
+  // the Vintary band
+  const bh = 170, by = H - bh;
+  x.fillStyle = '#620018'; x.fillRect(0, by, W, bh);
+  x.fillStyle = 'rgba(230,203,152,.5)'; x.fillRect(0, by, W, 2);
+  const logo = await shareLoadImg('icon-192.png');
+  x.textAlign = 'left';
+  if (logo) { x.save(); shareRound(x, P, by + 45, 80, 80, 18); x.clip(); x.drawImage(logo, P, by + 45, 80, 80); x.restore(); }
+  x.fillStyle = '#FFF8E9'; x.font = `46px ${serif}`; x.fillText('Vintary', P + 104, by + 88);
+  x.fillStyle = '#E6CB98'; x.font = `400 24px ${sans}`; x.fillText('Your personal wine companion · Wine, made personal.', P + 106, by + 126);
+  x.textAlign = 'right'; x.fillStyle = '#F4DFB4'; x.font = `600 24px ${sans}`; x.fillText('COMING SOON', W - P, by + 88);
+  return new Promise(res => c.toBlob(b => res(b), 'image/jpeg', 0.9));
+}
+/* Share: first the sheet that asks whether to add a shop link, and for which country */
+const SHARE = { id: null, cc: '', phase: '', offer: null, note: '' };
+const shareHomeOffer = w => {
+  const o = w && w.offer;
+  if (!o || !o.url || offerOtherCountry(o)) return null;
+  return o.date && (Date.now() - new Date(o.date).getTime()) / 86400000 > 14 ? null : o;
+};
+function shareOpen(id) {
+  Object.assign(SHARE, { id, cc: shopCountry(), phase: 'ask', offer: null, note: '' });
+  shareRender();
+}
+function shareClose() { SHARE.phase = ''; shareRender(); }
+function shareOfferHtml(o) {
+  return `<div class="between" style="gap:12px">${offerShopHtml(o, wineById(SHARE.id))}<a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.cur)} ${esc(fmtNum(o.v, 2))}${ICON.link}</a></div>`;
+}
+function shareRender() {
+  const root = $('#sheet-root');
+  if (!root) return;
+  if (!SHARE.phase) { if (root.querySelector('.share-sheet')) root.innerHTML = ''; return; }
+  const w = wineById(SHARE.id);
+  if (!w) { SHARE.phase = ''; root.innerHTML = ''; return; }
+  const name = SHOP_COUNTRIES[SHARE.cc] || SHARE.cc, home = SHARE.cc === shopCountry();
+  const ready = home && shareHomeOffer(w), old = !home && S.version && S.version < 40;
+  let body;
+  if (SHARE.phase === 'ask') {
+    body = `<p class="small" style="margin:0;line-height:1.5">Sends a picture with the label, your rating and the heart if it is a favorite. You can add a link to the best online offer, so your friend can buy it.</p>
+      <div class="field">Where is your friend?<button class="pick-btn" data-act="pick-open" data-k="share"><span class="ellipsis">${flagOfCode(SHARE.cc)}${esc(name)}</span>${ICON.chevron || ''}</button></div>
+      <p class="tiny muted" style="margin:0">${old ? 'A shop link for another country needs the new Code.gs.' : ready ? `Uses your best offer from ${esc(ready.shop)}.` : `Searches online shops in ${esc(name)}, about 2 to 5 cents. Offers of the last 14 days are reused.`}</p>
+      <div class="grid2"><button class="btn" data-act="share-go" data-link="0">Picture only</button><button class="btn primary" data-act="share-go" data-link="1"${old ? ' disabled' : ''}>With shop link</button></div>`;
+  } else if (SHARE.phase === 'busy') {
+    body = `<p class="small muted" style="margin:0">${ICON.refresh}Looking for the best offer in ${esc(name)}…</p>`;
+  } else {
+    body = `${SHARE.offer ? `${shareOfferHtml(SHARE.offer)}<p class="muted tiny" style="margin:0">Found by AI on the web. The link goes with the picture; check it if you like.</p>`
+        : `<p class="small" style="margin:0">${esc(SHARE.note || `No online shop in ${name} sells this wine right now.`)} The picture is shared without a link.</p>`}
+      <button class="btn primary" data-act="share-send">${ICON.share}Share</button>`;
+  }
+  root.innerHTML = `<div class="sheet-backdrop" data-act="share-close"></div><div class="sheet share-sheet" role="dialog" aria-modal="true" aria-label="Share this wine"><div class="grab"></div>
+    <div class="between"><h2 style="font-size:18px;font-weight:600">Share this wine</h2><button class="icon-btn" data-act="share-close" aria-label="Close">${ICON.x}</button></div>${body}</div>`;
+}
+async function shareGo(link) {
+  const w = wineById(SHARE.id);
+  if (!w) return;
+  // picture only, or the best offer you already have: share right away
+  const have = SHARE.cc === shopCountry() ? shareHomeOffer(w) : null;
+  if (!link || have) { const o = link ? have : null; shareClose(); shareWine(w.id, o); return; }
+  SHARE.phase = 'busy'; shareRender();
+  try {
+    if (SHARE.cc === shopCountry()) {
+      upsertWine(normWine(await api('bestOffer', { id: w.id })));
+      persist(); refreshView();
+      SHARE.offer = shareHomeOffer(wineById(w.id)) || wineById(w.id).offer || null;
+    } else {
+      const size = Number(w.size) > 0 && Number(w.size) !== 75 ? ` (${w.size} cl)` : '';
+      SHARE.offer = await api('offerFor', { wine: [w.producer, w.name, w.vintage].filter(x => str(x).trim()).join(' ') + size, region: w.region || '', country: SHARE.cc });
+    }
+    SHARE.note = '';
+  } catch (e) {
+    SHARE.offer = null;
+    SHARE.note = /No online shop/.test(str(e.message)) ? '' : aiErr(e.message);
+  }
+  if (!SHARE.phase) return;
+  // a new tap is needed to open the share menu, so the result is shown first
+  SHARE.phase = 'ready'; shareRender();
+}
+
+async function shareWine(id, offer) {
+  shareClose();
+  const w = wineById(id);
+  if (!w) return;
+  busy(true, 'Preparing the picture…');
+  let blob = null;
+  try { blob = await shareCard(w); } catch (e) { blob = null; }
+  busy(false);
+  if (!blob) { toast('The picture could not be made.'); return; }
+  const name = `vintary-${String(fullName(w)).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'wine'}.jpg`;
+  const file = new File([blob], name, { type: 'image/jpeg' });
+  const text = `${fullName(w)}${w.myRating !== null ? ` · my rating ${w.myRating}%` : ''}${offer && offer.url ? `\n\nAvailable at ${offer.shop}: ${offer.url}` : ''}`;
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], text }); } catch (e) { if (e && e.name !== 'AbortError') toast('Sharing did not work.'); }
+    return;
+  }
+  // no share menu with pictures here: save the picture instead
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  if (offer && offer.url && navigator.clipboard) { navigator.clipboard.writeText(text).catch(() => {}); toast('Picture saved, the text with the shop link is copied. Send both from your messenger.', 6000); }
+  else toast('Picture saved. Send it from your photos or downloads.', 5000);
 }

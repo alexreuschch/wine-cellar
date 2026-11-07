@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 39;
+var API_VERSION = 40;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -2169,10 +2169,12 @@ function actionConsultant_(req) {
   return { summary: String(d.summary || ''), picks: verified.slice(0, 5) };
 }
 
-/** Best offer for a wine that is not in the cellar yet, for example a suggestion of the consultant. */
+/** Best offer for a wine that is not in the cellar yet, for example a suggestion of the consultant.
+ *  With a country, the shops of that country are searched, for example for a friend you share a wine with. */
 function actionOfferFor_(req) {
   var wine = String(req.wine || '').trim();
   if (!wine) throw new Error('Missing wine');
+  if (req.country) scopeFrom_(req.country);
   var offer = findOffer_(wine.slice(0, 200), String(req.region || '').slice(0, 100), !!req.fresh);
   if (req.wishId) {
     withLock_(function () {

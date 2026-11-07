@@ -654,7 +654,7 @@ function tasteProfile() {
   const totalStock = stock.reduce((x, w) => x + w.count, 0);
   if (cs.cap) {
     const lasts = perMonth ? Math.round(totalStock / perMonth) : null;
-    lines.push(['Cellar space', `about ${cs.free} of ${cs.cap} places free${cs.pct >= 95 ? ', full' : cs.pct >= 80 ? ', nearly full' : ''}${lasts !== null ? `; the stock lasts about ${lasts > 99 ? '99+' : lasts} months at your pace` : ''}`]);
+    lines.push(['Cellar space', `about ${cs.free} of ${cs.cap} places free${cs.pct >= 100 ? ', full' : cs.pct >= 85 ? ', nearly full' : ''}${lasts !== null ? `; the stock lasts about ${lasts > 99 ? '99+' : lasts} months at your pace` : ''}`]);
   }
   const text = [
     ...lines.map(l => `${l[0]}: ${l[1]}`),
@@ -733,7 +733,7 @@ function viewDiscover() {
     ${CONS.error ? `<p class="small" style="color:var(--danger);margin:0">${esc(CONS.error)}</p>` : ''}
     ${res ? `<section class="ins-sec"><div class="sec-head"><h2>Recommendations</h2></div>${res.summary ? `<p style="margin:0;line-height:1.5">${esc(res.summary)}</p>` : ''}
       <div class="cons-list">${res.picks.map((p, i) => pickCardHtml(p, i, savedKeys.has(wishKey(p)))).join('')}</div></section>` : ''}
-    <section class="ins-sec"><div class="sec-head"><h2>Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
+    <section class="ins-sec" id="wishlist"><div class="sec-head"><h2>Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
       ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save suggestions here. When you buy one, Add to cellar opens the form with its details.</p>'}
     </section>
   </main>${nav('insights')}`;

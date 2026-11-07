@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.4.2';
+const APP_VERSION = '3.5.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -41,6 +41,8 @@ const TODAY = now.getFullYear() + now.getMonth() / 12 + (now.getDate() - 1) / 36
 const svg = (d, size = 20, sw = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {
   plus: svg('<path d="M5 12h14M12 5v14"/>', 18, 2.2),
+  bookmark: svg('<path d="M7 4h10v16l-5-3.5L7 20z"/>', 20, 1.8),
+  share: svg('<path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6"/>', 20, 1.8),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', 16, 2),
   sort: svg('<path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/>', 16, 1.8),
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', 22, 1.8),
@@ -462,7 +464,8 @@ function spaceNoteHtml(loc, n, w) {
   const alt = S.locations.filter(l => lc(l) !== lc(loc)).map(locSpace).filter(x => x.kind === 'cellar' && x.cap && x.free > 0).sort((a, b) => b.free - a.free)[0];
   return `<p class="space-note warn">${ICON.info}<span>${sp.free ? `Only about ${sp.free} ${sp.free === 1 ? 'place' : 'places'} left in ${esc(loc)}.` : `${esc(loc)} is full.`}${alt ? ` ${esc(alt.loc)} has about ${alt.free} free.` : ' No other location has room.'}</span></p>`;
 }
-const fillCls = pct => (pct >= 95 ? 'full' : pct >= 80 ? 'high' : '');
+/* green below 85%, yellow from 85%, orange from 95%, red when full */
+const fillCls = pct => (pct >= 100 ? 'full' : pct >= 95 ? 'orange' : pct >= 85 ? 'high' : '');
 /* the fill level as a bar with the numbers, for a location or the whole cellar */
 function fillBarHtml(x, label) {
   if (!x.cap) return '';
@@ -848,6 +851,8 @@ function afterRender(r) {
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
   if (r.p === 'sommelier') { const ta = $('#somm-text'); if (ta) autosize(ta); }
+  // a jump to a section, for example the wishlist from Insights
+  if (U.jumpTo) { const el = $('#' + U.jumpTo); U.jumpTo = null; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -10); } }
   if (r.p === 'journal-ai') { const ta = $('#ja-text'); if (ta) autosize(ta); }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); document.querySelectorAll('textarea.autosize').forEach(autosize); if (D.ai) updateBanner(); }

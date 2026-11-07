@@ -829,7 +829,8 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .fill { display: flex; flex-direction: column; gap: 6px; }
 .fill-bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
 .fill-bar i { display: block; height: 100%; border-radius: 5px; background: #4E9F6B; }
-.fill-bar.high i { background: #D9A23B; }
+.fill-bar.high i { background: #D9C23B; }
+.fill-bar.orange i { background: #E07B2C; }
 .fill-bar.full i { background: #C2414F; }
 .space-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .space-note { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); }

@@ -322,7 +322,7 @@ function viewSettings(first) {
 /* ------------------------------------------------------------ picker for countries and currencies, with search */
 
 const PICK = { kind: null, q: '' };
-const PICK_TITLE = { currency: 'Currency', country: 'Country for shopping', travel: 'Where are you?' };
+const PICK_TITLE = { currency: 'Currency', country: 'Country for shopping', travel: 'Where are you?', share: 'Where is your friend?' };
 function openPicker(kind) {
   PICK.kind = kind;
   PICK.q = '';
@@ -331,7 +331,7 @@ function openPicker(kind) {
   if (q) setTimeout(() => q.focus(), 60);
 }
 function closePicker() { PICK.kind = null; renderPicker(); }
-const pickCurrent = () => (PICK.kind === 'currency' ? cur() : PICK.kind === 'travel' ? travelCountry() : shopCountry());
+const pickCurrent = () => (PICK.kind === 'currency' ? cur() : PICK.kind === 'travel' ? travelCountry() : PICK.kind === 'share' ? SHARE.cc : shopCountry());
 function pickListHtml() {
   const q = lc(PICK.q.trim());
   const now = pickCurrent();
@@ -360,6 +360,7 @@ function renderPicker() {
 async function pickChoose(v) {
   const kind = PICK.kind;
   closePicker();
+  if (kind === 'share') { SHARE.cc = v; shareRender(); return; }
   if (kind === 'travel') { setTravelCountry(v); sommCountryChanged(); toast(`Prices are now checked in ${SHOP_COUNTRIES[v]}, in ${countryCur(v)}.`); refreshView(); return; }
   if (kind === 'currency') {
     S.settings = Object.assign({}, S.settings, { currency: v });
