@@ -172,6 +172,11 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .rating-val.none { font-size: 15px; font-weight: 400; color: var(--muted); }
 .rating-bar { touch-action: pan-y; cursor: pointer; padding: 6px 0; }
 .rating-bar .segs > div { height: 30px; }
+.tl-scale { position: relative; height: 18px; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.tl-scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.tl-scale span.l { transform: none; }
+.tl-scale span.r { transform: translateX(-100%); }
+.tl-scale .now { color: var(--text); font-weight: 500; }
 .scale { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .rating-ctl { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 4px; }
 .rating-ctl button { width: 52px; height: 44px; border: 1px solid var(--line); border-radius: 10px; background: transparent; display: flex; align-items: center; justify-content: center; }
@@ -934,3 +939,9 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 /* while listening the microphone becomes a stop square */
 .somm-mic.on svg { display: none; }
 .somm-mic.on::before { content: ''; width: 14px; height: 14px; border-radius: 3px; background: currentColor; }
+
+/* adding a wine: the AI details under their own title, Save always at hand */
+.form-sep { margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.form-sep h2 { font-size: 19px; font-weight: 600; }
+.form-sep p { margin: 0; font-size: 14px; color: var(--text-2); line-height: 1.45; }
+.save-bar { position: sticky; bottom: 0; z-index: 6; margin: 0 -20px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, rgba(26, 12, 18, 0), var(--bg) 30%); }

@@ -3,20 +3,20 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.5.4';
+const APP_VERSION = '3.5.5';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
 const SEG_COLORS = ['#9E0F0F', '#A8160F', '#B2210F', '#BC2D10', '#C53A12', '#CD4815', '#D55618', '#DD651C', '#E57620', '#EC8724', '#F09928', '#EFA82C', '#DFAE2E', '#CCAF30', '#B5AC31', '#9CA632', '#839E34', '#6A9636', '#528E38', '#3A863A'];
 const STATUS = {
-  'Past peak': { c: '#EC7A69', hint: 'Open these first' },
+  'Past its window': { c: '#EC7A69', hint: 'Open these first' },
   'Drink soon': { c: '#EDAA45', hint: 'Past their peak, still drinking well' },
   'Peak': { c: '#5CC489', hint: 'Best time to open' },
   'Ready': { c: '#8FBF73', hint: 'Drinkable now, will still improve' },
   'Too young': { c: '#9AA8C2', hint: 'Keep resting' },
   'No window': { c: '#8F837C', hint: 'Add a drinking window to track these' }
 };
-const STATUS_ORDER = ['Past peak', 'Drink soon', 'Peak', 'Ready', 'Too young', 'No window'];
+const STATUS_ORDER = ['Past its window', 'Drink soon', 'Peak', 'Ready', 'Too young', 'No window'];
 const TYPES = ['Red', 'White', 'Rosé', 'Sparkling', 'Dessert', 'Fortified'];
 const SYSTEMS = [
   { key: 'Vivino', max: 5 },
@@ -500,7 +500,7 @@ function statusOf(w, t = TODAY) {
   if (t < p.pf) return 'Ready';
   if (t < p.pt + 1) return 'Peak';
   if (t < p.u + 1) return 'Drink soon';
-  return 'Past peak';
+  return 'Past its window';
 }
 
 function statusLine(w) {
@@ -511,8 +511,8 @@ function statusLine(w) {
     'Too young': `Ready from ${p.f}`,
     'Ready': `Peak from ${p.pf}`,
     'Peak': `Peak until ${p.pt}`,
-    'Drink soon': `Drink by ${p.u}`,
-    'Past peak': `Past peak since ${p.u + 1}`
+    'Drink soon': `Past peak since ${p.pt + 1}, drink by ${p.u}`,
+    'Past its window': `Past its window since ${p.u + 1}`
   }[s];
 }
 
@@ -532,10 +532,20 @@ function timelineHtml(w, big = false) {
     [p.pf - p.f, STATUS['Ready'].c],
     [p.pt + 1 - p.pf, STATUS['Peak'].c],
     [p.u - p.pt, STATUS['Drink soon'].c],
-    [e - (p.u + 1), STATUS['Past peak'].c]
+    [e - (p.u + 1), STATUS['Past its window'].c]
   ].filter(x => x[0] > 0);
   const pos = clamp((TODAY - s) / (e - s) * 100, 0, 100);
   return `<div class="bar${big ? ' big' : ''}"><div class="bar-segs">${parts.map(x => `<div style="flex:${x[0]} 1 0;background:${x[1]}"></div>`).join('')}</div><div class="bar-marker" style="left:calc(${pos.toFixed(1)}% - 1px)"></div></div>`;
+}
+
+/* the years under the timeline, each right below its place: start and end of the window, and today */
+function timelineScaleHtml(w) {
+  const p = windowParts(w);
+  if (!p) return '';
+  const s = p.f - 2, e = p.u + 3, at = y => clamp((y - s) / (e - s) * 100, 0, 100);
+  const t = at(TODAY), f = at(p.f), u = at(p.u + 1);
+  const lab = (x, txt, cls) => `<span class="${cls || ''}${x < 7 ? ' l' : x > 93 ? ' r' : ''}" style="left:${x.toFixed(1)}%">${txt}</span>`;
+  return `<div class="tl-scale">${Math.abs(f - t) >= 13 ? lab(f, p.f) : ''}${Math.abs(u - t) >= 13 ? lab(u, p.u) : ''}${lab(t, 'Today', 'now')}</div>`;
 }
 
 const windowText = w => {

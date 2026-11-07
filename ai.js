@@ -162,7 +162,7 @@ function checkWindowHtml(a) {
   if (!p) return '';
   const s = statusOf(w);
   return `<div class="somm-win"><div class="between"><b>Drinking window</b><span class="small" style="color:${STATUS[s].c};font-weight:600">${esc(s)}</span></div>
-    ${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>
+    ${timelineHtml(w, true)}${timelineScaleHtml(w)}
     <p class="tiny muted" style="margin:0">${esc(windowText(w))}</p>${a.drinkNote ? `<p class="small" style="margin:2px 0 0;line-height:1.45">${esc(a.drinkNote)}</p>` : ''}</div>`;
 }
 
@@ -931,7 +931,7 @@ function renderPreview() {
   const p = windowParts(w), s = statusOf(w);
   const section = (title, body) => `<section style="gap:12px"><h2>${title}</h2>${body}</section>`;
   // the window known from the answer shows at once, also while the rest is loading
-  const winSec = p ? section('Drinking window', `<span class="small" style="color:${STATUS[s].c};font-weight:500;margin-top:-6px">${statusLine(w)}</span>${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>`) : '';
+  const winSec = p ? section('Drinking window', `<span class="small" style="color:${STATUS[s].c};font-weight:500;margin-top:-6px">${statusLine(w)}</span>${timelineHtml(w, true)}${timelineScaleHtml(w)}`) : '';
   const body = PREV.busy
     ? `${winSec}<div class="info-wait"><p class="somm-wait">Loading taste profile and drinking window<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Only for the wines you open, about 1 to 2 cents. Kept on your phone.</p></div>`
     : PREV.error ? `${winSec}<p class="small" style="margin:0;color:var(--danger)">${esc(PREV.error)}</p>`

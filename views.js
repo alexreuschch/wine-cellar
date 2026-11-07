@@ -586,7 +586,7 @@ function viewWine(id) {
     ${isDisc(w) ? discoveryHtml(w) : stockHtml(w)}
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>
-      ${p ? `${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div><p class="muted tiny" style="margin:0">${windowText(w)}</p>`
+      ${p ? `${timelineHtml(w, true)}${timelineScaleHtml(w)}<p class="muted tiny" style="margin:0">${windowText(w)}</p>`
         : `<p class="muted small" style="margin:0">No drinking window set yet. <a href="${editHref}">Add one</a></p>`}
     </section>
     <section>

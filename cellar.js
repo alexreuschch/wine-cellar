@@ -342,7 +342,7 @@ function onRange(el) {
 
 function drinkSoonHtml() {
   if (U.search.trim() || activeCount('cellar')) return '';
-  const list = S.wines.filter(w => w.count > 0 && ['Past peak', 'Drink soon'].includes(statusOf(w))).sort(urgencyCmp);
+  const list = S.wines.filter(w => w.count > 0 && ['Past its window', 'Drink soon'].includes(statusOf(w))).sort(urgencyCmp);
   if (!list.length) return '';
   return `<section><h2>Drink soon <span class="muted small" style="font-weight:400">${list.length}</span></h2><div>${list.map(wineRow).join('')}</div></section>`;
 }

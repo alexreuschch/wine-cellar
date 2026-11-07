@@ -79,7 +79,7 @@ function renderSizeBox() { const b = $('#size-box'); if (b) b.innerHTML = sizeFi
 const draftWineLike = () => ({ size: Number(D && D.fields.size) || 75, type: D ? D.fields.type : 'Red' });
 
 function stockEditorHtml() {
-  const add = D.mode === 'add';
+  const add = D.mode !== 'edit';
   const rows = D.stock.map((e, i) => {
     const locSel = add
       ? `<label class="field" style="flex:1;min-width:0">Location<select data-change="stock-loc" data-i="${i}">${e.loc ? '' : '<option value="" selected disabled>Choose a location</option>'}${S.locations.concat(e.loc && !S.locations.includes(e.loc) ? [e.loc] : []).map(l => `<option${l === e.loc ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>`
@@ -168,8 +168,9 @@ function formBody() {
   // in Edit the AI status stands right above the update button, where you tapped
   const aiBanner = '<div id="ai-banner" hidden></div>';
   const banner = (D.mode === 'edit' ? '' : aiBanner) + '<div id="dup-box">' + dupHtml() + '</div>';
-  // in Edit, ratings and stock are what you change most, so they come right after vintage and type
-  const quick = `
+  // in Edit, ratings and stock are what you change most, so they come right after vintage and type.
+  // When adding, what only you know comes first (storage, how you got it), the AI details after it to check.
+  const rateBox = `
     <div class="box"><div class="rating-head"><span class="box-title">My rating</span><span class="rating-val${D.myRating === null ? ' none' : ''}" id="rating-val">${D.myRating === null ? 'Not rated' : D.myRating + '%'}</span></div>
       <div class="rating-bar" id="rating-bar">${segsHtml(D.myRating, 30, 'lg')}</div>
       <div class="scale"><span>0</span><span>50</span><span>100</span></div>
@@ -177,20 +178,11 @@ function formBody() {
       ${rateExtrasHtml('form')}
       <button class="btn ghost" style="height:40px;align-self:center;font-size:15px" data-act="rate-clear">Clear rating</button>
     </div>
-    <div class="box" id="ext-box">${extRatingsHtml()}</div>
-    <div id="stock-box">${stockEditorHtml()}</div>
-`;
-  return `
-    ${D.preview ? `<img class="preview" src="${esc(D.preview)}" alt="Label">` : ''}
-    <button class="btn ghost" data-act="new-photo">${D.preview ? 'Replace label photo' : 'Add label photo'}</button>
-    ${banner}
+    <div class="box" id="ext-box">${extRatingsHtml()}</div>`;
+  const stockBox = `<div id="stock-box">${stockEditorHtml()}</div>`;
+  const add = D.mode !== 'edit';
+  const details = `
     <div class="form-grid">
-      ${field('Producer', 'producer', { full: true })}
-      ${field('Wine', 'name', { full: true })}
-      ${field('Vintage', 'vintage', { num: true, ph: '2019' })}
-      <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
-      <div id="size-box" style="display:contents">${sizeFieldHtml()}</div>
-    ${D.mode === 'edit' ? `</div>${quick}<div class="form-grid">` : ''}
       ${field('Region', 'region', { full: true, ph: 'Piedmont, Italy' })}
       ${field('Grapes', 'grapes', { full: true, ph: 'Nebbiolo 100%' })}
 
@@ -206,15 +198,35 @@ function formBody() {
     <div class="box" id="ab-editor">${aboutEditorHtml()}</div>
     ${D.mode === 'edit' ? aiBanner : ''}
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update wine info with AI</button>
-    <p class="muted tiny" style="margin:-10px 0 0">Fills in details, drinking window, taste profile and background from what you entered, for example the vintage. Fields you changed here stay as they are. About 3 cents.</p>
-${D.mode === 'edit' ? '' : quick}
-    ${D.mode === 'add' ? acquisitionBox() : `<div class="box"><span class="box-title">Purchases</span><div id="purchases-box">${purchasesHtml(wineById(D.id) || { id: D.id }, true)}</div>
-      <button class="btn dashed" data-act="record-add">Add purchase record</button>
-      <p class="muted tiny" style="margin:0">Tap a purchase to edit it or to set the retailer's website.</p></div>`}
+    <p class="muted tiny" style="margin:-10px 0 0">Fills in details, drinking window, taste profile and background from what you entered, for example the vintage. Fields you changed here stay as they are. About 3 cents.</p>`;
+  return `
+    ${D.preview ? `<img class="preview" src="${esc(D.preview)}" alt="Label">` : ''}
+    <button class="btn ghost" data-act="new-photo">${D.preview ? 'Replace label photo' : 'Add label photo'}</button>
+    ${banner}
+    <div class="form-grid">
+      ${field('Producer', 'producer', { full: true })}
+      ${field('Wine', 'name', { full: true })}
+      ${field('Vintage', 'vintage', { num: true, ph: '2019' })}
+      <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      <div id="size-box" style="display:contents">${sizeFieldHtml()}</div>
+    </div>
+    ${add ? `${stockBox}
+    ${acquisitionBox()}
     ${streetBox()}
-    ${D.mode === 'edit' ? `<div class="box" id="offer-box">${offerBoxHtml()}</div>` : ''}
+    ${rateBox}
+    <div class="form-sep"><h2>Wine details</h2><p>Filled in by AI from the label. Check them and change what is not right.</p></div>
+    ${details}
+    <div class="save-bar"><button class="btn primary big block" data-act="save-wine">Save wine</button></div>`
+    : `${rateBox}
+    ${stockBox}
+    ${details}
+    <div class="box"><span class="box-title">Purchases</span><div id="purchases-box">${purchasesHtml(wineById(D.id) || { id: D.id }, true)}</div>
+      <button class="btn dashed" data-act="record-add">Add purchase record</button>
+      <p class="muted tiny" style="margin:0">Tap a purchase to edit it or to set the retailer's website.</p></div>
+    ${streetBox()}
+    <div class="box" id="offer-box">${offerBoxHtml()}</div>
     <button class="btn primary big block" data-act="save-wine">Save wine</button>
-    ${D.mode === 'edit' ? `<button class="btn danger block" data-act="delete-wine">Delete wine</button>` : ''}`;
+    <button class="btn danger block" data-act="delete-wine">Delete wine</button>`}`;
 }
 
 /* tag editor for taste tags and food pairings */

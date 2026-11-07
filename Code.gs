@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 41;
+var API_VERSION = 42;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -2338,7 +2338,7 @@ function monthlyDigest() {
   var past = [], soon = [], peakNew = [];
   wines.forEach(function (w) {
     var s = status_(w, t);
-    if (s === 'Past peak') past.push(w);
+    if (s === 'Past its window') past.push(w);
     else if (s === 'Drink soon') soon.push(w);
     else if (s === 'Peak' && Number(w.peakFrom) === year) peakNew.push(w);
   });
@@ -2359,7 +2359,7 @@ function monthlyDigest() {
     '<p style="margin:0 0 2px;font-family:Georgia,serif;font-size:22px;color:#620018">Vintary</p>' +
     '<p style="margin:0 0 14px;color:#888;font-style:italic">Wine, made personal.</p>' +
     '<p>Here is your monthly drinking window update.</p>' +
-    block('Past peak', past, 'Open these first.') +
+    block('Past its window', past, 'Open these first.') +
     block('Drink soon', soon, 'Past their peak, still drinking well.') +
     block('Now at peak', peakNew, 'They entered their peak this year.') +
     '</div>';
@@ -2385,7 +2385,7 @@ function status_(w, t) {
   if (t < pf) return 'Ready';
   if (t < pt + 1) return 'Peak';
   if (t < u + 1) return 'Drink soon';
-  return 'Past peak';
+  return 'Past its window';
 }
 
 // ---------------------------------------------------------------- sheet helpers
