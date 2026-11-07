@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 31;
+var API_VERSION = 32;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -19,14 +19,16 @@ var WINE_COLS = [
   'drinkFrom', 'peakFrom', 'peakUntil', 'drinkUntil', 'location', 'shelf', 'position', 'count',
   'myRating', 'ratings', 'labelFileId', 'thumb', 'createdAt', 'updatedAt',
   'retailer', 'purchaseDate', 'purchasePrice', 'streetPrice', 'acquired', 'giftFrom',
-  'stock', 'street', 'offer', 'profile', 'origin'
+  'stock', 'street', 'offer', 'profile', 'origin', 'size'
 ];
+// size: the bottle size in cl, empty means a standard bottle of 75 cl
 // origin "discovery": a wine tasted out, for example in a restaurant, never in the cellar
 // The Removals tab is the journal: bottles going out (dir "out"), coming in (dir "in") and discoveries tasted out (dir "taste", no bottle).
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
   'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer', 'venue', 'shopRef'];
 // venue of a discovery: "restaurant", "shop" or "other"; shopRef: the shop price it was compared with, as JSON {v, cur}
-var LOCATION_COLS = ['name', 'shelves'];
+var LOCATION_COLS = ['name', 'shelves', 'capacity', 'kind'];
+// capacity: about how many standard bottles fit; kind: "cellar" for storage, "short" for a short stay such as the kitchen
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name', 'aliases', 'note'];
 // aliases: other names of the same person, comma separated; note: what is worth knowing about them, for example what they like
@@ -44,7 +46,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '16';
+var SCHEMA_VERSION = '17';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -86,6 +88,7 @@ var ACTIONS = {
   renameRetailer: actionRenameRetailer_,
   renameLocation: actionRenameLocation_,
   setShelfNames: actionSetShelfNames_,
+  setLocationInfo: actionSetLocationInfo_,
   savePerson: actionSavePerson_,
   deletePerson: actionDeletePerson_,
   renamePerson: actionRenamePerson_,
@@ -499,7 +502,7 @@ function actionLoad_() {
     wines: readAll_(SHEETS.wines),
     removals: readAll_(SHEETS.removals),
     locations: readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String),
-    locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(function (r) { return { name: String(r.name), shelves: parseShelves_(r.shelves) }; }),
+    locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(function (r) { return { name: String(r.name), shelves: parseShelves_(r.shelves), capacity: Number(r.capacity) > 0 ? Math.round(Number(r.capacity)) : null, kind: r.kind === 'short' ? 'short' : 'cellar' }; }),
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
     people: peopleList_(),
     peopleInfo: peopleInfo_(),
@@ -720,6 +723,19 @@ function actionSetShelfNames_(req) {
     var n = updateRows_(SHEETS.locations, function (o) { if (lower_(o.name) !== lower_(name)) return false; o.shelves = JSON.stringify(clean); return true; });
     if (!n) throw new Error('Location not found');
     return clean;
+  });
+}
+
+/** About how many standard bottles fit into a location, and whether it is for storage or a short stay. */
+function actionSetLocationInfo_(req) {
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('Missing location name');
+  var cap = Number(req.capacity) > 0 ? Math.min(100000, Math.round(Number(req.capacity))) : '';
+  var kind = req.kind === 'short' ? 'short' : 'cellar';
+  return withLock_(function () {
+    var n = updateRows_(SHEETS.locations, function (o) { if (lower_(o.name) !== lower_(name)) return false; o.capacity = cap; o.kind = kind; return true; });
+    if (!n) throw new Error('Location not found');
+    return { name: name, capacity: cap || null, kind: kind };
   });
 }
 
@@ -995,6 +1011,7 @@ var ANALYZE_PROMPT = [
   '"producer": the winery or producer,',
   '"name": the wine or cuvee name without producer and vintage (use the appellation if there is no separate name),',
   '"vintage": the year as a number, or null for non-vintage,',
+  '"size": the bottle size in cl as a number if the label or the photo shows it, for example 37.5, 75 or 150, otherwise null,',
   '"type": exactly one of "Red", "White", "Rosé", "Sparkling", "Dessert", "Fortified",',
   '"region": region and country, for example "Piedmont, Italy",',
   '"grapes": grape varieties with shares, for example "Nebbiolo 100%" or "Merlot 70%, Cabernet Franc 30%" (if the label does not say, use typical shares from your knowledge and set "typical" in the profile to true),',
@@ -1219,8 +1236,8 @@ function actionStreetPrice_(req) {
   var w = toObj_(t.headers, t.rows[idx]);
   var sc = shopScope_();
   var cur = sc.cur;
-  var wine = [w.producer, w.name, w.vintage].filter(String).join(' ');
-  var prompt = 'Find the current typical retail price for one 0.75 l bottle of this wine for a buyer in ' + sc.name + ': ' + wine +
+  var wine = [w.producer, w.name, w.vintage].filter(String).join(' ') + sizeText_(w.size);
+  var prompt = 'Find the current typical retail price for one bottle of this wine (0.75 l, unless a bottle size is given, then exactly that size) for a buyer in ' + sc.name + ': ' + wine +
     (w.region ? ' (' + w.region + ')' : '') + '. Search the web for current offers from ' + sc.where + '. ' +
     'Use the median of the offers you find for exactly this vintage. If there is no offer for this vintage, use the closest vintage and set confidence to "low". ' +
     'Give the price in ' + cur + '. Return ONLY a JSON object, no other text: {"price": number per bottle, "currency": "three letter ISO code", "source": "shop or website name", "confidence": "high" or "medium" or "low"}. ' +
@@ -1277,7 +1294,7 @@ function actionBestOffer_(req) {
   var idx = findIndex_(t, req.id);
   if (idx < 0) throw new Error('Wine not found');
   var w = toObj_(t.headers, t.rows[idx]);
-  var offer = findOffer_([w.producer, w.name, w.vintage].filter(String).join(' '), w.region, !!req.fresh);
+  var offer = findOffer_([w.producer, w.name, w.vintage].filter(String).join(' ') + sizeText_(w.size), w.region, !!req.fresh);
   return withLock_(function () {
     var t2 = table_(SHEETS.wines);
     var i2 = findIndex_(t2, req.id);
@@ -1289,10 +1306,18 @@ function actionBestOffer_(req) {
   });
 }
 
+/** The bottle size as words for searches, empty for a standard bottle of 75 cl. */
+function sizeText_(cl) {
+  var n = Number(cl);
+  if (!(n > 0) || n === 75) return '';
+  var name = n === 37.5 ? 'half bottle' : n === 50 ? 'bottle' : n === 150 ? 'Magnum' : n === 300 ? 'Double magnum' : 'bottle';
+  return ' (' + name + ', ' + String(n).replace(/\.0$/, '') + ' cl)';
+}
+
 /** Request for the cheapest shop offer of one wine in the country of the chosen currency. Another vintage of the same wine is fine if the asked one is not sold. */
 function offerRequest_(wine, region, uses) {
   var sc = shopScope_();
-  var prompt = 'Find the online shop that currently sells this wine at the lowest price per 0.75 l bottle, for a buyer in ' + sc.name + ': ' + wine +
+  var prompt = 'Find the online shop that currently sells this wine at the lowest price per bottle (0.75 l, unless a bottle size is given with the wine, then exactly that size), for a buyer in ' + sc.name + ': ' + wine +
     (region ? ' (' + region + ')' : '') + '. Search the web for offers of this wine from ' + sc.where + '. Prefer the vintage given; if no shop sells it, take the closest vintage of the same wine that is available and report it. ' +
     'Compare the shops by price including the shipping cost to ' + sc.name + ', for an order of about 6 bottles, where the shop states it. ' +
     'Prices are usually in ' + sc.cur + '. Ignore auctions, marketplaces of private sellers and offers that are sold out. ' +
@@ -1339,7 +1364,7 @@ function findOffer_(wine, region, fresh) {
 
 /** When no shop in the country sells a wine: one shop anywhere in the world as a price reference. */
 function worldOfferRequest_(wine, region) {
-  var prompt = 'Find an online shop anywhere in the world that currently sells this wine, as a price reference per 0.75 l bottle: ' + wine + (region ? ' (' + region + ')' : '') + '. ' +
+  var prompt = 'Find an online shop anywhere in the world that currently sells this wine, as a price reference per bottle (0.75 l, unless a bottle size is given with the wine, then exactly that size): ' + wine + (region ? ' (' + region + ')' : '') + '. ' +
     'Prefer shops in the country where the wine is made or in large wine markets, and the vintage given; if no shop sells it, take the closest vintage of the same wine and report it. ' +
     'Ignore auctions, marketplaces of private sellers and offers that are sold out. The link must be the product page of this wine at that shop, taken from your search results. ' +
     'Return ONLY a JSON object, no other text: {"shop": "shop name", "country": "two letter ISO code of the country where the shop is based", "price": number per bottle, "currency": "three letter ISO code", "url": "direct link to the product page", "vintage": "vintage of the offer"}. ' +
@@ -1580,7 +1605,7 @@ var CHECK_RULES = [
   'You are a warm, knowledgeable sommelier. The owner of a private cellar looks at a wine that is NOT in their cellar, for example in a shop, at a restaurant or at a friend, and wants to know if they will like it.',
   'You get a photo of the label or a description, maybe with a price, plus the cellar, the finished wines with ratings and the journal of the owner.',
   'Rules:',
-  '1. Identify the wine: producer, name and vintage. Put them in "wine". If you are unsure, say what you think it is.',
+  '1. Identify the wine: producer, name and vintage. Put them in "wine". If you are unsure, say what you think it is. If the label or the question shows a bottle size other than 75 cl, add it to "wine", for example "Domaine X Pinot Noir 2019 (Magnum, 150 cl)", and a price refers to that bottle.',
   '2. Judge how well it fits the taste of the owner, based on the wines they rated highly or low, their favorites and what they drink often. Give "fit" from 0 to 100.',
   '3. In "answer" explain the style and why it fits or not. Do not discuss shop prices: the app checks them in local shops and shows them next to your answer. If the owner mentions a price, put it in "price" with its currency in "priceCur" (three letter ISO code) and the app tells you below whether the owner is in a shop or a restaurant.',
   '4. Say whether the cellar already holds similar wines in enough bottles.',
@@ -1610,7 +1635,7 @@ function cellarContext_() {
     var where = parseStock_(w.stock).map(function (e) { return e.n + ' in ' + [e.loc, e.shelf === null || e.shelf === '' ? '' : shelfName(e.loc, e.shelf), e.pos].filter(String).join(', '); }).join('; ');
     var win = [w.drinkFrom, w.drinkUntil].every(function (x) { return x !== '' && x !== null; }) ? ' (drink ' + w.drinkFrom + ' to ' + w.drinkUntil + (w.peakFrom !== '' && w.peakUntil !== '' ? ', peak ' + w.peakFrom + ' to ' + w.peakUntil : '') + ')' : '';
     return [
-      w.id, [w.producer, w.name, w.vintage].filter(String).join(' '), w.type, w.region, w.grapes,
+      w.id, [w.producer, w.name, w.vintage].filter(String).join(' ') + sizeText_(w.size), w.type, w.region, w.grapes,
       w.tasteTags ? 'style: ' + w.tasteTags : '', w.pairings ? 'pairs with: ' + w.pairings : '',
       'status: ' + status_(w, t) + win, ratings.join(', '), streetText(w), where
     ].filter(String).join(' | ');
@@ -1840,7 +1865,7 @@ var CONSULTANT_RULES = [
   'Rules:',
   '1. Fit the taste of the owner: styles, grapes and regions they rate highly and drink often. Avoid styles they rated low.',
   '2. Respect the budget per bottle. Prefer wines with an outstanding price to quality ratio, for example from lesser known producers or regions.',
-  '3. Plan quantities sensibly. Compare the stock of each style with how fast the owner drinks it. Where the stock is large, only suggest small quantities of a clearly different style. Where stock is low compared to consumption, suggest more bottles.',
+  '3. Plan quantities sensibly. Compare the stock of each style with how fast the owner drinks it. Where the stock is large, only suggest small quantities of a clearly different style. Where stock is low compared to consumption, suggest more bottles. Respect the cellar space in the profile: the bottles of all picks together must fit into the free space. When the cellar is nearly full, or the stock lasts for years at the current pace, say so clearly in "summary", suggest few bottles or none, and say which wines to drink first.',
   '4. A suggestion may replace a wine in stock with few bottles left (1 to 3) when it has better ratings and a better price to quality ratio. Then give the id of that wine in "replaces" and the reason in "replaceWhy". Otherwise leave both empty.',
   '5. Mix the labels: "Safe bet" (close to their favorites), "New to you" (new grape or region that fits their taste), "Top value" (outstanding price to quality).',
   '6. "price" is your estimate of the typical shop price per bottle in the currency of the budget. "vintage" is a recommended recent vintage as a number, or null.',

@@ -439,10 +439,18 @@ function viewJournal() {
 
 /* ------------------------------------------------------------ view: wine detail */
 
+/* a wine meant for ageing that stays in a place for a short stay, such as the kitchen, for more than a month */
+function shortStayHtml(w, e) {
+  if (!e.loc || locInfoOf(e.loc).kind !== 'short' || !(w.drinkUntil && w.drinkUntil >= new Date().getFullYear() + 2)) return '';
+  const last = S.removals.filter(r => r.wineId === w.id && r.dir === 'in' && lc(r.loc) === lc(e.loc)).map(r => r.date).sort().pop();
+  if (last && (Date.now() - (parseISO(last) || new Date()).getTime()) / 864e5 < 30) return '';
+  return `<span class="space-note warn" style="margin-top:4px">${ICON.pin}<span>${esc(e.loc)} is for a short stay. For ageing, move it to a cellar location in Edit.</span></span>`;
+}
+
 const whereText = e => [shelfLabel(e.loc, shelfVal(e.shelf)), e.pos].filter(Boolean).join(' · ');
 
 function stockHtml(w) {
-  const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}</div>
+  const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}${shortStayHtml(w, e)}</div>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Take a bottle from ${esc(placeLabel(e))}">${ICON.minus}</button><span>${e.n}</span><button data-act="plus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Add bottles to ${esc(placeLabel(e))}">${ICON.plus}</button></div></div>`).join('');
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
@@ -545,7 +553,7 @@ function viewWine(id) {
   const label = w.thumb || w.labelFileId
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
-  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, alcText(w)].filter(Boolean).join(' · ');
+  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w), alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
     <div class="detail-top">${isDisc(w) ? `<a class="back" href="#/top">${ICON.back}Top rated</a>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}

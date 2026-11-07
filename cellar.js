@@ -356,7 +356,9 @@ function viewCellar() {
   }
   const filters = filterArea('cellar');
   const btn = filterButton('cellar');
-  return `<main class="screen has-nav">${head}${notice}${statsHtml()}
+  const cs = cellarSpace();
+  const space = cs.cap ? `<a class="space-card" href="#/settings" aria-label="Cellar space, set in Settings">${fillBarHtml(cs, 'Cellar space')}</a>` : '';
+  return `<main class="screen has-nav">${head}${notice}${statsHtml()}${space}
     <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search wine, grape or food" value="${esc(U.search)}"></label>${btn}</div>
     ${filters}
     <div id="drink-soon">${drinkSoonHtml()}</div>

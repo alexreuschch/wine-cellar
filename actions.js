@@ -57,6 +57,7 @@ const ACTS = {
   },
   'ed-open': el => { U.edit = { kind: el.dataset.k, name: el.dataset.v }; U.locMove = null; refreshView(); const i = $('#ed-name'); if (i) i.focus(); },
   'ed-cancel': () => { U.edit = null; refreshView(); },
+  'loc-kind': el => { if (U.edit) { const i = $('#ed-name'); if (i) U.edit.typed = i.value; U.edit.lkind = el.dataset.v; refreshView(); } },
   'shelf-more': () => { if (U.edit) { const i = $('#ed-name'); if (i) U.edit.typed = i.value; U.edit.shelfTop = (U.edit.shelfTop || 0) + 1; refreshView(); } },
   'ed-save': () => saveEdit(),
   'ret-add': async () => {
@@ -250,7 +251,7 @@ const ACTS = {
     const h = $('#rs-hint');
     if (h) h.textContent = placeHint();
   },
-  'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').value = RS.qty; },
+  'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').value = RS.qty; refreshSpaceNotes(); },
   'rs-skip': () => saveSheet(false),
   'rs-save': () => saveSheet(true),
   'rs-delete': () => startDelete(),
@@ -286,6 +287,7 @@ const ACTS = {
     const e = D.stock[Number(el.dataset.i)];
     e.n = clamp(e.n + Number(el.dataset.d), 0, 999);
     $('#st-n-' + el.dataset.i).value = e.n;
+    refreshSpaceNotes();
     const t = $('#st-total');
     if (t) t.textContent = D.stock.reduce((a, x) => a + x.n, 0) + ' bottles';
   },
@@ -402,6 +404,7 @@ const INPUTS = {
   },
   rng: el => onRange(el),
   rtmin: el => onRatingMin(el),
+  'ed-cap': el => { if (U.edit) U.edit.cap = el.value; },
   'ed-shelf': el => { if (U.edit && U.edit.shelves) { const v = el.value.trim(); if (v) U.edit.shelves[el.dataset.n] = el.value; else delete U.edit.shelves[el.dataset.n]; } },
   'ers-score': el => { if (!RT) return; RT.score = el.value; const p = $('#rt-preview'); if (p) p.innerHTML = rtPreview(); },
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
@@ -464,10 +467,11 @@ const CHANGES = {
   'top-disc': el => { U.topDisc = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },
   'qty-in': el => setQty(el, true),
+  'size-sel': el => { if (!D) return; D.touched.add('size'); if (el.value === 'other') { D.sizeOther = true; D.fields.size = ''; } else { D.sizeOther = false; D.fields.size = el.value; } renderSizeBox(); refreshSpaceNotes(); if (D.sizeOther) { const i = $('[name="size"]'); if (i) i.focus(); } },
   'stock-loc': async el => {
     if (!D) return;
     const e = D.stock[Number(el.dataset.i)];
-    if (el.value !== '__new') { e.loc = el.value; return; }
+    if (el.value !== '__new') { e.loc = el.value; refreshSpaceNotes(); return; }
     const name = await newLocationPrompt();
     if (name) e.loc = name;
     renderStockBox();
@@ -532,6 +536,13 @@ function openExternal(url) {
 }
 
 /** Typed bottle counts. While typing only the state changes, on leaving the field the value is corrected. */
+/* the hint on free space follows the number of bottles */
+function refreshSpaceNotes() {
+  const n = $('#space-note');
+  if (n && RS) n.innerHTML = spaceNoteHtml(RS.loc, RS.qty, wineById(RS.wineId));
+  if (D && D.mode === 'add') D.stock.forEach((e, i) => { const b = $('#st-space-' + i); if (b) b.innerHTML = spaceNoteHtml(e.loc, e.n, draftWineLike()); });
+}
+
 function setQty(el, final) {
   const raw = el.value.replace(/[^0-9]/g, '');
   const k = el.dataset.k;
@@ -549,6 +560,7 @@ function setQty(el, final) {
     v = clamp(v === null ? 1 : v, 1, Math.max(1, src ? src.n : 1));
     D.move.n = v;
   } else return;
+  if (k === 'rs' || k === 'st') refreshSpaceNotes();
   if (final || String(v) !== raw && raw !== '') el.value = v;
 }
 

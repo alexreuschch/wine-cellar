@@ -123,7 +123,7 @@ function renderSheet() {
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" class="shelf-val">${esc(shelfText(RS.loc, RS.shelf))}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input name="pos" data-input="rs" placeholder="Back row, left" value="${esc(RS.pos)}"></label>
       </div><p class="muted tiny" style="margin:-6px 0 0" id="rs-hint">${placeHint()}</p>` : '';
-    body = `${typeGrid}${locs}${place}${qty}${date}
+    body = `${typeGrid}${locs}${place}${qty}${RS.mode === 'add' ? `<div id="space-note">${spaceNoteHtml(RS.loc, RS.qty, w)}</div>` : ''}${date}
       ${RS.type === 'Purchase' ? picker('Retailer') : RS.type === 'Received' ? picker('From') : ''}
       ${showSite ? `<label class="field">Website of ${esc(RS.rp.people[0].name)}<input name="website" data-input="rs" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(RS.website)}"></label>` : ''}
       ${RS.type === 'Purchase' ? priceField('Purchase price per bottle') : RS.type === 'Received' ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>` : ''}

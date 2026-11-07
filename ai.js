@@ -656,9 +656,16 @@ function tasteProfile() {
   if (top.length) lines.push(['Rated highest', top.map(w => `${wineTitle(w)} ${w.vintage} ${w.myRating}%`).join(', ')]);
   if (tags.length) lines.push(['Style you like', tags.join(', ')]);
   lines.push(['Drinking', perMonth ? `about ${fmtNum(perMonth, 1)} bottles per month${occ.length ? `, mostly ${occ.join(' and ').toLowerCase()}` : ''}` : 'no bottles opened in the last 12 months']);
+  const cs = cellarSpace();
+  const totalStock = stock.reduce((x, w) => x + w.count, 0);
+  if (cs.cap) {
+    const lasts = perMonth ? Math.round(totalStock / perMonth) : null;
+    lines.push(['Cellar space', `about ${cs.free} of ${cs.cap} places free${cs.pct >= 95 ? ', full' : cs.pct >= 80 ? ', nearly full' : ''}${lasts !== null ? `; the stock lasts about ${lasts > 99 ? '99+' : lasts} months at your pace` : ''}`]);
+  }
   const text = [
     ...lines.map(l => `${l[0]}: ${l[1]}`),
     low.length ? `Rated lowest: ${low.map(w => `${fullName(w)} ${w.myRating}%`).join(', ')}` : '',
+    cs.cap ? `Free space in the cellar: about ${cs.free} standard bottle places (${Math.round(cs.used)} of about ${cs.cap} used). A magnum takes 1.5 places.` : 'The cellar space is not set.',
     'Stock compared with drinking over the last 12 months:',
     ...cover.map(c => `${c.t}: ${btl(c.stock)} in stock, ${c.used} opened in 12 months${c.months !== null ? `, lasts about ${c.months} months` : ''}`)
   ].filter(Boolean).join('\n');

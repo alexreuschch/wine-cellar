@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.27.0';
+const APP_VERSION = '2.28.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -116,7 +116,7 @@ const store = {
 };
 
 let CFG = store.get('wc-config', null);
-const S = { wines: [], removals: [], locations: [], shelfNames: {}, retailers: [], people: [], peopleInfo: [], wishlist: [], history: [], usage: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
+const S = { wines: [], removals: [], locations: [], shelfNames: {}, locInfo: {}, retailers: [], people: [], peopleInfo: [], wishlist: [], history: [], usage: [], settings: { currency: 'CHF' }, fx: null, version: 0 };
 const newF = () => ({ open: false, sel: {}, tab: null, q: {}, all: {} });
 const U = {
   search: '', showFinished: false, f: { cellar: newF(), journal: newF(), top: newF() },
@@ -231,6 +231,7 @@ function normWine(w) {
     thumb: str(w.thumb),
     profile: typeof parseProfile === 'function' ? parseProfile(w.profile) : null,
     origin: str(w.origin) === 'discovery' ? 'discovery' : '',
+    size: Number(String(w.size || '').replace(',', '.')) > 0 ? Number(String(w.size).replace(',', '.')) : 75,
     createdAt: str(w.createdAt),
     updatedAt: str(w.updatedAt)
   };
@@ -374,6 +375,7 @@ function loadCache() {
   S.removals = (c.removals || []).map(normRemoval);
   if (Array.isArray(c.locations)) S.locations = c.locations;
   if (c.shelfNames) S.shelfNames = c.shelfNames;
+  if (c.locInfo) S.locInfo = c.locInfo;
   if (Array.isArray(c.retailers)) S.retailers = c.retailers;
   if (Array.isArray(c.people)) S.people = c.people;
   if (Array.isArray(c.peopleInfo)) S.peopleInfo = c.peopleInfo;
@@ -385,7 +387,7 @@ function loadCache() {
   if (c.version) S.version = c.version;
 }
 function persist() {
-  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, retailers: S.retailers, people: S.people, peopleInfo: S.peopleInfo, wishlist: S.wishlist, history: S.history, usage: S.usage, settings: S.settings, fx: S.fx, version: S.version });
+  store.set('wc-data', { wines: S.wines, removals: S.removals, locations: S.locations, shelfNames: S.shelfNames, locInfo: S.locInfo, retailers: S.retailers, people: S.people, peopleInfo: S.peopleInfo, wishlist: S.wishlist, history: S.history, usage: S.usage, settings: S.settings, fx: S.fx, version: S.version });
 }
 const wineById = id => S.wines.find(w => w.id === id);
 function upsertWine(w) {
@@ -413,7 +415,55 @@ function countryOf(w) {
 }
 const flagOf = w => { const c = countryOf(w); return c ? `<span class="flag" title="${esc(c.name)}" aria-label="${esc(c.name)}">${String.fromCodePoint(...[...c.code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))}</span>` : ''; };
 
-const wineSub = w => [w.name ? w.producer : '', w.vintage].filter(Boolean).join(' · ') || w.region || w.type;
+const wineSub = w => [w.name ? w.producer : '', w.vintage, w.size !== 75 ? sizeName(w.size) : ''].filter(Boolean).join(' · ') || w.region || w.type;
+
+/* ------------------------------------------------------------ bottle sizes and space in the cellar */
+
+const SIZES = [[37.5, 'Half bottle'], [50, 'Medium'], [75, 'Standard'], [150, 'Magnum'], [300, 'Double magnum']];
+const clText = cl => `${fmtNum(cl, cl % 1 ? 1 : 0)} cl`;
+const sizeName = cl => { const s = SIZES.find(x => x[0] === Number(cl)); return s && s[0] !== 75 ? s[1] : clText(cl); };
+/* the size under the name of a wine, only when it is not a standard bottle */
+const sizeText = w => (w.size && w.size !== 75 ? (SIZES.some(x => x[0] === w.size) ? `${sizeName(w.size)} · ${clText(w.size)}` : clText(w.size)) : '');
+/* how much space one bottle takes, in standard bottles: small ones 0.6, a magnum 1.5, sparkling wine a little more */
+function spaceOf(w) {
+  const cl = w && w.size ? w.size : 75;
+  const f = cl < 75 ? 0.6 : cl === 75 ? 1 : cl / 100;
+  return w && w.type === 'Sparkling' ? f * 1.2 : f;
+}
+const locInfoOf = loc => S.locInfo[lc(str(loc))] || { capacity: null, kind: 'cellar' };
+/* the space a location has and uses, in standard bottles */
+function locSpace(loc) {
+  let used = 0, bottles = 0;
+  S.wines.forEach(w => w.stock.forEach(e => { if (lc(e.loc) === lc(loc)) { used += e.n * spaceOf(w); bottles += e.n; } }));
+  const info = locInfoOf(loc), cap = info.capacity;
+  return { loc, bottles, used, cap, kind: info.kind, free: cap ? Math.max(0, Math.round(cap - used)) : null, pct: cap ? Math.min(100, Math.round(used / cap * 100)) : null };
+}
+/* all storage locations together; locations for a short stay and without a capacity do not count */
+function cellarSpace() {
+  const list = S.locations.map(locSpace).filter(x => x.kind === 'cellar' && x.cap);
+  const cap = list.reduce((a, x) => a + x.cap, 0), used = list.reduce((a, x) => a + x.used, 0);
+  return { list, cap, used, free: cap ? Math.max(0, Math.round(cap - used)) : null, pct: cap ? Math.min(100, Math.round(used / cap * 100)) : null,
+    missing: S.locations.filter(l => locInfoOf(l).kind === 'cellar' && !locInfoOf(l).capacity) };
+}
+/* when bottles come in: is there room in this location, and where else if not */
+function spaceNoteHtml(loc, n, w) {
+  if (!loc || !(n > 0)) return '';
+  const sp = locSpace(loc);
+  if (sp.kind === 'short') return `<p class="space-note">${ICON.info}<span>${esc(loc)} is for a short stay, not counted as cellar space.</span></p>`;
+  if (!sp.cap) return '';
+  const need = n * spaceOf(w);
+  if (need <= sp.free) return `<p class="space-note">${ICON.info}<span>${esc(loc)}: about ${sp.free} ${sp.free === 1 ? 'place' : 'places'} free.</span></p>`;
+  const alt = S.locations.filter(l => lc(l) !== lc(loc)).map(locSpace).filter(x => x.kind === 'cellar' && x.cap && x.free > 0).sort((a, b) => b.free - a.free)[0];
+  return `<p class="space-note warn">${ICON.info}<span>${sp.free ? `Only about ${sp.free} ${sp.free === 1 ? 'place' : 'places'} left in ${esc(loc)}.` : `${esc(loc)} is full.`}${alt ? ` ${esc(alt.loc)} has about ${alt.free} free.` : ' No other location has room.'}</span></p>`;
+}
+const fillCls = pct => (pct >= 95 ? 'full' : pct >= 80 ? 'high' : '');
+/* the fill level as a bar with the numbers, for a location or the whole cellar */
+function fillBarHtml(x, label) {
+  if (!x.cap) return '';
+  const used = Math.round(x.used);
+  return `<div class="fill"><div class="between"><span class="small">${label ? `${esc(label)}: ` : ''}<b>${used}</b> of about ${x.cap}</span><span class="small ${x.free === 0 ? 'down' : 'muted'}">${x.free === 0 ? 'Full' : `about ${x.free} free`}</span></div>
+    <div class="fill-bar ${fillCls(x.pct)}"><i style="width:${Math.max(2, x.pct)}%"></i></div></div>`;
+}
 const fullName = w => [w.producer, w.name, w.vintage].filter(Boolean).join(' ');
 function initials(w) {
   const src = (w.producer || w.name || '?').replace(/[^A-Za-zÀ-ÿ ]/g, ' ').trim().split(/\s+/);
@@ -562,6 +612,8 @@ async function sync(silent) {
     S.locations = Array.isArray(d.locations) ? d.locations : [];
     S.shelfNames = {};
     (d.locationInfo || []).forEach(l => { if (l && l.name && l.shelves && Object.keys(l.shelves).length) S.shelfNames[lc(l.name)] = l.shelves; });
+    S.locInfo = {};
+    (d.locationInfo || []).forEach(l => { if (l && l.name) S.locInfo[lc(l.name)] = { capacity: Number(l.capacity) > 0 ? Math.round(Number(l.capacity)) : null, kind: l.kind === 'short' ? 'short' : 'cellar' }; });
     S.retailers = Array.isArray(d.retailers) ? d.retailers.map(r => ({ name: str(r.name), website: str(r.website) })).filter(r => r.name) : [];
     S.people = Array.isArray(d.people) ? d.people.map(str).filter(Boolean) : [];
     S.peopleInfo = Array.isArray(d.peopleInfo) ? d.peopleInfo.map(normPersonInfo).filter(x => x.name) : [];

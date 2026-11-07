@@ -823,3 +823,16 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .tpe-row > span:first-child { grid-area: name; }
 .tpe-row .tpe-dots { grid-area: dots; }
 .tpe-row .tpe-word { grid-area: word; color: var(--text); font-size: 13px; font-weight: 500; }
+
+/* fill level of a location or the whole cellar */
+.fill { display: flex; flex-direction: column; gap: 6px; }
+.fill-bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.fill-bar i { display: block; height: 100%; border-radius: 5px; background: #4E9F6B; }
+.fill-bar.high i { background: #D9A23B; }
+.fill-bar.full i { background: #C2414F; }
+.space-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.space-note { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+.space-note svg { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+.space-note.warn { color: #E2B357; }
+.loc-kind { display: inline-block; margin-left: 6px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 10px; font-size: 11px; color: var(--muted); vertical-align: 1px; }
+a.space-card { color: var(--text); }

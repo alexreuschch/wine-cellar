@@ -11,14 +11,16 @@ function locationsHtml() {
   const rows = S.locations.map(l => {
     const n = used[lc(l)] || 0;
     const others = S.locations.filter(x => x !== l);
-    if (isEditing('loc', l)) return `<div class="loc-row">${editRowHtml(l, undefined, shelfEditHtml(l))}</div>`;
-    const head = `<div class="between"><span class="set-name">${esc(l)} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span><span style="display:flex;gap:6px;flex:none">${n
+    if (isEditing('loc', l)) return `<div class="loc-row">${editRowHtml(l, undefined, locInfoEditHtml(l) + shelfEditHtml(l))}</div>`;
+    const info = locInfoOf(l), sp = locSpace(l);
+    const fill = info.kind === 'short' ? '' : info.capacity ? fillBarHtml(sp) : '<p class="muted tiny" style="margin:0">Add its capacity with the edit button to see how full it is.</p>';
+    const head = `<div class="between"><span class="set-name">${esc(l)}${info.kind === 'short' ? '<span class="loc-kind">Short term</span>' : ''} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span><span style="display:flex;gap:6px;flex:none">${n
       ? `<button class="btn" style="${small}" data-act="loc-show" data-v="${esc(l)}">Show</button><button class="btn" style="${small}" data-act="loc-move-open" data-v="${esc(l)}">Move</button>`
       : `<button class="icon-btn" data-act="loc-del" data-v="${esc(l)}" aria-label="Delete ${esc(l)}">${ICON.trash}</button>`}${editBtn('loc', l)}</span></div>`;
     const move = U.locMove === l ? (others.length
       ? `<div class="move-box"><span class="tiny muted">Move all bottles from ${esc(l)} to</span><div style="display:flex;gap:8px"><label class="field" style="flex:1"><span class="sr-only">Target location</span><select id="move-to">${others.map(o => `<option>${esc(o)}</option>`).join('')}</select></label><button class="btn accent" data-act="loc-move" data-v="${esc(l)}">Move</button><button class="icon-btn" data-act="loc-move-cancel" aria-label="Cancel">${ICON.x}</button></div></div>`
       : `<div class="move-box"><span class="small muted">Add another location first, then move the bottles there.</span></div>`) : '';
-    return `<div class="loc-row">${head}${move}</div>`;
+    return `<div class="loc-row">${head}${fill}${move}</div>`;
   }).join('');
   return `<section class="box"><span class="box-title">Locations</span>
     ${rows || '<p class="muted small" style="margin:0">No locations yet. Add where you keep your wine, for example Wine fridge, Basement or Kitchen.</p>'}
@@ -41,6 +43,18 @@ function editRowHtml(name, website, extra = '') {
     ${extra}
     <div class="grid2"><button class="btn" data-act="ed-cancel">Cancel</button><button class="btn accent" data-act="ed-save">Save</button></div>
     <p class="muted tiny" style="margin:0">Renaming also changes all entries in the journal${U.edit && U.edit.kind === 'loc' ? ' and all bottles stored there' : ''}.</p></div>`;
+}
+
+/* capacity and kind of a location, edited together with its name */
+function locInfoEditHtml(loc) {
+  const ed = U.edit;
+  if (ed.lkind === undefined) { const i = locInfoOf(loc); ed.cap = i.capacity ? String(i.capacity) : ''; ed.lkind = i.kind; }
+  const b = (v, label) => `<button class="${ed.lkind === v ? 'on' : ''}" data-act="loc-kind" data-v="${v}" aria-pressed="${ed.lkind === v}">${label}</button>`;
+  return `<div class="field"><span>Kind</span><div class="toggle">${b('cellar', 'Cellar')}${b('short', 'Short term')}</div></div>
+    ${ed.lkind === 'cellar'
+      ? `<label class="field">Capacity, about how many 75 cl bottles<input id="ed-cap" data-input="ed-cap" inputmode="numeric" placeholder="For example 100" value="${esc(ed.cap)}"></label>
+        <p class="muted tiny" style="margin:-4px 0 0">A rough estimate is enough. A magnum counts as 1.5 bottles, a half bottle as 0.6, sparkling wine a little more.</p>`
+      : '<p class="muted tiny" style="margin:0">For bottles that stay only a short time, for example in the kitchen. Not counted as cellar space.</p>'}`;
 }
 
 /* shelf names, edited together with the location */
@@ -121,6 +135,7 @@ function renameLocal(kind, from, to) {
   if (kind === 'loc') {
     S.locations = S.locations.map(l => (eq(l) ? to : l));
     if (S.shelfNames[lc(from)]) { S.shelfNames[lc(to)] = S.shelfNames[lc(from)]; if (lc(from) !== lc(to)) delete S.shelfNames[lc(from)]; }
+    if (S.locInfo[lc(from)]) { S.locInfo[lc(to)] = S.locInfo[lc(from)]; if (lc(from) !== lc(to)) delete S.locInfo[lc(from)]; }
     S.wines.forEach(w => { w.stock.forEach(e => { if (eq(e.loc)) e.loc = to; }); if (eq(w.location)) w.location = to; });
     S.removals.forEach(r => { if (eq(r.loc)) r.loc = to; });
     if (eq(store.get('wc-lastloc', ''))) store.set('wc-lastloc', to);
@@ -148,7 +163,12 @@ async function saveEdit() {
     Object.keys(ed.shelves).forEach(k => { const v = str(ed.shelves[k]).trim(); if (v) clean[k] = v; });
     if (JSON.stringify(clean) !== JSON.stringify(S.shelfNames[lc(ed.name)] || {})) shelves = clean;
   }
-  if (sameName && !shelves && (site === undefined || site === str((S.retailers.find(r => r.name === ed.name) || {}).website))) { U.edit = null; refreshView(); return; }
+  let info = null;
+  if (ed.kind === 'loc' && ed.lkind !== undefined) {
+    const now = locInfoOf(ed.name), cap = Math.round(Number(String(ed.cap).replace(/[^\d.]/g, ''))) || null;
+    if (cap !== now.capacity || ed.lkind !== now.kind) info = { capacity: ed.lkind === 'cellar' ? cap : now.capacity, kind: ed.lkind };
+  }
+  if (sameName && !shelves && !info && (site === undefined || site === str((S.retailers.find(r => r.name === ed.name) || {}).website))) { U.edit = null; refreshView(); return; }
   U.edit = null;
   if (ed.kind === 'ret') {
     const r = S.retailers.find(x => x.name === ed.name);
@@ -160,6 +180,13 @@ async function saveEdit() {
   try {
     if (ed.kind === 'loc') {
       if (!sameName) S.locations = await api('renameLocation', { from: ed.name, to });
+      if (info) {
+        S.locInfo[lc(to)] = info;
+        persist();
+        refreshView();
+        const saved = await api('setLocationInfo', { name: to, capacity: info.capacity, kind: info.kind });
+        S.locInfo[lc(to)] = { capacity: saved.capacity || null, kind: saved.kind };
+      }
       if (shelves) {
         if (Object.keys(shelves).length) S.shelfNames[lc(to)] = shelves; else delete S.shelfNames[lc(to)];
         persist();
@@ -218,7 +245,7 @@ async function exportExcel() {
     const wines = S.wines.map(w => {
       const a = avgPrice(w), st = streetOf(w), p = windowParts(w);
       return {
-        Producer: w.producer, Wine: w.name, Vintage: w.vintage, Type: w.type, Region: w.region, Grapes: w.grapes, Bottles: w.count,
+        Producer: w.producer, Wine: w.name, Vintage: w.vintage, Type: w.type, 'Bottle size cl': w.size, Region: w.region, Grapes: w.grapes, Bottles: w.count,
         Storage: w.stock.map(e => `${e.n} × ${placeLabel(e)}`).join('; '), Status: w.count ? statusOf(w) : 'Finished',
         'Drink from': w.drinkFrom ?? '', 'Peak from': w.peakFrom ?? '', 'Peak until': w.peakUntil ?? '', 'Drink until': w.drinkUntil ?? '',
         'My rating %': w.myRating ?? '', 'External ratings': w.ratings.map(r => `${r.sys} ${r.score}`).join(', '),
@@ -238,9 +265,10 @@ async function exportExcel() {
         Price: r.price === null || r.price === undefined ? '' : r.price, Currency: str(r.priceCur) };
     });
     const locations = S.locations.map(l => ({ Location: l, Bottles: S.wines.reduce((a, w) => a + w.stock.filter(e => lc(e.loc) === lc(l)).reduce((b, e) => b + e.n, 0), 0),
+      Kind: locInfoOf(l).kind === 'short' ? 'Short term' : 'Cellar', 'Capacity about': locInfoOf(l).capacity || '',
       'Shelf names': Object.entries(S.shelfNames[lc(l)] || {}).map(([k, v]) => `${k}: ${v}`).join(', ') }));
     const retailers = S.retailers.map(r => ({ Retailer: r.name, Website: r.website }));
-    const people = S.people.map(n => ({ Person: n }));
+    const people = S.people.map(n => ({ Person: n, 'Also called': personInfo(n).aliases, Note: personInfo(n).note }));
     const wish = S.wishlist.map(x => ({ Wine: wishTitle(x), Type: x.type, Region: x.region, Label: x.label, 'Price estimate': x.price ?? '', Currency: x.priceCur, Bottles: x.qty ?? '', Why: x.why,
       'Offer shop': x.offer ? x.offer.shop : '', 'Offer price': x.offer ? x.offer.v : '', 'Offer link': x.offer ? x.offer.url : '' }));
     const wb = XLSX.utils.book_new();

@@ -20,7 +20,7 @@ function newDraft(mode, w) {
       producer: src.producer, name: src.name, vintage: src.vintage, type: src.type, region: src.region, grapes: src.grapes,
       taste: src.taste, tasteTags: src.tasteTags.join(', '), pairings: src.pairings.join(', '),
       drinkFrom: str(src.drinkFrom), drinkUntil: str(src.drinkUntil), peakFrom: str(src.peakFrom), peakUntil: str(src.peakUntil),
-      street, price: '', date: todayISO()
+      street, price: '', date: todayISO(), size: String(src.size || 75)
     },
     streetInit: street,
     stock: mode === 'add' ? [{ loc: defaultLocation(), shelf: null, pos: '', n: 1 }] : src.stock.map(e => Object.assign({}, e)),
@@ -65,6 +65,18 @@ function viewForm(mode, id) {
   return `<main class="screen">${head}${steps}${formBody()}</main>`;
 }
 
+/* bottle size: the usual sizes by name, or any size in cl */
+function sizeFieldHtml() {
+  const v = Number(String(D.fields.size).replace(',', '.')) || 75;
+  const known = !D.sizeOther && SIZES.some(x => x[0] === v);
+  return `<label class="field">Bottle size<select name="sizeSel" data-change="size-sel">${SIZES.map(([cl, n]) => `<option value="${cl}"${known && cl === v ? ' selected' : ''}>${n} · ${clText(cl)}</option>`).join('')}<option value="other"${known ? '' : ' selected'}>Other size</option></select></label>
+    ${known ? '' : `<label class="field">Size in cl<input name="size" data-input="field" inputmode="decimal" placeholder="For example 100" value="${esc(D.fields.size === '75' ? '' : D.fields.size)}"></label>`}`;
+}
+function renderSizeBox() { const b = $('#size-box'); if (b) b.innerHTML = sizeFieldHtml(); }
+
+/* the wine being added, as far as size and type matter for space */
+const draftWineLike = () => ({ size: Number(D && D.fields.size) || 75, type: D ? D.fields.type : 'Red' });
+
 function stockEditorHtml() {
   const add = D.mode === 'add';
   const rows = D.stock.map((e, i) => {
@@ -77,6 +89,7 @@ function stockEditorHtml() {
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="st-shelf" data-i="${i}" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="st-shelf-${i}" class="shelf-val">${esc(shelfText(e.loc, shelfVal(e.shelf)))}</span><button data-act="st-shelf" data-i="${i}" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         <label class="field">Position<input data-input="st-pos" data-i="${i}" placeholder="Back row, left" value="${esc(e.pos)}"></label>
       </div>
+      ${add ? `<div id="st-space-${i}">${spaceNoteHtml(e.loc, e.n, draftWineLike())}</div>` : ''}
       ${!add && e.n === 0 ? '<p class="muted tiny" style="margin:0">Empty. Hidden after saving.</p>' : ''}
     </div>`;
   }).join('');
@@ -177,6 +190,7 @@ function formBody() {
       ${field('Wine', 'name', { full: true })}
       ${field('Vintage', 'vintage', { num: true, ph: '2019' })}
       <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      <div id="size-box" style="display:contents">${sizeFieldHtml()}</div>
     ${D.mode === 'edit' ? `</div>${quick}<div class="form-grid">` : ''}
       ${field('Region', 'region', { full: true, ph: 'Piedmont, Italy' })}
       ${field('Grapes', 'grapes', { full: true, ph: 'Nebbiolo 100%' })}
@@ -605,6 +619,12 @@ function applyAnalysis(draft, r) {
     const t = TYPES.find(x => x.toLowerCase() === String(r.type).toLowerCase().replace('rose', 'rosé')) || null;
     if (t) { draft.fields.type = t; if (D === draft) { const el = document.querySelector('[name="type"]'); if (el) el.value = t; } }
   }
+  const cl = Number(r.size);
+  if (cl >= 10 && cl <= 2000 && !draft.touched.has('size')) {
+    draft.fields.size = String(cl);
+    draft.sizeOther = !SIZES.some(x => x[0] === cl);
+    if (D === draft) renderSizeBox();
+  }
   if (r.profile && !draft.touched.has('profile')) {
     draft.profile = parseProfile(r.profile) || draft.profile;
     if (D === draft) { renderProfileEditor(); const ab = $('#ab-editor'); if (ab) { ab.innerHTML = aboutEditorHtml(); ab.querySelectorAll('.autosize').forEach(autosize); } }
@@ -683,7 +703,7 @@ async function saveWineForm() {
   if (streetTxt !== D.streetInit) street = streetTxt ? { v: parseMoney(streetTxt), cur: cur(), date: todayISO(), src: 'Manual', conf: '' } : null;
   const w = normWine(Object.assign({}, base || {}, {
     id: base ? base.id : newId('w'),
-    producer: f.producer.trim(), name: f.name.trim(), vintage: str(f.vintage).trim(), type: f.type,
+    producer: f.producer.trim(), name: f.name.trim(), vintage: str(f.vintage).trim(), type: f.type, size: Number(String(f.size).replace(',', '.')) || 75,
     region: f.region.trim(), grapes: f.grapes.trim(), taste: f.taste.trim(),
     tasteTags: splitList(f.tasteTags), pairings: splitList(f.pairings),
     drinkFrom: f.drinkFrom, drinkUntil: f.drinkUntil, peakFrom: f.peakFrom, peakUntil: f.peakUntil,
