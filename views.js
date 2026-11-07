@@ -93,7 +93,7 @@ function grapeIsRed(name, wines) {
 const insSection = (title, sub, body) => `<section class="ins-sec"><div class="sec-head"><h2>${title}</h2>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>${body}</section>`;
 
 function viewInsights() {
-  const head = `<header class="top"><h1 class="title">Insights</h1></header>`;
+  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
   if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;

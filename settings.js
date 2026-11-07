@@ -318,7 +318,7 @@ function renderPicker() {
   const root = $('#pick-root');
   if (!root) return;
   if (!PICK.kind) { root.innerHTML = ''; return; }
-  const hint = PICK.kind === 'travel' ? '<p class="muted small" style="margin:0">Will I like it? and Wine list check prices in shops of this country, in its currency. It stays until you change it.</p>' : '';
+  const hint = PICK.kind === 'travel' ? '<p class="muted small" style="margin:0">Will I like it? and Wine list check prices in shops of this country, in its currency. It stays until you change it. A result for another country can then be updated with one tap.</p>' : '';
   root.innerHTML = `<div class="sheet-backdrop" data-act="pick-close"></div>
   <div class="sheet pick-sheet" role="dialog" aria-modal="true" aria-label="${esc(PICK_TITLE[PICK.kind])}">
     <div class="between"><h2 style="font-size:18px;font-weight:600">${esc(PICK_TITLE[PICK.kind])}</h2><button class="icon-btn" data-act="pick-close" aria-label="Close">${ICON.x}</button></div>
@@ -330,7 +330,7 @@ function renderPicker() {
 async function pickChoose(v) {
   const kind = PICK.kind;
   closePicker();
-  if (kind === 'travel') { setTravelCountry(v); toast(`Prices are now checked in ${SHOP_COUNTRIES[v]}, in ${countryCur(v)}.`); refreshView(); return; }
+  if (kind === 'travel') { setTravelCountry(v); sommCountryChanged(); toast(`Prices are now checked in ${SHOP_COUNTRIES[v]}, in ${countryCur(v)}.`); refreshView(); return; }
   if (kind === 'currency') {
     S.settings = Object.assign({}, S.settings, { currency: v });
     persist();

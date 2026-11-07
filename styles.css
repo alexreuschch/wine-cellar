@@ -787,3 +787,19 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .prev-open > span { display: grid; gap: 2px; min-width: 0; }
 .prev-open svg { flex: none; color: var(--muted); }
 .prev-sheet .info-body section h2 { font-size: 17px; }
+
+/* the country of the sommelier, inside the where block and above the wine list button */
+.where-row .travel-row { background: var(--bg); padding: 8px 10px; }
+.wl-country { display: grid; gap: 8px; }
+.tz-hint { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--gold); border-radius: 12px; background: color-mix(in srgb, var(--gold) 10%, var(--surface)); font-size: 14px; }
+.tz-hint p { margin: 0; }
+.tz-hint b { font-weight: 600; }
+.tz-hint .flag { margin: 0 3px 0 2px; }
+.tz-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.tz-acts .btn { flex: 1 1 auto; height: auto; min-height: 38px; padding: 6px 12px; font-size: 14px; }
+
+/* the wishes for the consultant, typed or spoken */
+.note-voice { display: flex; align-items: flex-end; gap: 8px; }
+.note-voice textarea { flex: 1; min-height: 64px; }
+.note-voice .somm-mic { border: 1px solid var(--line); margin-bottom: 4px; }
+.note-voice .somm-mic.on { border-color: transparent; }

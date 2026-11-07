@@ -6,7 +6,7 @@
 
 /* ------------------------------------------------------------ AI sommelier */
 
-const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '' };
+const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '' };
 const sommThread = () => SOMM.threads[SOMM.mode] || [];
 /* wine list in a restaurant: photos of the pages, price range and food, then three picks */
 const WL = { pages: [], min: '', max: '', result: null, error: '', busy: false };
@@ -57,9 +57,30 @@ const whereRowHtml = () => { const w = sommWhere(); const b = (v, ic, label) => 
   // in a shop the shelf price is a must, in a restaurant the menu price is optional, elsewhere there is none
   const c = countryCur(travelCountry());
   const price = w === 'shop' || w === 'restaurant' ? `<label class="where-price${w === 'shop' && !sommPrice() ? ' need' : ''}"><span>${w === 'shop' ? 'Price on the shelf' : 'Price on the menu <small>optional</small>'}</span><input id="somm-price" data-input="somm-price" inputmode="decimal" placeholder="${w === 'shop' ? 'Required' : 'If you know it'}" value="${esc(SOMM.price)}"><em>${esc(c)}</em></label>` : '';
-  return `<div class="where-row${w ? '' : ' need'}" id="where-row"><span>${w ? 'You are' : 'Where are you? Choose first'}</span><div class="toggle three">${b('shop', ICON.cart, 'Shop')}${b('restaurant', ICON.dining, 'Restaurant')}${b('other', ICON.pin, 'Elsewhere')}</div>${price}</div>`; };
+  return `<div class="where-row${w ? '' : ' need'}" id="where-row"><span>${w ? 'You are' : 'Where are you? Choose first'}</span><div class="toggle three">${b('shop', ICON.cart, 'Shop')}${b('restaurant', ICON.dining, 'Restaurant')}${b('other', ICON.pin, 'Elsewhere')}</div>${countryBtnHtml('in')}${tzHintHtml()}${price}${redoHtml('check')}</div>`; };
 const sommPrice = () => { const v = parseMoney(SOMM.price); return v && v > 0 ? v : null; };
-const travelRowHtml = () => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>Prices for ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
+/* the country prices are checked in, shown where you start the analysis */
+const countryBtnHtml = lead => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>${lead} ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
+/* the phone's time zone points to another country: offer it with one tap */
+const tzHintHtml = () => {
+  const c = tzMismatch();
+  if (!c) return '';
+  const t = travelCountry();
+  return `<div class="tz-hint"><p>Your phone's time zone is in ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b>. Check prices there?</p><div class="tz-acts"><button class="btn accent" data-act="tz-use" data-v="${esc(c)}">Use ${esc(SHOP_COUNTRIES[c])}</button><button class="btn ghost" data-act="tz-keep" data-v="${esc(c)}">Keep ${esc(SHOP_COUNTRIES[t])}</button></div></div>`;
+};
+/* after the country was changed, offer to run the last analysis again for it */
+const redoHtml = mode => {
+  if (SOMM.redo !== mode) return '';
+  const c = travelCountry();
+  return `<div class="tz-hint redo" id="somm-redo"><p>Update the last ${mode === 'list' ? 'wine list' : 'wine check'} for ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b>, with prices in ${esc(countryCur(c))}?</p><div class="tz-acts"><button class="btn accent" data-act="somm-redo">Update</button><button class="btn ghost" data-act="somm-redo-no">Keep as it is</button></div></div>`;
+};
+const lastCheck = () => [...SOMM.threads.check].reverse().find(t => t.a && t.a.wine) || null;
+/* the country was changed: remember to offer the update when the shown result is for another country */
+function sommCountryChanged() {
+  const c = travelCountry(), t = lastCheck();
+  SOMM.redo = SOMM.mode === 'list' ? (WL.result && WL.result.country && WL.result.country !== c && !WL.busy ? 'list' : '')
+    : SOMM.mode === 'check' ? (t && t.a.country && t.a.country !== c && !SOMM.busy ? 'check' : '') : '';
+}
 /* converts between any two currencies with the stored rates, or null */
 function convTo(v, from, to) {
   if (v === null || v === undefined || !(Number(v) > 0)) return null;
@@ -133,7 +154,7 @@ function sommAnswerHtml(t) {
   const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${hasFit ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
   const i = sommThread().indexOf(t);
-  const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.info}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div>` : '';
+  const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.magic}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div>` : '';
   return `<div class="somm-a">${fit}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
@@ -178,7 +199,6 @@ function viewSommelier() {
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
     <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>
     <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
-    ${check || list ? travelRowHtml() : ''}
     ${check ? whereRowHtml() : ''}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
@@ -259,7 +279,7 @@ function listPickHtml(p, i, cur0) {
     ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
     ${p.food ? `<p class="small cons-value" style="margin:0">${ICON.glass}<span>${esc(p.food)}</span></p>` : ''}
     ${p.fit !== null && p.fit !== undefined ? `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${p.fit}%</b></div>${segsHtml(p.fit, 12)}</div>` : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="wl-preview" data-i="${i}">${ICON.info}More about this wine</button><button class="link-btn" data-act="wl-taste" data-i="${i}">${ICON.spark}I'm tasting this</button><button class="link-btn" data-act="wl-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
+    <div class="cons-actions"><button class="link-btn" data-act="wl-preview" data-i="${i}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="wl-taste" data-i="${i}">${ICON.spark}I'm tasting this</button><button class="link-btn" data-act="wl-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
   </div>`;
 }
 
@@ -287,19 +307,21 @@ function listHtml() {
       <p class="small muted" style="margin:-4px 0 0">How much you want to spend on one bottle, in ${esc(countryCur(travelCountry()))} as on the list. The best wine within it becomes your first pick, <b>Best in your range</b>. Leave it empty for no limit.</p>
       <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
       <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
+      <div class="wl-country">${countryBtnHtml('Restaurant in')}${tzHintHtml()}${redoHtml('list')}</div>
       ${wait}
       <button class="btn accent big block" data-act="wl-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}${res ? 'Analyze again' : 'Find the best wines'}</button>
     </section>`;
   return `${result}${setup}${res || WL.busy ? '' : listGuideHtml()}`;
 }
 
-async function listAnalyze() {
+async function listAnalyze(foodAgain) {
   if (WL.busy || !WL.pages.length) { if (!WL.pages.length) toast('Take a photo of at least one page first.'); return; }
   // pages kept from an earlier session are only previews: a new analysis needs the photos again
   if (WL.pages.some(pg => !pg.b64)) { WL.pages = WL.pages.filter(pg => pg.b64); toast('Take the photos of the wine list again for a new analysis.'); sommRefresh(false); return; }
   if (SOMM.listening) sommStopVoice();
   const ta = $('#somm-text');
-  const food = str(ta ? ta.value : SOMM.draft).trim();
+  const food = foodAgain !== undefined ? str(foodAgain).trim() : str(ta ? ta.value : SOMM.draft).trim();
+  SOMM.redo = '';
   WL.busy = true;
   WL.error = '';
   WL.result = null;
@@ -385,6 +407,8 @@ async function sommAsk(text, photo) {
   try {
     const where = mode === 'check' ? sommWhere() : '';
     const price = where === 'shop' || where === 'restaurant' ? sommPrice() : null;
+    turn.where = where; turn.price = price;
+    if (mode === 'check' && SOMM.redo) { SOMM.redo = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }
     turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '' });
     if (mode === 'check') { SOMM.price = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }   // the next wine has its own price
   } catch (e) {
@@ -395,10 +419,40 @@ async function sommAsk(text, photo) {
   sommRefresh(true);
 }
 
+/* runs the last wine check again for the country now set; the price you entered was on the shelf or the menu there, so it is read in the new currency */
+async function sommRedoCheck() {
+  const t = lastCheck();
+  SOMM.redo = '';
+  const row = $('#where-row');
+  if (row) row.outerHTML = whereRowHtml();
+  if (!t || SOMM.busy) return;
+  const c = travelCountry();
+  const where = t.where || t.a.priceWhere || sommWhere() || 'other';
+  const price = where === 'shop' || where === 'restaurant' ? (t.price || (where === 'shop' && !t.where ? t.a.price : null) || null) : null;
+  const q = t.q || (t.img ? '' : `Will I like this wine? ${t.a.wine}`);
+  const th = SOMM.threads.check;
+  const history = th.slice(0, th.indexOf(t)).filter(x => x.a).slice(-3).map(x => ({ q: x.q || (x.a.wine ? `Will I like this wine? (label photo of ${x.a.wine})` : 'Will I like this wine?'), a: JSON.stringify(x.a) }));
+  const old = t.a;
+  t.a = null;
+  t.error = '';
+  SOMM.busy = true;
+  sommRefresh(true);
+  try {
+    t.a = await api('sommelier', { question: q, history, image: t.img ? t.img.b64 : null, mode: 'check', country: c, where, price, priceCur: price ? countryCur(c) : '' });
+    t.where = where; t.price = price;
+  } catch (e) {
+    t.a = old;
+    toast('Not updated: ' + e.message.replace(/Claude API/g, 'AI service'), 5000);
+  }
+  SOMM.busy = false;
+  sommSave();
+  sommRefresh(true);
+}
+
 /* the conversations, the wine checks and the last wine list stay after closing the app, until you tap New question, New wine or New wine list.
    Photos are kept as small previews only; the full pages of a wine list are needed again only for a new analysis. */
 function sommSave() {
-  const turns = m => (SOMM.threads[m] || []).filter(t => t.a || t.error).slice(-20).map(t => ({ q: t.q, a: t.a, error: t.error, photo: t.photo || '', mode: t.mode }));
+  const turns = m => (SOMM.threads[m] || []).filter(t => t.a || t.error).slice(-20).map(t => ({ q: t.q, a: t.a, error: t.error, photo: t.photo || '', mode: t.mode, where: t.where || '', price: t.price || null }));
   const data = { threads: { cellar: turns('cellar'), check: turns('check') }, mode: SOMM.mode, where: SOMM.where, whereAt: SOMM.whereAt,
     wl: { result: WL.result, min: WL.min, max: WL.max, pages: WL.result ? WL.pages.map(p => ({ thumb: p.thumb })) : [] } };
   try { localStorage.setItem('wc-somm', JSON.stringify(data)); }
@@ -441,6 +495,45 @@ function sommStartVoice() {
   SOMM.rec = rec;
   SOMM.listening = true;
   sommRefresh(false);
+}
+
+/* the wishes for the consultant by voice: the text lands in the field, where you can check and correct it before sending */
+function consVoiceUi() {
+  const b = $('#cons-mic'), h = $('#cons-mic-hint');
+  if (b) { b.classList.toggle('on', CONS.listening); b.setAttribute('aria-label', CONS.listening ? 'Stop listening' : 'Speak'); }
+  if (h) h.textContent = CONS.listening ? 'Listening. Speak your wishes, then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.';
+}
+function consStopVoice() {
+  if (CONS.rec) { try { CONS.rec.stop(); } catch (e) { /* already stopped */ } }
+  CONS.listening = false;
+  consVoiceUi();
+}
+function consStartVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); const ta = $('#cons-note'); if (ta) ta.focus(); return; }
+  const rec = new SR();
+  rec.lang = navigator.language || 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  const ta0 = $('#cons-note');
+  if (ta0) CONS.note = ta0.value;
+  const base = CONS.note.trim() ? CONS.note.trim() + ' ' : '';
+  rec.onresult = e => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    CONS.note = base + txt.trim();
+    const ta = $('#cons-note');
+    if (ta) ta.value = CONS.note;
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Allow the microphone for this app to speak your wishes.', 5000);
+    else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Voice input stopped. Try again or type your wishes.');
+  };
+  rec.onend = () => { CONS.listening = false; CONS.rec = null; consVoiceUi(); const ta = $('#cons-note'); if (ta && CONS.note) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } };
+  try { rec.start(); } catch (e) { toast('Voice input could not start.'); return; }
+  CONS.rec = rec;
+  CONS.listening = true;
+  consVoiceUi();
 }
 
 function sommStopVoice() {
@@ -514,7 +607,7 @@ function normWish(x) {
 const wishTitle = x => [x.producer, x.name, x.vintage].filter(Boolean).join(' ');
 const wishKey = x => lc([x.producer, x.name].join('|'));
 
-const CONS = { focus: '', budget: null, note: '', busy: false, result: null, error: '', offers: {}, offerRun: new Set() };
+const CONS = { focus: '', budget: null, note: '', listening: false, rec: null, busy: false, result: null, error: '', offers: {}, offerRun: new Set() };
 (() => { const c = store.get('wc-consult', null); if (c && c.result) { CONS.result = c.result; CONS.offers = c.offers || {}; } })();
 const saveConsult = () => store.set('wc-consult', { result: CONS.result, offers: CONS.offers });
 const CONS_FOCUS = ['Like my favorites', 'Something new', 'Everyday wines', 'Special bottles', 'Top value'];
@@ -599,7 +692,7 @@ function pickCardHtml(p, i, saved) {
     <p class="small" style="margin:0"><b>Buy ${p.qty || 1} ${p.qty === 1 ? 'bottle' : 'bottles'}</b>${rw ? ` · replaces <a href="#/wine/${encodeURIComponent(rw.id)}">${esc(wineTitle(rw))} ${esc(rw.vintage)}</a> (${rw.count} left)` : ' · new addition'}</p>
     ${rw && p.replaceWhy ? `<p class="tiny muted" style="margin:-4px 0 0">${esc(p.replaceWhy)}</p>` : ''}
     ${o ? offerLineHtml(o, p.qty) : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
+    <div class="cons-actions"><button class="link-btn" data-act="cons-preview" data-i="${i}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
       <button class="link-btn" data-act="cons-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
   </div>`;
 }
@@ -611,7 +704,7 @@ function wishCardHtml(x) {
     <div><p class="cons-title">${esc(wishTitle(x))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(x) ? flagOf(x) : ''}${esc([x.region, x.type].filter(Boolean).join(' · '))}${x.qty ? ` · buy ${x.qty}` : ''}</p></div>
     ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
     ${x.offer ? offerLineHtml(x.offer, x.qty || 6) : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="wish-preview" data-id="${esc(x.id)}">${ICON.info}More about this wine</button><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
+    <div class="cons-actions"><button class="link-btn" data-act="wish-preview" data-id="${esc(x.id)}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
       <button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
       <button class="icon-btn" data-act="wish-del" data-id="${esc(x.id)}" aria-label="Remove from wishlist">${ICON.trash}</button></div>
   </div>`;
@@ -637,7 +730,8 @@ function viewDiscover() {
     <section class="ins-sec"><div class="sec-head"><h2>What are you looking for?</h2></div>
       <div class="chips">${CONS_FOCUS.map(f => `<button class="chip${CONS.focus === f ? ' on' : ''}" data-act="cons-focus" data-v="${esc(f)}">${esc(f)}</button>`).join('')}</div>
       <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
-      <label class="field">Anything else? (optional)<input data-input="cons-note" placeholder="More whites for summer, wines for guests" value="${esc(CONS.note)}"></label>
+      <div class="field"><label for="cons-note">Anything else? (optional)</label><div class="note-voice"><textarea id="cons-note" data-input="cons-note" rows="2" placeholder="Type or speak, for example more whites for summer, wines for guests">${esc(CONS.note)}</textarea><button class="somm-mic${CONS.listening ? ' on' : ''}" id="cons-mic" data-act="cons-mic" aria-label="${CONS.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div>
+        <span class="tiny muted" id="cons-mic-hint">${CONS.listening ? 'Listening. Speak your wishes, then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.'}</span></div>
       <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Choosing wines and checking shops…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
       <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops for ' + esc(shopCountryName()) + ', so you only get wines you can buy.' : 'You only get wines that an online shop for ' + esc(shopCountryName()) + ' sells right now, with price and link. One round takes about a minute and costs about 15 to 20 cents, less when offers from the last 14 days can be reused.'}</p>
     </section>
@@ -653,6 +747,9 @@ const infoRowWide = (label, value) => `<div class="info-row wide"><span class="i
 
 async function consRun() {
   if (CONS.busy) return;
+  if (CONS.listening) consStopVoice();
+  const ta = $('#cons-note');
+  if (ta) CONS.note = ta.value;
   const prof = tasteProfile();
   CONS.busy = true; CONS.error = '';
   render();
@@ -813,16 +910,25 @@ function renderPreview() {
   const k = PREV.src && PREV.src.kind;
   const wished = S.wishlist.some(x => wishKey(x) === wishKey(PREV.base));
   const buttons = `<div class="grid2">${k === 'wish' ? `<button class="btn" data-act="prev-cellar">${ICON.plus}Add to cellar</button>` : `<button class="btn" data-act="prev-wish"${wished ? ' disabled' : ''}>${wished ? `${ICON.check}On your wishlist` : `${ICON.plus}Save to wishlist`}</button>`}<button class="btn primary" data-act="prev-taste">${ICON.spark}I'm tasting this</button></div>`;
-  root.innerHTML = `<div class="sheet-backdrop" data-act="prev-close"></div>
-  <div class="sheet prev-sheet" role="dialog" aria-modal="true" aria-label="${esc(wineTitle(w))}">
-    <div class="between" style="align-items:flex-start;gap:12px">
+  const inner = `<div class="between" style="align-items:flex-start;gap:12px">
       <div class="info-head"><span class="ab-ic">${c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : ICON.glass}</span><div><span class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em">${esc([w.type, w.vintage].filter(Boolean).join(' · ') || 'Wine')}</span><h2>${esc(wineTitle(w))}</h2><p class="small muted" style="margin:2px 0 0">${esc([w.producer !== wineTitle(w) ? w.producer : '', w.region].filter(Boolean).join(' · '))}</p></div></div>
       <button class="icon-btn" data-act="prev-close" aria-label="Close">${ICON.x}</button>
     </div>
     ${PREV.note ? `<p class="small" style="margin:0">${PREV.note}</p>` : ''}
     <div class="info-body prev-body">${body}</div>
-    ${buttons}
-  </div>`;
+    ${buttons}`;
+  const key = prevKey(PREV.base), open = root.querySelector('.prev-sheet');
+  if (open && root.dataset.key === key) {
+    const pb = open.querySelector('.prev-body'), top = open.scrollTop, btop = pb ? pb.scrollTop : 0;
+    open.innerHTML = inner;
+    open.scrollTop = top;
+    const nb = open.querySelector('.prev-body');
+    if (nb) nb.scrollTop = btop;
+    return;
+  }
+  root.dataset.key = key;
+  root.innerHTML = `<div class="sheet-backdrop" data-act="prev-close"></div>
+  <div class="sheet prev-sheet" role="dialog" aria-modal="true" aria-label="${esc(wineTitle(w))}">${inner}</div>`;
 }
 
 /* where a preview comes from: a pick of the wine list, the wine of Will I like it?, or the wishlist */
@@ -836,6 +942,11 @@ function sommPreview(i) {
   if (!t || !t.a) return;
   const a = t.a, x = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: (str(a.wine).match(/\b(19|20)\d{2}\b/) || [''])[0], type: '', region: a.region || '', grapes: '' };
   openPreview(x, a.fit ? `Fits your taste: <b>${a.fit}%</b>` : '', { kind: 'check', i });
+}
+function consPreview(i) {
+  const p = CONS.result && CONS.result.picks[i];
+  if (!p) return;
+  openPreview({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes }, esc(p.why || ''), { kind: 'cons', i });
 }
 function wishPreview(id) {
   const x = S.wishlist.find(w => w.id === id);
@@ -853,6 +964,7 @@ async function previewWish() {
   const src = PREV.src || {};
   if (src.kind === 'list') { const p = WL.result && WL.result.picks[src.i]; if (p) await listSave(p); }
   else if (src.kind === 'check') await checkSave(src.i);
+  else if (src.kind === 'cons') { const p = CONS.result && CONS.result.picks[src.i]; if (p) await consSave(p); }
   renderPreview();
 }
 /* Will I like it? to the wishlist, with the shop price found */

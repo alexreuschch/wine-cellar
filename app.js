@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '2.25.2';
+const APP_VERSION = '2.26.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -171,6 +171,10 @@ const shopCountry = () => (S.settings && SHOP_COUNTRIES[S.settings.country] ? S.
 /* the country where the sommelier checks prices on a trip; stays until it is changed by hand */
 const travelCountry = () => { let c = ''; try { c = localStorage.getItem('wc-travel') || ''; } catch (e) { c = ''; } return SHOP_COUNTRIES[c] ? c : shopCountry(); };
 const setTravelCountry = c => { try { localStorage.setItem('wc-travel', c); } catch (e) { /* kept for this session only */ } };
+/* the country of the phone's time zone, which follows the phone abroad; '' when unknown */
+const tzCountry = () => { let z = ''; try { z = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { z = ''; } const c = GEO_TZ[z] || ''; return SHOP_COUNTRIES[c] ? c : ''; };
+/* the time zone points to another country than the one set, and you have not chosen to keep it */
+const tzMismatch = () => { const c = tzCountry(), t = travelCountry(); if (!c || c === t) return ''; let keep = ''; try { keep = localStorage.getItem('wc-tz-keep') || ''; } catch (e) { keep = ''; } return keep === c + ':' + t ? '' : c; };
 const shopCountryName = () => SHOP_COUNTRIES[shopCountry()];
 const flagOfCode = code => (/^[A-Z]{2}$/.test(str(code)) ? `<span class="flag" title="${esc(SHOP_COUNTRIES[code] || code)}">${String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65))}</span>` : '');
 /* shop name with the flag of the country where the shop is based, and one line of details */
