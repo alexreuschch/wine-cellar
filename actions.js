@@ -21,6 +21,7 @@ const ACTS = {
   'rating-clear': el => { U.f[el.dataset.ctx].rating = null; refreshView(); },
   'rt-sys': el => {
     const st = U.f[el.dataset.ctx], v = el.dataset.v;
+    if (!st.rating && v === 'mine') return;   // already chosen as the default, the slider starts the filter
     st.rating = st.rating && st.rating.sys === v ? null : { sys: v, min: 0 };
     refreshView();
   },

@@ -553,7 +553,7 @@ function viewWine(id) {
   const label = w.thumb || w.labelFileId
     ? `<img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`
     : `<div class="label-ph">${esc(wineTitle(w))}<small>${esc(w.vintage || '')}</small></div>`;
-  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w), alcText(w)].filter(Boolean).join(' · ');
+  const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w) || clText(w.size || 75), alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
     <div class="detail-top">${isDisc(w) ? `<a class="back" href="#/top">${ICON.back}Top rated</a>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}<a class="btn" style="height:40px" href="${editHref}">Edit</a></div>
     ${label}

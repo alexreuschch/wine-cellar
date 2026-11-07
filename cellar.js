@@ -291,18 +291,23 @@ function ratingCountText(ctx) {
 }
 
 function ratingHtml(ctx) {
-  const r = rflt(ctx);
-  const chips = ratingSystems(ctx).map(sys => `<button class="chip${r && r.sys === sys ? ' on' : ''}" data-act="rt-sys" data-ctx="${ctx}" data-v="${esc(sys)}">${esc(rSysName(sys))}${r && r.sys === sys ? ICON.x : ''}</button>`).join('');
+  const r0 = rflt(ctx), systems = ratingSystems(ctx);
+  // My rating is chosen from the start; the filter only starts working when the slider moves
+  const pre = !r0 && systems.includes('mine');
+  const r = r0 || (pre ? { sys: 'mine', min: 0 } : null);
+  const chips = systems.map(sys => `<button class="chip${r && r.sys === sys ? ' on' : ''}" data-act="rt-sys" data-ctx="${ctx}" data-v="${esc(sys)}">${esc(rSysName(sys))}${r0 && r0.sys === sys ? ICON.x : ''}</button>`).join('');
   if (!r) return `<div style="display:flex;flex-direction:column;gap:8px"><div class="chips">${chips}</div><p class="muted tiny" style="margin:0">Choose one rating system, then set the lowest rating to show.</p></div>`;
   const sc = rScale(r.sys);
   return `<div style="display:flex;flex-direction:column;gap:8px"><div class="chips">${chips}</div>
     <div class="between"><span class="small muted">At least</span><span class="dual-val" id="rt-val-${ctx}">${rFmt(r.sys, r.min)}</span></div>
-    <div class="single"><input type="range" min="0" max="${sc.max}" step="${sc.step}" value="${r.min}" data-input="rtmin" data-ctx="${ctx}" aria-label="Lowest ${esc(rSysName(r.sys))}" style="--p:${(r.min / sc.max * 100).toFixed(1)}%"></div>
-    <p class="muted tiny" style="margin:0" id="rt-n-${ctx}">${ratingCountText(ctx)}</p></div>`;
+    <div class="single"><input type="range" min="0" max="${sc.max}" step="${sc.step}" value="${r.min}" data-input="rtmin" data-ctx="${ctx}" data-sys="${esc(r.sys)}" aria-label="Lowest ${esc(rSysName(r.sys))}" style="--p:${(r.min / sc.max * 100).toFixed(1)}%"></div>
+    <p class="muted tiny" style="margin:0" id="rt-n-${ctx}">${pre ? 'Move the slider to show only wines with at least this rating.' : ratingCountText(ctx)}</p></div>`;
 }
 
 function onRatingMin(el) {
-  const ctx = el.dataset.ctx, r = rflt(ctx);
+  const ctx = el.dataset.ctx;
+  if (!rflt(ctx) && el.dataset.sys) U.f[ctx].rating = { sys: el.dataset.sys, min: 0 };
+  const r = rflt(ctx);
   if (!r) return;
   r.min = Number(el.value);
   el.style.setProperty('--p', (r.min / rScale(r.sys).max * 100) + '%');
