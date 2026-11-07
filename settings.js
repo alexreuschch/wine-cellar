@@ -299,12 +299,12 @@ function viewSettings(first) {
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
       <p class="muted tiny" style="margin:0">AI looks up current shop prices on the web, one wine after the other. This costs about USD 0.02 per wine. New wines get their street price automatically.</p></section>`}
-    ${first ? '' : ttSettingsHtml()}
     ${first ? '' : locationsHtml()}
     ${first ? '' : retailersHtml()}
     ${first ? '' : peopleHtml()}
     ${first ? '' : wineInfoBoxHtml()}
     ${first ? '' : usageHtml()}
+    ${first ? '' : ttSettingsHtml()}
     ${first ? '' : `<section class="box"><span class="box-title">Your data</span>
       <button class="btn block" data-act="export"${U.exporting ? ' disabled' : ''}>${ICON.download}${U.exporting ? 'Preparing file…' : 'Export all data to Excel'}</button>
       <p class="muted tiny" style="margin:0">Downloads one Excel file with your wines, journal, locations, retailers, people and wishlist. Keep it as a backup. The label photos stay in the Labels folder of your Google Drive.</p></section>`}

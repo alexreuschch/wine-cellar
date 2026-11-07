@@ -951,3 +951,10 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .one-pick-name { flex: 1; min-width: 0; height: 100%; padding: 0 14px; text-align: left; font-size: 16px; color: var(--text); background: none; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .one-pick .x { width: 44px; height: 100%; display: grid; place-items: center; color: var(--muted); background: none; border: 0; }
 .one-pick .x svg { width: 18px; height: 18px; }
+
+/* a box that opens on a tap, for example the taste test in Settings */
+.fold-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0; background: none; border: 0; color: inherit; text-align: left; min-height: 28px; }
+.fold-head .box-title { flex: none; }
+.fold-head .fold-sum { flex: 1; text-align: right; }
+.fold-head svg { width: 18px; height: 18px; color: var(--muted); transform: rotate(90deg); transition: transform .2s; }
+.fold.open .fold-head svg { transform: rotate(-90deg); }

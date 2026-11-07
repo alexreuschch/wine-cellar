@@ -272,7 +272,10 @@ function ttSettingsHtml() {
     [5, 'Chocolate', t.choc ? TQ_CHOC[t.choc - 1] : ''],
     [6, 'Oak, vanilla and toast', t.oak === true ? 'I like that' : t.oak === false ? 'Rather not' : '']
   ];
-  return `<section class="box"><span class="box-title">Taste test</span>
+  // taken once, so it stays folded: one line, the answers on a tap
+  const head = `<button class="fold-head" data-act="tt-fold" aria-expanded="${!!U.ttOpen}"><span class="box-title">Taste test</span><span class="small muted fold-sum">${esc(t.date ? `Taken on ${fmtDate(t.date)}` : 'Taken')}</span>${ICON.chevron}</button>`;
+  if (!U.ttOpen) return `<section class="box fold">${head}</section>`;
+  return `<section class="box fold open">${head}
     <p class="small" style="margin:0">${esc(`${t.date ? `Taken on ${fmtDate(t.date)}. ` : ''}It counts about ${Math.round(w * 100)}% next to your ${n} rated wine${n === 1 ? '' : 's'}, like two rated wines.`)}</p>
     <div class="rec-list">${rows.map(([st, label, val]) => `<button class="rec-btn tq-row" data-act="tt-edit" data-step="${st}"><span class="rec-text"><span class="rec-main">${esc(label)}</span><span class="small ${val ? '' : 'muted'}">${esc(val || 'Not answered')}</span></span>${ICON.chevron}</button>`).join('')}</div>
     <div class="grid2"><a class="btn" href="#/taste">Retake</a><button class="btn danger" data-act="tt-delete">Delete</button></div></section>`;

@@ -209,6 +209,7 @@ const ACTS = {
   'rate-clear': () => setRating(null),
   'wine-fav': el => toggleWineFav(el.dataset.id),
   'share-wine': el => shareOpen(el.dataset.id),
+  'tt-fold': () => { U.ttOpen = !U.ttOpen; render(); },
   'share-go': el => shareGo(el.dataset.link === '1'),
   'share-send': () => shareWine(SHARE.id, SHARE.offer),
   'share-close': () => shareClose(),
