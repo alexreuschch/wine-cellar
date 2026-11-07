@@ -97,27 +97,39 @@ function stockEditorHtml() {
   if (add) return `<div class="box"><span class="box-title">Storage</span>${rows}</div>`;
   const addBox = D.addLoc
     ? `<div class="chips">${S.locations.map(l => `<button class="chip" data-act="st-add" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}<button class="chip" data-act="st-add-new">${ICON.plus}New location</button><button class="chip" data-act="st-add-close">Cancel</button></div>`
-    : `<div class="chips"><button class="chip" data-act="st-add-open">${ICON.plus}Add storage place</button>${D.stock.filter(e => e.n > 0).length && D.stock.length > 1 ? `<button class="chip${D.move ? ' on' : ''}" data-act="st-move-open">${ICON.move}Move bottles</button>` : ''}</div>`;
+    : `<div class="chips"><button class="chip" data-act="st-add-open">${ICON.plus}Add storage place</button>${D.stock.some(e => e.n > 0) ? `<button class="chip${D.move ? ' on' : ''}" data-act="st-move-open">${ICON.move}Move bottles</button>` : ''}</div>`;
   let move = '';
   if (D.move) {
     const src = D.stock[D.move.from];
     const opt = (i, on) => `<option value="${i}"${on ? ' selected' : ''}>${esc(placeLabel(D.stock[i]))}</option>`;
     const fromIdx = D.stock.map((e, i) => i).filter(i => D.stock[i].n > 0);
+    // to: a place this wine already has, any other location, or a new one
     const toIdx = D.stock.map((e, i) => i).filter(i => i !== D.move.from);
-    move = `<div class="move-box"><span class="tiny muted">Move bottles between storage places</span>
+    const others = S.locations.filter(l => !D.stock.some(e => lc(e.loc) === lc(l)));
+    const pend = str(D.move.to).startsWith('loc:') ? D.move.to.slice(4) : '';
+    if (pend && !others.some(l => lc(l) === lc(pend))) others.push(pend);
+    move = `<div class="move-box"><span class="tiny muted">Move bottles to another place</span>
       <label class="field">From<select data-change="mv-from">${fromIdx.map(i => opt(i, i === D.move.from)).join('')}</select></label>
-      <label class="field">To<select data-change="mv-to">${toIdx.map(i => opt(i, i === D.move.to)).join('')}</select></label>
+      <label class="field">To<select data-change="mv-to">${D.move.to ? '' : '<option value="" selected disabled>Choose a place</option>'}${toIdx.map(i => `<option value="i:${i}"${D.move.to === 'i:' + i ? ' selected' : ''}>${esc(placeLabel(D.stock[i]))}</option>`).join('')}${others.map(l => `<option value="loc:${esc(l)}"${lc(D.move.to) === lc('loc:' + l) ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">New location…</option></select></label>
       <div class="between"><span class="small">Bottles</span><div class="stepper"><button data-act="mv-n" data-d="-1" aria-label="Fewer">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="mv-n" data-input="qty-in" data-change="qty-in" data-k="mv" aria-label="Number of bottles" value="${D.move.n}"><button data-act="mv-n" data-d="1" aria-label="More">${ICON.plus}</button></div></div>
-      <div class="grid2"><button class="btn" data-act="st-move-close">Cancel</button><button class="btn accent" data-act="st-move"${src && src.n ? '' : ' disabled'}>Move</button></div></div>`;
+      <div class="grid2"><button class="btn" data-act="st-move-close">Cancel</button><button class="btn accent" data-act="st-move"${src && src.n && D.move.to ? '' : ' disabled'}>Move</button></div></div>`;
   }
   return `<div class="box"><div class="between"><span class="box-title">Storage</span><span class="small muted" id="st-total">${D.stock.reduce((a, e) => a + e.n, 0)} bottles</span></div>${rows || '<p class="muted small" style="margin:0">No bottles in stock.</p>'}${addBox}${move}
     <p class="muted tiny" style="margin:0">Counts changed here are corrections. They adjust the purchases in the journal without a new entry. Use plus and minus on the wine to log new purchases and bottles taken.</p></div>`;
 }
 
+/* where moved bottles go by default: another place of this wine, else another location, else a new one */
+function moveDefaultTo(from) {
+  const i = D.stock.findIndex((e, k) => k !== from);
+  if (i >= 0) return 'i:' + i;
+  const l = S.locations.find(x => !D.stock.some(e => lc(e.loc) === lc(x)));
+  return l ? 'loc:' + l : '';
+}
+
 function acquisitionBox() {
   const a = D.acq, f = D.fields;
   const picker = label => `<div class="field"><span>${label}</span><div id="people-chips" class="chips">${peopleChipsHtml()}</div>
-    <input id="people-input" data-input="people" aria-label="${label}" placeholder="${a.type === 'Purchase' ? 'Type the name of a shop or winery' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
+    <input id="people-input" data-input="people" aria-label="${label}" placeholder="${a.type === 'Purchase' ? 'Type the name of a shop or winery' : 'Type a name'}"${pickInputAttrs()} autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
     <div id="people-sugg">${peopleSuggHtml()}</div></div>`;
   return `<div class="box"><span class="box-title">Acquired</span>
     <div class="grid3">${ADD_TYPES.map(([v, l]) => `<button class="btn${v === a.type ? ' primary' : ''}" style="height:42px;font-size:14px;padding:0 6px" data-act="acq" data-v="${v}">${l}</button>`).join('')}</div>
@@ -219,13 +231,14 @@ function formBody() {
     <div class="save-bar"><button class="btn primary big block" data-act="save-wine">Save wine</button></div>`
     : `${rateBox}
     ${stockBox}
-    ${details}
     <div class="box"><span class="box-title">Purchases</span><div id="purchases-box">${purchasesHtml(wineById(D.id) || { id: D.id }, true)}</div>
       <button class="btn dashed" data-act="record-add">Add purchase record</button>
       <p class="muted tiny" style="margin:0">Tap a purchase to edit it or to set the retailer's website.</p></div>
     ${streetBox()}
     <div class="box" id="offer-box">${offerBoxHtml()}</div>
-    <button class="btn primary big block" data-act="save-wine">Save wine</button>
+    <div class="form-sep"><h2>Wine details</h2><p>Filled in by AI. Change them only when something is not right.</p></div>
+    ${details}
+    <div class="save-bar"><button class="btn primary big block" data-act="save-wine">Save wine</button></div>
     <button class="btn danger block" data-act="delete-wine">Delete wine</button>`}`;
 }
 

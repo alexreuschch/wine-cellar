@@ -945,3 +945,9 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .form-sep h2 { font-size: 19px; font-weight: 600; }
 .form-sep p { margin: 0; font-size: 14px; color: var(--text-2); line-height: 1.45; }
 .save-bar { position: sticky; bottom: 0; z-index: 6; margin: 0 -20px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, rgba(26, 12, 18, 0), var(--bg) 30%); }
+
+/* one retailer: the name fills the field, × clears it */
+.one-pick { flex-basis: 100%; display: flex; align-items: center; height: 48px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+.one-pick-name { flex: 1; min-width: 0; height: 100%; padding: 0 14px; text-align: left; font-size: 16px; color: var(--text); background: none; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.one-pick .x { width: 44px; height: 100%; display: grid; place-items: center; color: var(--muted); background: none; border: 0; }
+.one-pick .x svg { width: 18px; height: 18px; }

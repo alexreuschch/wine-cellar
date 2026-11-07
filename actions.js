@@ -241,9 +241,16 @@ const ACTS = {
     catch (e) { w.ratings = prev; persist(); refreshView(); toast('Not saved: ' + e.message); }
   },
   'p-heart': el => { const p = PK().people[Number(el.dataset.i)]; if (p) { p.heart = !p.heart; updatePeople(); } },
+  'p-change': () => {
+    const P = PK();
+    P.editing = true; P.typing = '';
+    if (RS && P === RS.rp) renderSheet(); else updatePeople();
+    const i = $('#people-input'); if (i) i.focus();
+  },
   'p-rm': el => {
     const P = PK();
     P.people.splice(Number(el.dataset.i), 1);
+    P.editing = false;
     if (RS && P === RS.rp) renderSheet(); else { updatePeople(); renderSiteBox(); }
   },
   'p-pick': el => addPerson(el.dataset.v),
@@ -319,9 +326,8 @@ const ACTS = {
   'st-move-open': () => {
     if (D.move) { D.move = null; renderStockBox(); return; }
     const from = D.stock.findIndex(e => e.n > 0);
-    const to = D.stock.findIndex((e, i) => i !== from);
-    if (from < 0 || to < 0) return;
-    D.move = { from, to, n: 1 };
+    if (from < 0) return;
+    D.move = { from, to: moveDefaultTo(from), n: 1 };
     D.addLoc = false;
     renderStockBox();
   },
@@ -333,14 +339,17 @@ const ACTS = {
   },
   'st-move': () => {
     const m = D.move;
-    const src = D.stock[m.from], dst = D.stock[m.to];
-    if (!src || !dst || m.from === m.to) return;
+    const src = D.stock[m.from];
+    let dst = null;
+    if (str(m.to).startsWith('i:')) dst = D.stock[Number(m.to.slice(2))];
+    else if (str(m.to).startsWith('loc:')) { dst = { loc: m.to.slice(4), shelf: null, pos: '', n: 0 }; D.stock.push(dst); }
+    if (!src || !dst || src === dst) return;
     const n = Math.min(m.n, src.n);
     src.n -= n;
     dst.n += n;
     D.move = null;
     renderStockBox();
-    toast(`${n} ${n === 1 ? 'bottle' : 'bottles'} moved to ${placeLabel(dst)}. Save to keep it.`);
+    toast(`${n} ${n === 1 ? 'bottle' : 'bottles'} moved to ${placeLabel(dst)}. ${dst.shelf === null && !dst.pos ? 'Set shelf and position if you like, then save.' : 'Save to keep it.'}`, 5000);
   },
   radd: () => {
     const used = D.ratings.map(r => r.sys);
@@ -493,12 +502,17 @@ const CHANGES = {
   },
   'mv-from': el => {
     D.move.from = Number(el.value);
-    if (D.move.to === D.move.from) D.move.to = D.stock.findIndex((x, i) => i !== D.move.from);
+    if (D.move.to === 'i:' + D.move.from) D.move.to = moveDefaultTo(D.move.from);
     const src = D.stock[D.move.from];
     D.move.n = clamp(D.move.n, 1, Math.max(1, src ? src.n : 1));
     renderStockBox();
   },
-  'mv-to': el => { D.move.to = Number(el.value); },
+  'mv-to': async el => {
+    if (el.value !== '__new') { D.move.to = el.value; renderStockBox(); return; }
+    const name = await newLocationPrompt();
+    if (name) D.move.to = 'loc:' + name;
+    renderStockBox();
+  },
   'wl-photo': async el => { const files = [...(el.files || [])]; el.value = ''; if (files.length) await listAddPhotos(files); },
   'somm-photo': async el => {
     const file = el.files && el.files[0];

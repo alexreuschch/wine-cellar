@@ -103,7 +103,7 @@ function renderSheet() {
   const qty = `<div class="between"><span>${RS.mode === 'edit' || (RS.mode === 'record' && RS.id) ? 'Bottles' : out ? 'Bottles taken' : 'Bottles'}</span><div class="stepper"><button data-act="rs-qty" data-d="-1" aria-label="Fewer">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="rs-qty" data-input="qty-in" data-change="qty-in" data-k="rs" aria-label="Number of bottles" value="${RS.qty}"><button data-act="rs-qty" data-d="1" aria-label="More">${ICON.plus}</button></div></div>`;
   const picker = (label) => `<div class="field"><span>${label}</span>
       <div id="people-chips" class="chips">${peopleChipsHtml()}</div>
-      <input id="people-input" data-input="people" aria-label="${label}" placeholder="${PK() && PK().source === 'retailers' ? 'Type the name of a shop or winery' : 'Type a name'}" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
+      <input id="people-input" data-input="people" aria-label="${label}" placeholder="${PK() && PK().source === 'retailers' ? 'Type the name of a shop or winery' : 'Type a name'}"${pickInputAttrs()} autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
       <div id="people-sugg">${peopleSuggHtml()}</div></div>`;
   const priceField = label => `<label class="field">${label}${curLabel()}<input name="price" data-input="rs" inputmode="decimal" placeholder="45.00" value="${esc(RS.price)}"></label>`;
   const date = `<label class="field">Date<input type="date" name="date" data-input="rs" value="${esc(RS.date)}"></label>`;
@@ -160,9 +160,13 @@ const PK = () => {
 };
 const knownFor = P => (P.source === 'retailers' ? knownRetailers() : knownPeople());
 
+/* a retailer is one name: once chosen it fills the field itself, a tap on it lets you choose another */
+const pickOne = P => !!(P && P.single && P.people.length && !P.editing);
+const pickInputAttrs = () => { const P = PK(); return pickOne(P) ? ' hidden' : P && P.single && P.editing && P.people.length ? ` placeholder="${esc(P.people[0].name)}"` : ''; };
 function peopleChipsHtml() {
   const P = PK();
   if (!P || !P.people.length) return '';
+  if (P.single) return pickOne(P) ? `<div class="one-pick"><button class="one-pick-name" data-act="p-change" aria-label="Change ${esc(P.people[0].name)}">${esc(P.people[0].name)}</button><button class="x" data-act="p-rm" data-i="0" aria-label="Clear ${esc(P.people[0].name)}">${ICON.x}</button></div>` : '';
   return P.people.map((p, i) => `<span class="person${P.hearts ? '' : ' plain'}">${P.hearts ? `<button class="heart${p.heart ? ' on' : ''}" data-act="p-heart" data-i="${i}" aria-pressed="${p.heart}" aria-label="Favorite wine of ${esc(p.name)}">${p.heart ? HEART_ON : ICON.heart}</button>` : ''}${esc(p.name)}<button class="x" data-act="p-rm" data-i="${i}" aria-label="Remove ${esc(p.name)}">${ICON.x}</button></span>`).join('')
     + (P.hearts ? '<p class="tiny muted" style="flex-basis:100%;margin:0">Tap the heart if it is their favorite wine.</p>' : '');
 }
@@ -170,7 +174,7 @@ function peopleChipsHtml() {
 function peopleSuggHtml() {
   const P = PK();
   if (!P) return '';
-  if (P.single && P.people.length && !P.typing.trim()) return '';
+  if (pickOne(P)) return '';
   const t = lc(P.typing.trim());
   const chosen = P.people.map(p => lc(p.name));
   const known = knownFor(P).filter(p => !chosen.includes(lc(p.name)));
@@ -195,7 +199,7 @@ function updatePeople() {
   const c = $('#people-chips'), s = $('#people-sugg'), i = $('#people-input');
   if (c) c.innerHTML = peopleChipsHtml();
   if (s) s.innerHTML = peopleSuggHtml();
-  if (i) i.value = P.typing;
+  if (i) { i.value = P.typing; i.hidden = pickOne(P); if (P.single && P.editing && P.people.length) i.placeholder = P.people[0].name; }
 }
 
 function addPerson(raw) {
@@ -206,7 +210,7 @@ function addPerson(raw) {
   if (clean && !P.people.some(p => lc(p.name) === lc(clean))) {
     const known = knownFor(P).find(p => lc(p.name) === lc(clean));
     const item = { name: known ? known.name : clean, heart: false };
-    if (P.single) P.people = [item]; else P.people.push(item);
+    if (P.single) { P.people = [item]; P.editing = false; } else P.people.push(item);
     if (RS && P === RS.rp) {
       RS.website = str((S.retailers.find(x => lc(x.name) === lc(item.name)) || {}).website);
       RS.websiteInit = RS.website;
