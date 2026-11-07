@@ -569,7 +569,7 @@ async function saveDiscovery() {
     // what was loaded with More about this wine is kept, so the AI is not asked twice
     const pv = previewOf(x) || {};
     w = normWine({ id: newId('w'), producer: x.producer, name: x.name, vintage: x.vintage, type: x.type || pv.type, region: x.region || pv.region, grapes: x.grapes || pv.grapes, origin: 'discovery', stock: '[]', myRating: st.rating, myFav: !!st.fav, street, offer: st.offer ? JSON.stringify(st.offer) : '',
-      taste: pv.taste || '', tasteTags: (pv.tasteTags || []).join(', '), pairings: (pv.pairings || []).join(', '), drinkFrom: pv.drinkFrom, drinkUntil: pv.drinkUntil, peakFrom: pv.peakFrom, peakUntil: pv.peakUntil,
+      taste: pv.taste || '', tasteTags: (pv.tasteTags || []).join(', '), pairings: (pv.pairings || []).join(', '), drinkFrom: x.drinkFrom || pv.drinkFrom, drinkUntil: x.drinkUntil || pv.drinkUntil, peakFrom: x.peakFrom || pv.peakFrom, peakUntil: x.peakUntil || pv.peakUntil,
       profile: pv.profile ? JSON.stringify(pv.profile) : '' });
   }
   const entry = Object.assign({ id: st.id || newId('t'), wineId: w.id, wineName: fullName(w) }, fields);

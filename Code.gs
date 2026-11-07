@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 35;
+var API_VERSION = 37;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1779,9 +1779,21 @@ var CHECK_RULES = [
   '4. Say whether the cellar already holds similar wines in enough bottles.',
   '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Fewer is fine.',
   '6. Answer in the language of the question; if there is no question, in English. Keep "answer" to three to five sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "typicalMarkup": [2, 3]}.',
-  '8. "typicalMarkup" is the usual range by which restaurants in the country of the owner multiply the shop price of a wine, for example [2.5, 3.5]. Give it always.'
+  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "typicalMarkup": [2, 3], "drinkFrom": 2026, "peakFrom": 2029, "peakUntil": 2035, "drinkUntil": 2040, "drinkNote": "one short sentence"}.',
+  '8. "typicalMarkup" is the usual range by which restaurants in the country where the owner is now multiply the shop price of a wine in the same price class as this one, for example [2.5, 3.5]. Restaurants usually multiply everyday wines more and expensive wines less, so judge it for the shop price of this wine in that country, not for wine in general. Give it always.',
+  '9. Give the drinking window of exactly this vintage from your knowledge, as years: "drinkFrom", "peakFrom", "peakUntil", "drinkUntil". Use null for all four only if you cannot judge it, for example without a vintage. "drinkNote" is one short sentence for today, for example "Still young: decant it for an hour, or keep it until 2029." or "At its best now."'
 ].join('\n');
+
+/** The drinking window from an AI answer, as whole years in order, or null. */
+function windowFrom_(d) {
+  var y = function (v) { var n = Math.round(Number(v)); return n >= 1900 && n <= 2150 ? n : null; };
+  var f = y(d.drinkFrom), u = y(d.drinkUntil);
+  if (!f || !u || u < f) return null;
+  var pf = y(d.peakFrom), pu = y(d.peakUntil);
+  if (!pf || pf < f || pf > u) pf = f;
+  if (!pu || pu < pf || pu > u) pu = u;
+  return { drinkFrom: f, peakFrom: pf, peakUntil: pu, drinkUntil: u };
+}
 
 /** One compact line per wine in stock, plus recent journal entries, as context for the sommelier. */
 function cellarContext_() {
@@ -1871,6 +1883,7 @@ function actionSommelier_(req) {
   var out = { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
   // what the app needs to keep the wine as a discovery, if the owner tastes it
   if (check && d.wine && (d.producer || d.name)) out.info = { producer: String(d.producer || ''), name: String(d.name || ''), vintage: d.vintage ? String(d.vintage) : '', type: String(d.type || ''), region: String(d.region || ''), grapes: String(d.grapes || '') };
+  if (check) { var win = windowFrom_(d); if (win && out.info) Object.assign(out.info, win); if (win) { out.window = win; out.drinkNote = String(d.drinkNote || '').slice(0, 240); } }
   if (check && out.wine) {
     // the price in local shops of the country the owner is in, reused for 14 days
     var sc = shopScope_();
@@ -1914,7 +1927,7 @@ var WINELIST_RULES = [
   'If the owner says what they eat, all three must go well with it. Use the cellar, the finished wines and the ratings of the owner to judge how well each wine fits their taste, as "fit" from 0 to 100, and prefer wines that fit.',
   '"page" is the number of the photo where the wine appears, starting at 1. Prices are numbers in the currency of the list. Estimates are fine, but never invent a wine that is not on the list.',
   'Write in English. "why" is one or two sentences, "food" is one short sentence about the pairing or empty, "note" is two to three sentences about the list as a whole. Do not use dashes as punctuation.',
-  'Return ONLY a JSON object, no other text: {"restaurant": "the name of the restaurant if it is on the pages, otherwise empty", "typicalMarkup": [2.5, 3.5] as the usual range by which restaurants in this country multiply shop prices, "count": 47, "currency": "CHF", "avgMarkup": 2.8, "note": "text", "picks": [{"kind": "range|value|gem", "producer": "", "name": "", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "listPrice": 78, "page": 2, "shopPrice": 45, "markup": 1.7, "fit": 80, "why": "", "food": ""}]}.'
+  'Return ONLY a JSON object, no other text: {"restaurant": "the name of the restaurant if it is on the pages, otherwise empty", "typicalMarkup": [2.5, 3.5] as the usual range by which restaurants in this country multiply shop prices for wines in the price classes of this list, "count": 47, "currency": "CHF", "avgMarkup": 2.8, "note": "text", "picks": [{"kind": "range|value|gem", "producer": "", "name": "", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "listPrice": 78, "page": 2, "shopPrice": 45, "markup": 1.7, "typicalMarkup": [2, 2.8], "fit": 80, "why": "", "food": "", "drinkFrom": 2024, "peakFrom": 2027, "peakUntil": 2032, "drinkUntil": 2036}]}. The four years are the drinking window of exactly this vintage from your knowledge, or null if you cannot judge it. The "typicalMarkup" of a pick is the usual range in this country for a wine at its shop price: restaurants usually multiply everyday wines more and expensive wines less.'
 ].join('\n');
 
 /** Photos of a restaurant wine list: the best wine in a price range, the best value and the hidden gem. */
@@ -1947,7 +1960,7 @@ function actionWineList_(req) {
         listPrice: num(p.listPrice), page: Number(p.page) >= 1 ? Math.round(Number(p.page)) : null, shopPrice: num(p.shopPrice),
         markup: num(p.markup) || (num(p.listPrice) && num(p.shopPrice) ? Math.round(num(p.listPrice) / num(p.shopPrice) * 10) / 10 : null),
         fit: isNaN(fit) || p.fit === null || p.fit === '' ? null : Math.max(0, Math.min(100, Math.round(fit))),
-        why: String(p.why || ''), food: String(p.food || '')
+        why: String(p.why || ''), food: String(p.food || ''), window: windowFrom_(p), typical: markupRange_(p.typicalMarkup)
       };
     })
     .sort(function (a, b) { return kinds.indexOf(a.kind) - kinds.indexOf(b.kind); });

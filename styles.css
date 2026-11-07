@@ -912,3 +912,8 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .rh-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
 .rh-wine-head { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; color: var(--text); }
 .rh-note { background: var(--surface-2); }
+
+/* drinking window of a checked wine and of wine list picks */
+.somm-win { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.somm-win b { font-size: 14px; font-weight: 600; }
+.win-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--sc); color: var(--sc); }

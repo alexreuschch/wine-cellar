@@ -112,7 +112,7 @@ function priceCheckHtml(a) {
       const f = a.price / shop;
       if (resto) {
         const [label, cls] = f < typ[0] ? ['Good price', 'up'] : f <= typ[1] ? ['Fair price', ''] : ['Expensive', 'down'];
-        verdict = `<p class="verdict"><b class="${cls}">${label}</b> for a restaurant</p><p class="small" style="margin:0">Markup <b>${fmtNum(f, 1)}×</b> over ${ref}. Usual in ${esc(where)}: ${typText}.</p>`;
+        verdict = `<p class="verdict"><b class="${cls}">${label}</b> for a restaurant</p><p class="small" style="margin:0">Markup <b>${fmtNum(f, 1)}×</b> over ${ref}. Usual in ${esc(where)} for wines at this price: ${typText}.</p>`;
       } else {
         verdict = `<p class="small" style="margin:0"><b class="${f <= 1.05 ? 'up' : f > 1.2 ? 'down' : ''}">${f >= 1 ? `${Math.round((f - 1) * 100)}% above` : `${Math.round((1 - f) * 100)}% below`}</b> ${ref}.</p>`;
       }
@@ -120,7 +120,7 @@ function priceCheckHtml(a) {
   } else if (o && resto) {
     // no menu price given: what would be a fair price for it in a restaurant here
     const lo = convTo(o.v * typ[0], o.cur, tripCur), hi = convTo(o.v * typ[1], o.cur, tripCur);
-    if (lo && hi) verdict = `<p class="small" style="margin:0">A fair restaurant price here: <b>${esc(tripCur)} ${fmtNum(Math.round(lo), 0)} to ${fmtNum(Math.round(hi), 0)}</b>, the usual ${typText} of the shop price. Add the price on the menu for a verdict.</p>`;
+    if (lo && hi) verdict = `<p class="small" style="margin:0">A fair restaurant price here: <b>${esc(tripCur)} ${fmtNum(Math.round(lo), 0)} to ${fmtNum(Math.round(hi), 0)}</b>, the usual ${typText} of the shop price for wines at this price. Add the price on the menu for a verdict.</p>`;
   }
   const none = `No online shop in ${esc(where)} sells this wine right now`;
   const note = abroad ? `<p class="tiny muted" style="margin:0">${none}. The reference comes from a shop abroad, converted to ${esc(tripCur)}.</p>`
@@ -147,9 +147,23 @@ function sommAnswerHtml(t) {
   const fit = t.a.wine ? `<div class="somm-fit"><div class="between" style="gap:10px"><b>${esc(t.a.wine)}</b>${hasFit ? `<span class="rating-val" style="font-size:22px">${t.a.fit}%</span>` : ''}</div>
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
   const i = sommThread().indexOf(t);
+  const win = check ? checkWindowHtml(t.a) : '';
   const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.magic}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div>` : '';
-  return `<div class="somm-a">${fit}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
+  return `<div class="somm-a">${fit}${win}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
+}
+
+/* the drinking window of a wine you check, from the same AI answer: timeline, status and a word for today */
+const winWine = x => normWine({ id: 'window', drinkFrom: x.drinkFrom, peakFrom: x.peakFrom, peakUntil: x.peakUntil, drinkUntil: x.drinkUntil, stock: '[]' });
+function checkWindowHtml(a) {
+  const x = a.window || (a.info && a.info.drinkFrom ? a.info : null);
+  if (!x) return '';
+  const w = winWine(x), p = windowParts(w);
+  if (!p) return '';
+  const s = statusOf(w);
+  return `<div class="somm-win"><div class="between"><b>Drinking window</b><span class="small" style="color:${STATUS[s].c};font-weight:600">${esc(s)}</span></div>
+    ${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>
+    <p class="tiny muted" style="margin:0">${esc(windowText(w))}</p>${a.drinkNote ? `<p class="small" style="margin:2px 0 0;line-height:1.45">${esc(a.drinkNote)}</p>` : ''}</div>`;
 }
 
 function sommIntroHtml() {
@@ -249,7 +263,15 @@ function listLevelHtml(res) {
   const typ = res.typical, land = SHOP_COUNTRIES[res.country] || 'this country';
   if (!typ) return `<p class="small" style="margin:0">Average markup of this list about <b>${fmtNum(res.avgMarkup, 1)}×</b> the shop price.</p>`;
   const f = res.avgMarkup, [label, cls] = f < typ[0] ? ['Good prices', 'up'] : f <= typ[1] ? ['Fair prices', ''] : ['Expensive list', 'down'];
-  return `<div class="price-check"><p class="verdict"><b class="${cls}">${label}</b> for ${esc(land)}</p><p class="small" style="margin:0">This list about <b>${fmtNum(f, 1)}×</b> the shop price, usual for restaurants in ${esc(land)}: ${fmtNum(typ[0], 1)} to ${fmtNum(typ[1], 1)}×. The markup of each pick below is compared with this list.</p></div>`;
+  return `<div class="price-check"><p class="verdict"><b class="${cls}">${label}</b> for ${esc(land)}</p><p class="small" style="margin:0">This list about <b>${fmtNum(f, 1)}×</b> the shop price, usual for restaurants in ${esc(land)} at these prices: ${fmtNum(typ[0], 1)} to ${fmtNum(typ[1], 1)}×. ${res.picks.some(p => p.typical) ? 'Each pick below shows what is usual for a wine at its price.' : 'The markup of each pick below is compared with this list.'}</p></div>`;
+}
+/* the drinking window of a pick as a small badge: Peak, Ready, Too young and so on */
+function wlStatus(p) {
+  if (!p.window) return '';
+  const w = winWine(p.window);
+  if (!windowParts(w)) return '';
+  const s = statusOf(w);
+  return `<span class="win-chip" style="--sc:${STATUS[s].c}" title="${esc(windowText(w))}">${esc(s)}</span>`;
 }
 function listPickHtml(p, i, cur0) {
   const [label, cls] = WL_KIND[p.kind] || ['Pick', 'disc'];
@@ -259,13 +281,15 @@ function listPickHtml(p, i, cur0) {
   const price = v => (v ? `${cur0} ${fmtNum(v, v % 1 ? 2 : 0)}` : '');
   const mine = v => { const c = v && cur0 !== cur() ? convTo(v, cur0, cur()) : null; return c ? `<small>≈ ${esc(money(c, 0))}</small>` : ''; };
   const o = p.offer || p.worldOffer, abroad = !p.offer && !!p.worldOffer;
+  // the markup against what is usual for a wine at this price, else against the average of the list
+  const mkCls = !p.markup ? '' : p.typical ? (p.markup < p.typical[0] ? 'up' : p.markup > p.typical[1] ? 'down' : '') : avg ? (p.markup < avg ? 'up' : p.markup > avg * 1.1 ? 'down' : '') : '';
   return `<div class="cons-card wl-card">
-    <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${cls}">${esc(label)}</span>${p.page ? `<span class="small muted">page ${p.page}</span>` : ''}</div>
+    <div class="between" style="gap:8px;align-items:flex-start"><span style="display:flex;gap:6px;flex-wrap:wrap"><span class="cons-label ${cls}">${esc(label)}</span>${wlStatus(p)}</span>${p.page ? `<span class="small muted">page ${p.page}</span>` : ''}</div>
     <button class="prev-open" data-act="wl-preview" data-i="${i}"><span><span class="cons-title">${esc(wishTitle(p))}</span><span class="small muted">${countryOf(p) ? flagOf(p) : ''}${esc([p.region, p.type, p.grapes].filter(Boolean).join(' · '))}</span></span>${ICON.chevron}</button>
     <div class="wl-prices">
       <div><span>On the list</span><b>${esc(price(p.listPrice) || 'N/A')}</b>${mine(p.listPrice)}</div>
       <div><span>${abroad ? 'Shop abroad' : o ? 'In shops' : 'Shop, estimate'}</span><b>${esc(price(p.shopPrice) || 'N/A')}</b>${mine(p.shopPrice)}</div>
-      <div><span>Markup</span><b class="${p.markup && avg ? (p.markup < avg ? 'up' : p.markup > avg * 1.1 ? 'down' : '') : ''}">${p.markup ? `${fmtNum(p.markup, 1)}×` : 'N/A'}</b>${avg ? `<small>list ${fmtNum(avg, 1)}×</small>` : ''}</div>
+      <div><span>Markup</span><b class="${mkCls}">${p.markup ? `${fmtNum(p.markup, 1)}×` : 'N/A'}</b>${p.typical ? `<small>usual ${fmtNum(p.typical[0], 1)} to ${fmtNum(p.typical[1], 1)}×</small>` : avg ? `<small>list ${fmtNum(avg, 1)}×</small>` : ''}</div>
     </div>
     ${o ? shopLineHtml(o, cur0, abroad) : ''}
     ${abroad ? `<p class="tiny muted" style="margin:0">No online shop in ${esc(SHOP_COUNTRIES[WL.result.country] || 'this country')} sells this wine. Reference price from abroad, converted to ${esc(cur0)}.</p>` : !o ? `<p class="tiny muted" style="margin:0">No online shop found, in ${esc(SHOP_COUNTRIES[WL.result.country] || 'this country')} or abroad. The shop price is an AI estimate.</p>` : ''}
@@ -850,7 +874,7 @@ function sommTaste(i) {
 function listTaste(i) {
   const res = WL.result, p = res && res.picks[i];
   if (!p) return;
-  openDiscovery({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes },
+  openDiscovery(Object.assign({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes }, p.window || {}),
     { venue: 'restaurant', place: res.restaurant || '', price: p.listPrice || '', priceCur: res.currency || cur(), food: res.food || '', shopRef: p.shopPrice ? { v: p.shopPrice, cur: res.currency || cur() } : null, offer: p.offer || null });
 }
 
@@ -867,7 +891,8 @@ function prevRemember(x, d) {
 }
 /* the suggested wine as a wine of the app, with what was loaded about it */
 function previewWine(base, d) {
-  const x = Object.assign({}, base, d || {});
+  // the window you saw in the answer stays the same here
+  const x = Object.assign({}, base, d || {}, base && base.drinkFrom ? { drinkFrom: base.drinkFrom, peakFrom: base.peakFrom, peakUntil: base.peakUntil, drinkUntil: base.drinkUntil } : {});
   return normWine({ id: 'preview', producer: x.producer, name: x.name, vintage: x.vintage, type: x.type, region: x.region, grapes: x.grapes, taste: x.taste,
     tasteTags: (x.tasteTags || []).join(', '), pairings: (x.pairings || []).join(', '), drinkFrom: x.drinkFrom, drinkUntil: x.drinkUntil, peakFrom: x.peakFrom, peakUntil: x.peakUntil,
     profile: x.profile ? JSON.stringify(x.profile) : '', stock: '[]' });
@@ -902,16 +927,18 @@ function renderPreview() {
   const c = countryOf(w);
   const p = windowParts(w), s = statusOf(w);
   const section = (title, body) => `<section style="gap:12px"><h2>${title}</h2>${body}</section>`;
+  // the window known from the answer shows at once, also while the rest is loading
+  const winSec = p ? section('Drinking window', `<span class="small" style="color:${STATUS[s].c};font-weight:500;margin-top:-6px">${statusLine(w)}</span>${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>`) : '';
   const body = PREV.busy
-    ? `<div class="info-wait"><p class="somm-wait">Loading taste profile and drinking window<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Only for the wines you open, about 1 to 2 cents. Kept on your phone.</p></div>`
-    : PREV.error ? `<p class="small" style="margin:0;color:var(--danger)">${esc(PREV.error)}</p>`
-    : d ? `${p ? section('Drinking window', `<span class="small" style="color:${STATUS[s].c};font-weight:500;margin-top:-6px">${statusLine(w)}</span>${timelineHtml(w, true)}<div class="scale" style="margin-top:4px"><span>${p.f}</span><span style="color:var(--text)">Today</span><span>${p.u}</span></div>`) : ''}
+    ? `${winSec}<div class="info-wait"><p class="somm-wait">Loading taste profile and drinking window<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">Only for the wines you open, about 1 to 2 cents. Kept on your phone.</p></div>`
+    : PREV.error ? `${winSec}<p class="small" style="margin:0;color:var(--danger)">${esc(PREV.error)}</p>`
+    : d ? `${winSec}
         <section style="gap:16px"><h2>Profile</h2>${grapeRingHtml(w)}${axesHtml(w)}${aromasHtml(w)}
           ${w.taste ? `<div class="kv"><span>Taste</span><p style="line-height:1.5">${esc(w.taste)}</p></div>` : ''}
           ${w.tasteTags.length ? `<div class="kv"><span>Style</span><p class="style-line">${w.tasteTags.map(t => esc(cap(t))).join(' · ')}</p></div>` : ''}
           ${foodTilesHtml(w)}</section>
         ${aboutHtml(w)}
-        <p class="tiny muted" style="margin:0">Written by AI from its knowledge. Tap region, style or producer for the background.</p>` : '';
+        <p class="tiny muted" style="margin:0">Written by AI from its knowledge. Tap region, style or producer for the background.</p>` : winSec;
   const k = PREV.src && PREV.src.kind;
   const wished = S.wishlist.some(x => wishKey(x) === wishKey(PREV.base));
   const buttons = `<div class="grid2">${k === 'wish' ? `<button class="btn" data-act="prev-cellar">${ICON.plus}Add to cellar</button>` : `<button class="btn" data-act="prev-wish"${wished ? ' disabled' : ''}>${wished ? `${ICON.check}On your wishlist` : `${ICON.plus}Save to wishlist`}</button>`}<button class="btn primary" data-act="prev-taste">${ICON.spark}I'm tasting this</button></div>`;
@@ -940,7 +967,7 @@ function renderPreview() {
 function listPreview(i) {
   const res = WL.result, p = res && res.picks[i];
   if (!p) return;
-  openPreview({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes }, esc(p.why || ''), { kind: 'list', i });
+  openPreview(Object.assign({ producer: p.producer, name: p.name, vintage: p.vintage ? String(p.vintage) : '', type: p.type, region: p.region, grapes: p.grapes }, p.window || {}), esc(p.why || ''), { kind: 'list', i });
 }
 function sommPreview(i) {
   const t = sommThread()[i];
