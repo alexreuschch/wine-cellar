@@ -23,6 +23,7 @@ const offChip = (act, label) => `<button class="chip on" data-act="${act}" aria-
 
 const F_WINE = { label: 'Wine', sec: 'Type', plural: 'wine types', of: w => [w.type], order: TYPES };
 const F_GRAPE = { label: 'Grape', plural: 'grapes', of: grapeNames };
+const F_PRODUCER = { label: 'Producer', plural: 'producers', of: w => (w.producer ? [w.producer] : []) };
 /* country and region of a wine, from its region field "Côte de Nuits, Burgundy, France": the region is the part right before the country.
    Each shows the flag of the country. The choices follow each other: with France set, Region only offers French regions, and the other way round. */
 const flagEmoji2 = code => String.fromCodePoint(...[...code].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65));
@@ -86,6 +87,7 @@ const CTX = {
       grape: F_GRAPE,
       country: F_COUNTRY,
       region: F_REGION,
+      producer: F_PRODUCER,
       window: F_WINDOW,
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
       food: { label: 'Food', plural: 'kinds of food', of: foodNames },
@@ -97,7 +99,7 @@ const CTX = {
       price: F_PRICE,
       rating: F_RATING
     },
-    groups: [['wine', 'Wine', ['wine', 'grape']], ['origin', 'Origin', ['country', 'region']], ['taste', 'Taste', ['taste', 'food']], ['cellar', 'Cellar', ['window', 'location']], ['value', 'Value', ['rating', 'price']]],
+    groups: [['wine', 'Wine', ['wine', 'grape']], ['origin', 'Origin', ['country', 'region', 'producer']], ['taste', 'Taste', ['taste', 'food']], ['cellar', 'Cellar', ['window', 'location']], ['value', 'Value', ['rating', 'price']]],
     items: () => cellarPool(),
     text: w => matches(w, U.search),
     extra: () => { const done = finishedWines().length; return done ? switchHtml('show-finished', U.showFinished, `Include finished wines (${done})`) : ''; },
@@ -123,11 +125,12 @@ const CTX = {
       grape: F_GRAPE,
       country: F_COUNTRY,
       region: F_REGION,
+      producer: F_PRODUCER,
       window: F_WINDOW,
       taste: F_TASTE,
       price: F_PRICE
     },
-    groups: [['wine', 'Wine', ['wine', 'grape']], ['origin', 'Origin', ['country', 'region']], ['taste', 'Taste', ['taste']], ['window', 'Window', ['window']], ['price', 'Price', ['price']]],
+    groups: [['wine', 'Wine', ['wine', 'grape']], ['origin', 'Origin', ['country', 'region', 'producer']], ['taste', 'Taste', ['taste']], ['window', 'Window', ['window']], ['price', 'Price', ['price']]],
     items: () => topPool(),
     text: () => true,
     extra: () => switchHtml('top-fav', !!U.f.top.fav, `Only my favorites<span class="heart-on">${HEART_SM}</span>`) + (finishedWines().length ? switchHtml('top-finished', U.topFinished, `Include finished wines (${finishedWines().length})`) : '') + (discWines().length ? switchHtml('top-disc', U.topDisc, `Include discoveries (${discWines().length})`) : ''),

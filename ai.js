@@ -415,7 +415,7 @@ async function listSave(p) {
   sommRefresh(false);
   try {
     await api('saveWish', { wish: Object.assign({}, x, { offer: '', details: x.details ? JSON.stringify(x.details) : '' }) });
-    wishSavedToast();
+    wishSavedToast(x);
   } catch (e) {
     S.wishlist = S.wishlist.filter(w => w.id !== x.id);
     persist();
@@ -622,7 +622,8 @@ function normWish(x) {
     id: str(x.id), producer: str(x.producer), name: str(x.name), vintage: str(x.vintage), type: str(x.type), region: str(x.region), grapes: str(x.grapes),
     price: numOrNull(x.price), priceCur: str(x.priceCur) || cur(), label: str(x.label), why: str(x.why), value: str(x.value),
     qty: numOrNull(x.qty), replaces: str(x.replaces), offer: offer && offer.shop ? offer : null, createdAt: str(x.createdAt),
-    fit: numOrNull(x.fit), details: (() => { try { return x.details ? (typeof x.details === 'string' ? JSON.parse(x.details) : x.details) : null; } catch (e) { return null; } })()
+    fit: numOrNull(x.fit), details: (() => { try { return x.details ? (typeof x.details === 'string' ? JSON.parse(x.details) : x.details) : null; } catch (e) { return null; } })(),
+    recBy: str(x.recBy)
   };
 }
 const wishTitle = x => [x.producer, x.name, x.vintage].filter(Boolean).join(' ');
@@ -736,6 +737,7 @@ function wishCardHtml(x) {
     <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${LABEL_CLS[x.label] || 'disc'}">${esc(consLabel(x.label) || 'Wishlist')}</span>${x.price ? `<span class="small muted">≈ ${esc(priceText(x.price, x.priceCur))}</span>` : ''}</div>
     <div><p class="cons-title">${esc(wishTitle(x))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(x) ? flagOf(x) : ''}${esc([x.region, x.type].filter(Boolean).join(' · '))}${x.qty ? ` · buy ${x.qty}` : ''}</p></div>
     ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
+    ${x.recBy ? `<button class="rec-by as-link" data-act="rec-wish" data-id="${esc(x.id)}">${REC_IC}<span>Recommended by ${esc(namesOf(x.recBy).join(', '))}</span></button>` : `<button class="link-btn rec-ask" data-act="rec-wish" data-id="${esc(x.id)}">${REC_IC}Who recommended it?</button>`}
     ${fitBarHtml(x.fit)}
     ${x.offer ? offerLineHtml(x.offer, x.qty || 6, 'wish:' + x.id) : ''}
     <button class="link-btn" style="align-self:flex-start" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
@@ -818,7 +820,7 @@ async function consOffer(p, key, wishId) {
   refreshView();
 }
 
-const wishSavedToast = () => toastAct('Saved to your wishlist in Insights.', 'Show', () => goSection('wishlist'));
+const wishSavedToast = x => toastAct('Saved to your wishlist in Insights.', [['Show', () => goSection('wishlist')], ['Who recommended it?', () => recWishOpen(x.id)]]);
 async function consSave(p) {
   const x = normWish(Object.assign({}, p, { id: newId('x'), offer: CONS.offers[wishKey(p)] || null, createdAt: new Date().toISOString(), details: previewOf(p) }));
   S.wishlist.push(x);
@@ -826,7 +828,7 @@ async function consSave(p) {
   refreshView();
   try {
     await api('saveWish', { wish: Object.assign({}, x, { offer: x.offer ? JSON.stringify(x.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) });
-    wishSavedToast();
+    wishSavedToast(x);
   } catch (e) {
     S.wishlist = S.wishlist.filter(w => w.id !== x.id);
     persist();
@@ -1015,7 +1017,7 @@ async function checkSave(i) {
     price: o ? o.v : '', priceCur: o ? o.cur : cur(), label: 'Will I like it?', why: str(a.answer), createdAt: new Date().toISOString(), fit: a.fit, details: previewOf(x0) });
   S.wishlist.push(x);
   persist();
-  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) }); wishSavedToast(); }
+  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) }); wishSavedToast(x); }
   catch (e) { S.wishlist = S.wishlist.filter(w => w.id !== x.id); persist(); toast('Not saved: ' + e.message); }
 }
 

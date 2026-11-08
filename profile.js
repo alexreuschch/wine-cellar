@@ -82,7 +82,8 @@ function parseProfile(v) {
     style: t(p.style), styleDesc: t(p.styleDesc), sub: t(p.sub), producerLine: t(p.producerLine), about: t(p.about),
     classification: t(p.classification), alcohol: Number(p.alcohol) > 0 ? Number(p.alcohol) : null, ageing: t(p.ageing),
     closure: t(p.closure), vineyard: t(p.vineyard), vintageNote: t(p.vintageNote), typical: p.typical === true,
-    bottle: ['bordeaux', 'burgundy', 'flute', 'bocksbeutel', 'champagne', 'port', 'fiasco'].includes(p.bottle) ? p.bottle : ''
+    bottle: ['bordeaux', 'burgundy', 'flute', 'champagne', 'provence', 'bocksbeutel', 'port', 'clavelin', 'tokaji', 'fiasco'].includes(p.bottle) ? p.bottle : '',
+    glass: ['black', 'green', 'olive', 'light', 'amber', 'clear'].includes(p.glass) ? p.glass : ''
   };
 }
 /* the alcohol of a wine as shown under its name, or '' */
@@ -412,7 +413,7 @@ function renderProfileEditor() {
 
 function profileFromDraft() {
   const p = Object.assign({}, D.profile);
-  delete p.bottle;   // the bottle shape is kept in D.bottle
+  delete p.bottle; delete p.glass;   // shape and glass are kept in D.bottle and D.glass
   const a = Number(String(p.alcohol === null ? '' : p.alcohol).replace(',', '.'));
   p.alcohol = a > 0 && a < 25 ? a : null;
   p.aromas = p.aromas.filter(x => AROMAS[x.g]).map(x => ({ g: x.g, n: str(x.n).trim() }));
@@ -433,7 +434,7 @@ function infoStored() { try { return JSON.parse(localStorage.getItem('wc-info') 
 function infoCache() { return Object.assign(infoStored(), INFO_MEM); }
 const countryName = c => { if (COUNTRY_NAMES[c]) return COUNTRY_NAMES[c]; try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch (e) { return c; } };
 /* a grape background from before the charts is written again once */
-const INFO_NEW = { grape: [3, 24], region: [3, 26], producer: [2, 25] };
+const INFO_NEW = { grape: [3, 24], region: [3, 26], producer: [3, 49] };
 const infoOld = (kind, d) => (kind === 'vintages' ? !d || Number(d.made) < new Date().getFullYear() : !!INFO_NEW[kind] && ((d && d.v) || 0) < INFO_NEW[kind][0] && !(S.version && S.version < INFO_NEW[kind][1]));
 function infoRemember(key, data) {
   INFO_MEM[key] = data;
@@ -678,7 +679,7 @@ function infoTopHtml(d) {
   if (k === 'producer') {
     const facts = d.facts.filter(f => !/farming/i.test(f.label));
     if (d.website) facts.push({ label: 'Website', html: `<a class="gi-web" href="${esc(d.website)}" target="_blank" rel="noopener">${esc(d.website.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''))}${ICON.link}</a>` });
-    return tilesHtml(facts);
+    return `${d.map ? mapHtml(d.map, str(d.title || INFO.name)) : ''}${tilesHtml(facts)}${d.visits ? `<p class="gi-visit">${AB_ICON.producer}<span><b>Visits</b> ${esc(d.visits)}</span></p>` : ''}`;
   }
   return tilesHtml(d.facts);
 }
@@ -704,6 +705,39 @@ function grapeMineHtml(mine) {
   return `${mine.all.length ? `<div class="gi-sec"><h3>In your cellar</h3><div class="gi-mine"><div><b>${mine.all.length} wine${mine.all.length === 1 ? '' : 's'}</b><span class="small muted">${btl} bottle${btl === 1 ? '' : 's'} in stock${avg !== null ? ` · your rating ${avg}%` : ''}</span></div>${mine.go ? `<button class="btn ghost" data-act="info-mine">Show</button>` : ''}</div></div>` : ''}`;
 }
 
+/* the producer and you, from your own cellar and journal only: always the same rows, a dash where nothing is known yet */
+function producerMineHtml(mine) {
+  const n = lc(INFO.name);
+  const tasted = S.wines.filter(x => isDisc(x) && lc(x.producer) === n);
+  if (!mine.all.length && !tasted.length) return '<p class="pm-none">You have no wines from this producer yet.</p>';
+  const ids = new Set(mine.all.map(x => x.id));
+  const btl = mine.inStock.reduce((a, x) => a + x.count, 0);
+  const rated = mine.all.filter(x => x.myRating !== null);
+  const avg = rated.length ? Math.round(rated.reduce((a, x) => a + x.myRating, 0) / rated.length) : null;
+  const moves = S.removals.filter(r => ids.has(r.wineId));
+  const opened = moves.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift').map(r => r.date).sort().pop();
+  const buys = moves.filter(r => r.dir === 'in' && r.type === 'Purchase');
+  const shops = [...buys.reduce((m, r) => (r.retailer ? m.set(r.retailer, (m.get(r.retailer) || 0) + (r.qty || 1)) : m), new Map())].sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => x[0]);
+  const priced = buys.filter(r => r.price !== null);
+  const avgPrice = priced.length ? priced.reduce((a, r) => a + (conv(r.price, r.priceCur) || 0) * (r.qty || 1), 0) / priced.reduce((a, r) => a + (r.qty || 1), 0) : null;
+  const recs = [...new Set(buys.flatMap(r => namesOf(r.people)))];
+  const dash = '<span class="muted">–</span>';
+  const row = (k, v) => `<div class="pm-row"><span>${k}</span><b>${v || dash}</b></div>`;
+  const byRating = list => list.slice().sort((a, b) => (b.myRating === null ? -1 : b.myRating) - (a.myRating === null ? -1 : a.myRating) || str(b.vintage).localeCompare(str(a.vintage)));
+  const bar = x => `<a class="pm-bar" href="#/wine/${encodeURIComponent(x.id)}" data-act="info-wine"><span class="ellipsis">${esc(x.name || x.producer)} ${esc(x.vintage || '')}</span>${x.myRating !== null ? `${segsHtml(x.myRating, 6)}<b>${x.myRating}%</b>` : '<small class="muted pm-nr">Not rated yet</small>'}</a>`;
+  return `<div class="gi-sec pm"><h3>With this producer</h3>
+    <div class="pm-rows">
+      ${row('Wines', mine.all.length ? `${mine.all.length}, ${btl ? `${btl} ${btl === 1 ? 'bottle' : 'bottles'} in your cellar` : 'none in your cellar now'}` : 'None in your cellar')}
+      ${row('Your rating', avg !== null ? `${avg}% on average` : '')}
+      ${row('Last opened', opened ? esc(fmtDate(opened)) : '')}
+      ${row('Bought at', shops.length ? `${esc(shops.join(', '))}${avgPrice !== null ? `, ${esc(money(avgPrice))} per bottle on average` : ''}` : '')}
+      ${row('Recommended by', recs.length ? esc(recs.join(', ')) : '')}
+    </div>
+    ${mine.all.length ? `<div class="pm-bars"><span class="tiny muted">Your wines</span>${byRating(mine.all).map(bar).join('')}</div>` : ''}
+    ${tasted.length ? `<div class="pm-bars"><span class="tiny muted">Tasted elsewhere</span>${byRating(tasted).map(bar).join('')}</div>` : ''}
+    ${mine.all.length && mine.go ? `<button class="btn ghost block" data-act="info-mine">${ICON.glass}Show in the cellar</button>` : ''}</div>`;
+}
+
 function renderInfo() {
   let root = $('#info-root');
   if (!root) { root = document.createElement('div'); root.id = 'info-root'; document.body.appendChild(root); }
@@ -722,7 +756,7 @@ function renderInfo() {
         ${infoTextHtml(d)}
         ${INFO.kind === 'grape' ? grapeChartsHtml(d) : ''}
         <p class="tiny muted" style="margin:0">Written by AI from its knowledge, kept for all your wines.</p>` : '';
-  const yours = INFO.kind === 'grape' ? (d && !INFO.busy ? grapeMineHtml(mine) : '') : mine.all.length && mine.go
+  const yours = INFO.kind === 'grape' ? (d && !INFO.busy ? grapeMineHtml(mine) : '') : INFO.kind === 'producer' ? (INFO.busy ? '' : producerMineHtml(mine)) : mine.all.length && mine.go
     ? `<button class="btn ghost block" data-act="info-mine">${ICON.glass}Your wines: ${mine.all.length}${mine.inStock.length !== mine.all.length ? `, ${mine.inStock.length} in stock` : ''}</button>` : '';
   root.innerHTML = `<div class="sheet-backdrop" data-act="info-close"></div>
   <div class="sheet info-sheet" role="dialog" aria-modal="true" aria-label="${esc(INFO.name)}">

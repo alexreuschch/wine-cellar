@@ -334,7 +334,7 @@ function peopleLine(r) {
   const names = namesOf(r.people);
   if (!names.length) return '';
   const hearts = namesOf(r.hearts).map(lc);
-  const pre = { Gift: 'Given to ', Received: 'From ', Sale: 'Sold to ' }[r.type] || 'With ';
+  const pre = { Gift: 'Given to ', Received: 'From ', Sale: 'Sold to ', Purchase: 'Recommended by ' }[r.type] || 'With ';
   return pre + names.map(n => esc(n) + (hearts.includes(lc(n)) ? `<span class="heart-on" aria-label="favorite wine">${HEART_SM}</span>` : '')).join(', ');
 }
 
@@ -557,13 +557,16 @@ function retailerLink(name) {
   return url ? `<a class="ret-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}${ICON.link}</a>` : esc(name);
 }
 
+/* who recommended a wine: the people of its purchases */
+const wineRecBy = w => [...new Set(inEntries(w).filter(r => r.type === 'Purchase').flatMap(r => namesOf(r.people)))].join(', ');
 function purchasesHtml(w, editable) {
   const list = inEntries(w).sort((a, b) => b.date.localeCompare(a.date));
   const row = r => {
     const who = r.type === 'Purchase' ? (r.retailer ? (editable ? esc(r.retailer) : retailerLink(r.retailer)) : 'Retailer not set')
       : r.type === 'Received' ? `${GIFT_MARK.replace('gift-mark', 'gift-mark inline')}Gift from ${esc(namesOf(r.people).join(', ') || 'someone')}` : 'Added';
     const meta = [esc(fmtDate(r.date)), r.qty > 1 ? `${r.qty} bottles` : '1 bottle', r.type === 'Received' ? `${money(0)}, gift` : (r.price !== null ? `${priceText(r.price, r.priceCur)}${r.qty > 1 ? ' each' : ''}` : 'Price not set')].join(' · ');
-    const body = `<span class="rec-main">${who}</span><span class="small muted">${meta}</span>${r.note ? `<span class="small">${esc(r.note)}</span>` : ''}`;
+    const rec = r.type === 'Purchase' && namesOf(r.people).length ? `<span class="small muted">Recommended by ${esc(namesOf(r.people).join(', '))}</span>` : '';
+    const body = `<span class="rec-main">${who}</span><span class="small muted">${meta}</span>${rec}${r.note ? `<span class="small">${esc(r.note)}</span>` : ''}`;
     return editable
       ? `<button class="rec-btn" data-act="edit-entry" data-id="${esc(r.id)}" data-record="1" aria-label="Edit purchase from ${esc(fmtDate(r.date))}"><span class="rec-text">${body}</span>${ICON.chevron}</button>`
       : `<div class="hist">${body}</div>`;
@@ -583,7 +586,7 @@ function viewWine(id) {
   return `<main class="screen detail">
     <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<span style="display:flex;gap:6px;align-items:center"><button class="icon-btn" data-act="share-wine" data-id="${esc(w.id)}" aria-label="Share this wine">${ICON.share}</button><a class="btn" style="height:40px" href="${editHref}">Edit</a></span></div>
     ${label}
-    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p></div>
+    <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p>${recLineHtml(wineRecBy(w))}</div>
     ${isDisc(w) ? discoveryHtml(w) : stockHtml(w)}
     <section>
       <div class="sec-head"><h2>Drinking window</h2>${p ? `<span class="small" style="color:${STATUS[s].c};font-weight:500">${statusLine(w)}</span>` : ''}</div>

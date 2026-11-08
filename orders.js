@@ -12,7 +12,7 @@ function normOrder(x) {
     price: x.price === '' || x.price === null || x.price === undefined || isNaN(Number(x.price)) ? null : Number(x.price), priceCur: str(x.priceCur) || cur(),
     retailer: str(x.retailer), ordered: d(x.ordered), expected: d(x.expected), sub: x.sub === true || str(x.sub).toLowerCase() === 'true',
     note: str(x.note), details, createdAt: str(x.createdAt),
-    fit: x.fit === '' || x.fit === null || x.fit === undefined || isNaN(Number(x.fit)) ? null : Math.round(Number(x.fit)), why: str(x.why)
+    fit: x.fit === '' || x.fit === null || x.fit === undefined || isNaN(Number(x.fit)) ? null : Math.round(Number(x.fit)), why: str(x.why), recBy: str(x.recBy)
   };
 }
 const orderTitle = o => { const w = o.wineId && wineById(o.wineId); return w ? fullName(w) : [o.producer, o.name, o.vintage].filter(Boolean).join(' '); };
@@ -42,6 +42,7 @@ function openOrderSheet(src, existing) {
     website: src && src.website ? src.website : ''
   };
   RS.price = totalOf(RS.unit, RS.qty);
+  RS.rec = recNew(o ? o.recBy : src && src.recBy);
   if (src && src.note) RS.note = src.note;
   renderSheet();
 }
@@ -59,6 +60,7 @@ function orderSheetHtml() {
       <input id="people-input" data-input="people" aria-label="Retailer" placeholder="Type the name of a shop or winery"${pickInputAttrs()} autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
       <div id="people-sugg">${peopleSuggHtml()}</div></div>
     ${ordNewRetailer() ? `<label class="field">Website of ${esc(ordNewRetailer())}<input name="website" data-input="ord" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(st.website)}"></label>` : ''}
+    ${recFieldHtml(st.rec)}
     ${st.delivered ? '' : `<label class="field">Ordered on<input type="date" name="ordered" data-input="ord" value="${esc(st.ordered)}"></label>
     <label class="field">Expected delivery<input type="date" name="expected" data-input="ord" value="${esc(st.expected)}"><span class="muted tiny">Leave it empty if you do not know yet.</span></label>`}
     <label class="field">Note<textarea name="note" data-input="ord" rows="2" placeholder="Order number, case, anything to remember">${esc(st.note)}</textarea></label>
@@ -83,7 +85,7 @@ async function saveOrderSheet() {
     qty, price: p === null ? '' : Math.round(p / qty * 100) / 100, priceCur: cur(),
     retailer: P.people.length ? P.people[0].name : '', ordered: st.ordered || todayISO(),
     expected: st.expected || '', sub: false, note: str(st.note).trim(),
-    details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500)
+    details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500), recBy: recNames(st)
   };
   const wishId = st.wishId, delivered = st.delivered, site = str(st.website).trim(), newRet = o.retailer && !S.retailers.some(r => lc(r.name) === lc(o.retailer));
   closeSheet();
@@ -153,7 +155,7 @@ function orderArrive(id) {
   if (w) {
     openAddSheet(w.id);
     const unit = o.price === null ? null : unitOf(o.price, o.priceCur);
-    Object.assign(RS, { type: 'Purchase', qty: o.qty, unit, price: totalOf(unit, o.qty), note: orderNote(o), rp: newPicker('retailers', o.retailer, { single: true }), orderId: o.id, date: todayISO() });
+    Object.assign(RS, { type: 'Purchase', qty: o.qty, unit, price: totalOf(unit, o.qty), note: orderNote(o), rec: recNew(o.recBy), rp: newPicker('retailers', o.retailer, { single: true }), orderId: o.id, date: todayISO() });
     renderSheet();
     return;
   }
@@ -169,6 +171,7 @@ function orderArrive(id) {
   D.stock[0].n = o.qty;
   D.acq.type = 'Purchase';
   D.acq.rp = newPicker('retailers', o.retailer, { single: true });
+  D.acq.rec = recNew(o.recBy);
   if (o.price !== null) D.fields.price = priceInput(o.price, o.priceCur);
   D.fields.date = todayISO();
   const pv = o.details;
@@ -212,6 +215,7 @@ function orderCardHtml(o) {
     <div class="between" style="gap:8px"><span class="ord-when ${when.cls}">${esc(when.text)}</span><span class="small">${price}</span></div>
     <div><p class="cons-title">${title}</p>${sub ? `<p class="small muted" style="margin:2px 0 0">${countryOf(o) ? flagOf(o) : ''}${esc(sub)}</p>` : ''}</div>
     <p class="small" style="margin:0">${o.retailer ? `From <b>${esc(o.retailer)}</b> · ` : ''}ordered ${esc(fmtDate(o.ordered || o.createdAt))}${w ? ` · ${w.count} in stock` : ' · new to your cellar'}</p>
+    ${recLineHtml(o.recBy)}
     ${o.note ? `<p class="small muted" style="margin:0">${esc(o.note)}</p>` : ''}
     ${w ? '' : fitBarHtml(o.fit)}
     <div class="cons-actions">${w ? '' : `<button class="link-btn" data-act="ord-more" data-id="${esc(o.id)}">${ICON.magic}More about this wine</button>`}<button class="link-btn" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.edit}Edit</button></div>
@@ -286,7 +290,7 @@ function buyStatus(ordered) {
     if (!ordered && w) {
       const site = known ? str(known.website) : '';
       openAddSheet(w.id);
-      Object.assign(RS, { type: 'Purchase', qty: st.qty, unit: st.unit, price: st.price, note: st.note, rp: newPicker('retailers', ret, { single: true }),
+      Object.assign(RS, { type: 'Purchase', qty: st.qty, unit: st.unit, price: st.price, note: st.note, rec: st.rec, rp: newPicker('retailers', ret, { single: true }),
         website: known ? site : st.website, websiteInit: site });
       renderSheet();
       return;
@@ -299,7 +303,7 @@ function buyStatus(ordered) {
     const w = wineById(st.wineId);
     if (!w) return;
     openOrderSheet(Object.assign(wineSrc(w), { qty: st.qty, unit: st.unit === undefined ? (parseMoney(st.price) === null ? null : parseMoney(st.price) / st.qty) : st.unit,
-      retailer: ret, note: st.note, website: known ? '' : st.website }));
+      retailer: ret, note: st.note, website: known ? '' : st.website, recBy: recNames(st) }));
   }
 }
 const wineSrc = w => ({ wineId: w.id, producer: w.producer, name: w.name, vintage: w.vintage, type: w.type, region: w.region, grapes: w.grapes, size: w.size });
@@ -332,7 +336,7 @@ function sgGet(ref) {
   if (k === 'wish') {
     const x = S.wishlist.find(w => w.id === v);
     if (!x) return null;
-    return { k, ref, base: sgBase(x), fit: x.fit, why: x.why, offer: x.offer, price: x.price, priceCur: x.priceCur, qty: x.qty || 6, wishId: x.id, details: x.details, preview: () => wishPreview(x.id) };
+    return { k, ref, base: sgBase(x), fit: x.fit, why: x.why, offer: x.offer, price: x.price, priceCur: x.priceCur, qty: x.qty || 6, wishId: x.id, details: x.details, recBy: x.recBy, preview: () => wishPreview(x.id) };
   }
   return null;
 }
@@ -348,7 +352,7 @@ const fitBarHtml = fit => (fit === null || fit === undefined || fit === '' ? '' 
 function sgOrder(g) {
   const o = g.offer;
   openOrderSheet({ ...g.base, qty: g.qty || 6, price: o ? o.v : g.price || null, priceCur: o ? o.cur : g.priceCur, retailer: o ? o.shop : '', website: o ? hostOf(o.url) : '',
-    details: previewOf(g.base) || g.details || null, fit: g.fit, why: g.why, wishId: g.wishId || (wishOf(g.base) || {}).id || '' });
+    details: previewOf(g.base) || g.details || null, fit: g.fit, why: g.why, wishId: g.wishId || (wishOf(g.base) || {}).id || '', recBy: g.recBy || (wishOf(g.base) || {}).recBy || '' });
 }
 function sgRefresh() { refreshView(); if (PREV.open) renderPreview(); if (route().p === 'sommelier') sommRefresh(false); }
 const SG_ACTS = {
@@ -407,3 +411,79 @@ function shopBackHtml(ref) {
   const wine = ref.startsWith('wine:');
   return `<div class="shop-back">${ICON.cart}<span>Ordered at ${esc(v.shop)}?</span><button class="btn" data-act="${wine ? 'ord-wine' : 'sg-order'}" ${wine ? `data-id="${esc(ref.slice(5))}"` : `data-ref="${esc(ref)}"`}>I ordered it</button></div>`;
 }
+
+/* ---------------------------------------------------------------- recommended by
+   Who told you about a wine: one or more people. It goes from the wishlist to the order
+   and from there into the purchase in the journal, where people are kept for every entry. */
+
+const REC_IC = svg('<path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/>', 16, 1.8);
+const recNew = names => ({ people: namesOf(names), typing: '' });
+const recNames = st => { const r = st && st.rec; if (!r) return ''; const all = r.people.slice(); if (r.typing.trim() && !all.some(n => lc(n) === lc(r.typing.trim()))) all.push(r.typing.trim()); return all.join(', '); };
+const recNow = () => (RS && RS.rec) || (!RS && D && D.acq && D.acq.rec) || null;
+const recLineHtml = names => (namesOf(names).length ? `<p class="rec-by">${REC_IC}<span>Recommended by ${esc(namesOf(names).join(', '))}</span></p>` : '');
+function recFieldHtml(st) {
+  return `<div class="field"><span>Recommended by <small class="muted">optional</small></span>
+    <div id="rec-chips" class="chips">${recChipsHtml(st)}</div>
+    <input id="rec-input" data-input="rec" aria-label="Recommended by" placeholder="Who told you about it?" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(st.typing)}">
+    <div id="rec-sugg">${recSuggHtml(st)}</div></div>`;
+}
+const recChipsHtml = st => st.people.map((n, i) => `<span class="person plain">${esc(n)}<button class="x" data-act="rec-rm" data-i="${i}" aria-label="Remove ${esc(n)}">${ICON.x}</button></span>`).join('');
+function recSuggHtml(st) {
+  const t = lc(st.typing.trim());
+  const known = knownPeople().filter(p => !st.people.some(n => lc(n) === lc(p.name)));
+  const list = (t ? known.filter(p => lc(p.name).includes(t)) : known).slice(0, t ? 8 : 5);
+  const add = t && !known.some(p => lc(p.name) === t) && !st.people.some(n => lc(n) === t) ? `<button class="chip" data-act="rec-add">${ICON.plus}Add “${esc(st.typing.trim())}”</button>` : '';
+  return list.length || add ? `<div class="chips">${list.map(p => `<button class="chip" data-act="rec-pick" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join('')}${add}</div>` : '';
+}
+function recUpdate() {
+  const st = recNow();
+  if (!st) return;
+  const c = $('#rec-chips'), g = $('#rec-sugg'), i = $('#rec-input');
+  if (c) c.innerHTML = recChipsHtml(st);
+  if (g) g.innerHTML = recSuggHtml(st);
+  if (i && i.value !== st.typing) i.value = st.typing;
+}
+function recAdd(name) {
+  const st = recNow();
+  if (!st) return;
+  const n = str(name).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (n && !st.people.some(x => lc(x) === lc(n))) { const k = knownPeople().find(p => lc(p.name) === lc(n)); st.people.push(k ? k.name : n); }
+  st.typing = '';
+  recUpdate();
+}
+
+/* on the wishlist: a small sheet, also offered right after saving */
+function recWishOpen(id) {
+  const x = S.wishlist.find(w => w.id === id);
+  if (!x) return;
+  RS = { kind: 'rec', wishId: id, rec: recNew(x.recBy) };
+  renderSheet();
+}
+function recSheetHtml() {
+  const x = S.wishlist.find(w => w.id === RS.wishId);
+  return `<div class="sheet-backdrop" data-act="sheet-close"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Recommended by"><div class="grab"></div>
+    <div class="between"><div style="min-width:0"><h2 style="font-size:18px;font-weight:600">Recommended by</h2><p class="small muted ellipsis" style="margin:2px 0 0">${esc(x ? wishTitle(x) : '')}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
+    ${recFieldHtml(RS.rec)}
+    <div class="grid2"><button class="btn" data-act="sheet-close">Cancel</button><button class="btn primary" data-act="rec-save">Save</button></div></div>`;
+}
+async function recWishSave() {
+  const st = RS, x = S.wishlist.find(w => w.id === st.wishId);
+  if (!x) { closeSheet(); return; }
+  const prev = x.recBy, v = recNames(st);
+  closeSheet();
+  x.recBy = v;
+  persist();
+  refreshView();
+  try { await api('saveWish', { wish: { id: x.id, recBy: v } }); }
+  catch (e) { x.recBy = prev; persist(); refreshView(); toast('Not saved: ' + e.message); }
+}
+const REC_ACTS = {
+  'rec-pick': el => recAdd(el.dataset.v),
+  'rec-add': () => { const st = recNow(); if (st) recAdd(st.typing); },
+  'rec-rm': el => { const st = recNow(); if (st) { st.people.splice(Number(el.dataset.i), 1); recUpdate(); } },
+  'rec-wish': el => recWishOpen(el.dataset.id),
+  'rec-save': () => recWishSave()
+};
+const REC_INPUTS = { rec: el => { const st = recNow(); if (!st) return; if (el.value.includes(',')) { recAdd(el.value.split(',')[0]); return; } st.typing = el.value; const g = $('#rec-sugg'); if (g) g.innerHTML = recSuggHtml(st); } };
+Object.assign(OR_ACTS, REC_ACTS);
+Object.assign(OR_INPUTS, REC_INPUTS);

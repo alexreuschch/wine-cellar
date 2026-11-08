@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.9.0';
+const APP_VERSION = '3.11.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -587,14 +587,21 @@ const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gif
   : `<span class="badge${t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`);
 
 function nav(active) {
-  const item = (href, key, icon, label) => `<a href="${href}" class="${active === key ? 'on' : ''}">${icon}${label}</a>`;
-  return `<nav class="nav" aria-label="Main">${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window')}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/insights', 'insights', ICON.chart, 'Insights')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
+  // badges, if wanted in Settings: wines past their window on Window, a dot on Insights for an overdue delivery
+  const on = notifyOf().badges;
+  const past = on ? S.wines.filter(w => w.count > 0 && statusOf(w) === 'Past its window').length : 0;
+  const late = on && S.orders.some(orderOverdue);
+  const badge = (n, label) => (n ? `<span class="nav-n" aria-label="${n} ${label}">${n > 99 ? '99+' : n}</span>` : '');
+  const item = (href, key, icon, label, extra = '') => `<a href="${href}" class="${active === key ? 'on' : ''}"><span class="nav-ic">${icon}${extra}</span>${label}</a>`;
+  return `<nav class="nav" aria-label="Main">${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/insights', 'insights', ICON.chart, 'Insights', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
 }
+/* the monthly email and the badges, as chosen in Settings */
+const notifyOf = () => Object.assign({ mail: true, to: '', window: true, orders: true, month: true, badges: true }, (S.settings && S.settings.notify) || {});
 
 function toast(msg, ms = 3400) {
   const t = $('#toast');
   t.textContent = msg;
-  t.classList.remove('act');
+  t.classList.remove('act', 'multi');
   t.classList.add('show');
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.remove('show'), ms);
@@ -602,8 +609,13 @@ function toast(msg, ms = 3400) {
 /* a toast with one button, for example Show after saving to the wishlist */
 function toastAct(msg, label, fn, ms = 5000) {
   const t = $('#toast');
-  t.innerHTML = `<span>${esc(msg)}</span><button type="button">${esc(label)}</button>`;
-  t.querySelector('button').onclick = () => { t.classList.remove('show', 'act'); fn(); };
+  // one button, or several as [[label, fn], ...]
+  const btns = Array.isArray(label) ? label : [[label, fn]];
+  if (Array.isArray(label) && typeof fn === 'number') ms = fn;
+  if (btns.length > 1) ms = Math.max(ms, 7000);
+  t.innerHTML = `<span>${esc(msg)}</span><span class="toast-btns">${btns.map(b => `<button type="button">${esc(b[0])}</button>`).join('')}</span>`;
+  t.querySelectorAll('button').forEach((b, i) => { b.onclick = () => { t.classList.remove('show', 'act', 'multi'); btns[i][1](); }; });
+  t.classList.toggle('multi', btns.length > 1);
   t.classList.add('show', 'act');
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.remove('show', 'act'), ms);

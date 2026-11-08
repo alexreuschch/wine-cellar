@@ -88,6 +88,7 @@ function openEditEntry(id, record) {
   if (r.dir === 'out' && !REMOVAL_TYPES.includes(RS.type)) RS.type = 'Other';
   if (r.dir === 'in' && !ADD_TYPES.some(t => t[0] === RS.type)) RS.type = 'Added';
   if (isBuyIn(RS)) { RS.unit = r.price === null || r.price === '' ? null : unitOf(r.price, r.priceCur); RS.price = totalOf(RS.unit, RS.qty); RS.priceInit = RS.price; }
+  if (r.dir === 'in' && r.type === 'Purchase') RS.rec = recNew(r.people);
   renderSheet();
 }
 
@@ -103,6 +104,8 @@ function renderSheet() {
   if (!RS) { root.innerHTML = ''; return; }
   if (RS.kind === 'taste') { root.innerHTML = tasteSheetHtml(); setupTasteRating(); return; }
   if (RS.kind === 'order') { root.innerHTML = orderSheetHtml(); return; }
+  if (RS.kind === 'bottle') { root.innerHTML = bottleSheetHtml(); return; }
+  if (RS.kind === 'rec') { root.innerHTML = recSheetHtml(); return; }
   const w = wineById(RS.wineId);
   const r = RS.id ? S.removals.find(x => x.id === RS.id) : null;
   const name = w ? `${wineTitle(w)} ${w.vintage}`.trim() : ((r && r.wineName) || 'Deleted wine');
@@ -151,6 +154,7 @@ function renderSheet() {
     const status = RS.mode === 'add' && RS.type === 'Purchase' && !RS.orderId ? buyStatusHtml(false) : '';
     body = `${typeGrid}${status}${locs}${place}${qty}${RS.mode === 'add' ? `<div id="space-note">${spaceNoteHtml(RS.loc, RS.qty, w)}</div>` : ''}${date}
       ${RS.type === 'Purchase' ? picker('Retailer') : RS.type === 'Received' ? picker('From') : ''}
+      ${RS.type === 'Purchase' ? recFieldHtml(RS.rec || (RS.rec = recNew(''))) : ''}
       ${showSite ? `<label class="field">Website of ${esc(RS.rp.people[0].name)}<input name="website" data-input="rs" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(RS.website)}"></label>` : ''}
       ${RS.type === 'Purchase' ? totalFieldHtml(RS, 'rs') : RS.type === 'Received' ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>` : ''}
       ${note}
@@ -273,7 +277,8 @@ function entryFields(st) {
   return {
     type: st.type, dir: st.kind, qty: st.qty, date: st.date || todayISO(),
     occasion: str(st.occasion).trim(),
-    people: people ? people.people.map(p => p.name).join(', ') : '',
+    // a purchase keeps who recommended the wine in its people
+    people: people ? people.people.map(p => p.name).join(', ') : !out && st.type === 'Purchase' ? recNames(st) : '',
     hearts: out ? st.pp.people.filter(p => p.heart).map(p => p.name).join(', ') : '',
     food: out && st.type !== 'Gift' && st.type !== 'Sale' ? str(st.food).trim() : '',
     note: str(st.note).trim(),

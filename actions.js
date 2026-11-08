@@ -161,6 +161,7 @@ const ACTS = {
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
   'info-term': el => { const x = { k: el.dataset.k, t: el.dataset.t, region: el.dataset.r || '' }; infoLeave(); if (x.k === 'grape') insightsGo('grape', x.t); else insightsGo('term', x); },
+  'info-wine': (el, e) => { if (e) e.preventDefault(); const h = el.getAttribute('href'); infoLeave(); go(h); },
   'vint-open': el => openVintage(el.dataset.r, el.dataset.y),
   'vint-all': () => { INFO.vAll = !INFO.vAll; if (!INFO.vAll) INFO.vFocus = null; renderInfo(); },
   'vint-mine': el => { const r = str(INFO.name).split(',')[0].trim(), y = el.dataset.y; infoLeave(); insightsGo('regvint', `${r}|${y}`); },
@@ -473,12 +474,12 @@ const INPUTS = {
     if (l) l.innerHTML = journalList();
     if (f) { f.innerHTML = tabSecsHtml('journal'); clampChips(f); }
   },
-  field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); if (['producer', 'name', 'vintage'].includes(el.name)) renderDup(); } if (el.classList.contains('autosize')) autosize(el); },
+  field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); if (['producer', 'name', 'vintage'].includes(el.name)) renderDup(); bottleFieldLater(el.name); } if (el.classList.contains('autosize')) autosize(el); },
   rscore: el => { if (D) D.ratings[Number(el.dataset.i)].score = el.value; }
 };
 
 const CHANGES = {
-  field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); } },
+  field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); bottleFieldLater(el.name); } },
   sort: el => { SORT = SORTS[el.value] ? el.value : 'az'; store.set('wc-sort', SORT); const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
   rsys: el => { if (D) D.ratings[Number(el.dataset.i)].sys = el.value; },
   'ret-site': el => saveRetailerSite(el.dataset.v, el.value.trim()),
@@ -503,7 +504,6 @@ const CHANGES = {
   'top-fav': el => { U.f.top.fav = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },
   'qty-in': el => setQty(el, true),
-  'bottle-sel': el => { if (D) D.bottle = el.value; },
   'size-sel': el => { if (!D) return; D.touched.add('size'); if (el.value === 'other') { D.sizeOther = true; D.fields.size = ''; } else { D.sizeOther = false; D.fields.size = el.value; } renderSizeBox(); refreshSpaceNotes(); if (D.sizeOther) { const i = $('[name="size"]'); if (i) i.focus(); } },
   'stock-loc': async el => {
     if (!D) return;
@@ -558,9 +558,9 @@ const CHANGES = {
   }
 };
 
-Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS, OR_ACTS);
+Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS, OR_ACTS, BT_ACTS, NT_ACTS);
 Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS, OR_INPUTS);
-Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES, OR_CHANGES);
+Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES, OR_CHANGES, NT_CHANGES);
 
 /* ------------------------------------------------------------ start */
 
@@ -631,6 +631,7 @@ function init() {
   });
   document.addEventListener('keydown', e => {
     if (e.target && e.target.id === 'people-input' && e.key === 'Enter') { e.preventDefault(); addPerson(e.target.value); }
+    if (e.target && e.target.id === 'rec-input' && e.key === 'Enter') { e.preventDefault(); recAdd(e.target.value); }
     if (e.target && e.target.id === 'new-loc' && e.key === 'Enter') { e.preventDefault(); ACTS['loc-add'](); }
     if (e.target && e.target.dataset && e.target.dataset.input === 'tg-in' && e.key === 'Enter') { e.preventDefault(); addTag(e.target.dataset.k, e.target.value); }
     if (e.target && e.target.id === 'rt-score' && e.key === 'Enter') { e.preventDefault(); saveRatingSheet(); }

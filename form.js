@@ -33,6 +33,7 @@ function newDraft(mode, w) {
     src: null, corners: null, cornersTouched: false,
     profile: src.profile ? JSON.parse(JSON.stringify(src.profile)) : emptyProfile(),
     bottle: src.profile && src.profile.bottle ? src.profile.bottle : '',
+    glass: src.profile && src.profile.glass ? src.profile.glass : '',
     ai: null, aiMsg: '', touched: new Set()
   };
 }
@@ -140,7 +141,7 @@ function acquisitionBox() {
     <div id="people-sugg">${peopleSuggHtml()}</div></div>`;
   return `<div class="box"><span class="box-title">Acquired</span>
     <div class="grid3">${ADD_TYPES.map(([v, l]) => `<button class="btn${v === a.type ? ' primary' : ''}" style="height:42px;font-size:14px;padding:0 6px" data-act="acq" data-v="${v}">${l}</button>`).join('')}</div>
-    ${a.type === 'Purchase' ? picker('Retailer') + `<div id="site-box">${siteBoxHtml()}</div>` : a.type === 'Received' ? picker('Gift from') : ''}
+    ${a.type === 'Purchase' ? picker('Retailer') + `<div id="site-box">${siteBoxHtml()}</div>` + recFieldHtml(a.rec || (a.rec = recNew(''))) : a.type === 'Received' ? picker('Gift from') : ''}
     <div class="form-grid">
       <label class="field${a.type === 'Purchase' ? '' : ' full'}">Date<input type="date" name="date" data-input="field" value="${esc(f.date)}"></label>
       ${a.type === 'Purchase' ? `<label class="field">Price per bottle${curLabel()}<input name="price" data-input="field" inputmode="decimal" placeholder="45.00" value="${esc(f.price)}"></label>` : ''}
@@ -229,7 +230,7 @@ function formBody() {
       ${field('Vintage', 'vintage', { num: true, ph: '2019' })}
       <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       <div id="size-box" style="display:contents">${sizeFieldHtml()}</div>
-      <label class="field">Bottle shape<select name="bottle" data-change="bottle-sel">${['', ...Object.keys(BOTTLE_SHAPES)].map(k => `<option value="${k}"${k === (D.bottle || '') ? ' selected' : ''}>${k ? BOTTLE_NAMES[k] : `Automatic, ${BOTTLE_NAMES[bottleAuto({ type: f.type, region: f.region, grapes: f.grapes, name: f.name })]}`}</option>`).join('')}</select></label>
+      <div class="field full" id="bottle-field">${bottleFieldHtml()}</div>
     </div>
     ${add ? `${stockBox}
     ${acquisitionBox()}
@@ -394,20 +395,33 @@ function setupCrop() {
     const r = svgEl.getBoundingClientRect();
     return { x: clamp((e.clientX - r.left) / r.width * D.src.width, 0, D.src.width), y: clamp((e.clientY - r.top) / r.height * D.src.height, 0, D.src.height) };
   };
+  // the point moves with the finger instead of jumping under it, so it stays in sight; the loupe shows it enlarged
+  let off = { x: 0, y: 0 };
+  const pointAt = i => (i < 4 ? D.corners[i] : cropMids()[i - 4]);
   svgEl.addEventListener('pointerdown', e => {
     const p = toImg(e);
     let best = -1, bd = Infinity;
     D.corners.concat(cropMids()).forEach((c, i) => { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < bd) { bd = d; best = i; } });
-    if (bd < Math.max(D.src.width, D.src.height) * 0.12) { drag = best; svgEl.setPointerCapture(e.pointerId); e.preventDefault(); }
+    if (bd < Math.max(D.src.width, D.src.height) * 0.14) {
+      drag = best;
+      const q = pointAt(best);
+      off = { x: q.x - p.x, y: q.y - p.y };
+      svgEl.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      loupeShow(best);
+    }
   });
   svgEl.addEventListener('pointermove', e => {
     if (drag < 0) return;
+    const f = toImg(e);
+    const p = { x: clamp(f.x + off.x, 0, D.src.width), y: clamp(f.y + off.y, 0, D.src.height) };
     // a corner moves its edges, the middle points keep their bend; a middle point only bends its edge
-    if (drag < 4) D.corners[drag] = toImg(e); else setCropMid(drag - 4, toImg(e));
+    if (drag < 4) D.corners[drag] = p; else setCropMid(drag - 4, p);
     D.cornersTouched = true;
     drawCropOverlay();
+    loupeShow(drag, e);
   });
-  const end = () => { if (drag >= 0) cropPreview(); drag = -1; };
+  const end = () => { if (drag >= 0) cropPreview(); drag = -1; loupeHide(); };
   svgEl.addEventListener('pointerup', end);
   svgEl.addEventListener('pointercancel', end);
   cropPreview();
@@ -773,7 +787,7 @@ async function saveWineForm() {
     profile: (() => {
       let p = profileFromDraft();
       if (p && D.touched.has('grapes')) p.typical = false;
-      if (D.bottle) p = Object.assign(p || emptyProfile(), { bottle: D.bottle });
+      if (D.bottle || D.glass) p = Object.assign(p || emptyProfile(), D.bottle ? { bottle: D.bottle } : {}, D.glass ? { glass: D.glass } : {});
       return p;
     })()
   }));
@@ -784,7 +798,7 @@ async function saveWineForm() {
       id: newId('i'), dir: 'in', type: acq.type, qty: w.count, loc: stock[0].loc, date: f.date || todayISO(),
       price: price === null ? '' : price, priceCur: price === null ? '' : cur(),
       retailer: acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '',
-      people: acq.type === 'Received' ? acq.pp.people.map(p => p.name).join(', ') : '',
+      people: acq.type === 'Received' ? acq.pp.people.map(p => p.name).join(', ') : acq.type === 'Purchase' ? recNames(acq) : '',
       wineName: fullName(w), note: D.orderNote || ''
     });
   }

@@ -311,6 +311,7 @@ function viewSettings(first) {
       <p class="muted tiny" style="margin:0">${fxNote()} Switch it, for example, to show your cellar to a friend from abroad.</p>
       <div class="field">Country for shopping<button class="pick-btn" data-act="pick-open" data-k="country"><span class="ellipsis">${flagOfCode(shopCountry())}${esc(shopCountryName())}</span>${ICON.chevron}</button></div>
       <p class="muted tiny" style="margin:0">Street prices, best offers and the AI consultant search shops for this country${GEO_EU.includes(shopCountry()) ? ', including shops in other EU countries that deliver there, with shipping costs' : ''}. Offers you already have stay until you tap Update best offer. On a trip, the sommelier has its own country for Will I like it? and Wine list.</p></section>
+      ${notifyHtml()}
       <section class="box"><span class="box-title">Street prices</span>
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>
       <button class="btn block" data-act="street-all"${streetRun ? ' disabled' : ''}>${ICON.refresh}${streetRun ? 'Updating…' : 'Update all street prices'}</button>
@@ -392,3 +393,54 @@ async function pickChoose(v) {
   try { await api('setSettings', { settings: { country: v } }); toast(`Shops are now searched for ${SHOP_COUNTRIES[v]}.`); }
   catch (e) { toast('Saved on this device only: ' + e.message); }
 }
+
+/* ---------------------------------------------------------------- notifications: the monthly email and the badges in the app */
+
+function notifyHtml() {
+  const n = notifyOf(), old = S.version && S.version < 48;
+  const sw = (k, label, sub, off) => `<label class="switch nt-sw"><input type="checkbox" data-change="nt-set" data-k="${k}"${n[k] ? ' checked' : ''}${off ? ' disabled' : ''}><span>${label}${sub ? `<small>${sub}</small>` : ''}</span></label>`;
+  return `<section class="box"><span class="box-title">Notifications</span>
+    ${old ? '<p class="small" style="margin:0">The email settings need the new Code.gs. Until then the monthly email is sent as before.</p>' : ''}
+    ${sw('mail', 'Monthly email', 'On the first of every month, only when there is something to report', old)}
+    ${n.mail && !old ? `<label class="field">Send to<input type="email" inputmode="email" autocapitalize="off" data-change="nt-to" placeholder="${esc((S.settings && S.settings.mailDefault) || 'Your Google address')}" value="${esc(n.to)}"><span class="muted tiny">Empty: your Google address.</span></label>
+      <span class="fsec-h">What it holds</span>
+      ${sw('window', 'Drinking window', 'Past its window, drink soon, new at peak')}
+      ${sw('orders', 'Orders', 'Overdue deliveries and those expected this month')}
+      ${sw('month', 'Last month in short', 'Bottles opened and bought, stock, value, your best wine')}
+      <button class="btn block" data-act="nt-test"${U.ntTest ? ' disabled' : ''}>${U.ntTest ? 'Sending…' : 'Send a test email now'}</button>` : ''}
+    ${sw('badges', 'Badges in the app', 'A number on Window for wines past their window, a dot on Insights for an overdue delivery')}
+  </section>`;
+}
+async function notifySave(patch) {
+  const prev = notifyOf();
+  S.settings = Object.assign({}, S.settings, { notify: Object.assign({}, prev, patch) });
+  persist();
+  refreshView();
+  if (S.version && S.version < 48) return;   // only the badges can be kept, on this device
+  try {
+    const d = await api('setSettings', { settings: { notify: patch } });
+    if (d && d.notify) { S.settings = Object.assign({}, S.settings, d); persist(); refreshView(); }
+  } catch (e) {
+    S.settings = Object.assign({}, S.settings, { notify: prev });
+    persist();
+    refreshView();
+    toast('Not saved: ' + e.message);
+  }
+}
+async function notifyTest() {
+  U.ntTest = true;
+  refreshView();
+  try { const d = await api('testDigest', {}); toast(`Test email sent to ${d.to}.`, 4000); }
+  catch (e) { toast(/Unknown action/i.test(e.message) ? 'This needs the new Code.gs.' : 'Not sent: ' + e.message, 5000); }
+  U.ntTest = false;
+  refreshView();
+}
+const NT_ACTS = { 'nt-test': () => notifyTest() };
+const NT_CHANGES = {
+  'nt-set': el => notifySave({ [el.dataset.k]: el.checked }),
+  'nt-to': el => {
+    const v = el.value.trim();
+    if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { toast('This is not a valid email address.'); return; }
+    notifySave({ to: v });
+  }
+};

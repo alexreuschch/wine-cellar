@@ -3,62 +3,174 @@
 /* Vintary: the label and the bottle. A camera with a label frame, unrolling a label from a round bottle,
    a drawn bottle per wine and a drawn label for wines without a photo. Loaded after form.js. */
 
-/* ---------------------------------------------------------------- drawn bottle */
+/* ---------------------------------------------------------------- drawn bottle
+   Drawn from the measures of real bottles, all in one scale: the profile is [cm from the top, half width in cm].
+   1 cm = 9.6 units in a box of 160 x 360, standing on the ground at 352. */
 
-/* viewBox 0 0 160 360, all standing on the same ground at 352, centered on x 80, in the proportions of real bottles.
-   label: [x, y, w, h] on the body; hl: where the light falls on the glass */
-const BOTTLE_SHAPES = {
-  bordeaux: { d: 'M72 20h16v4h-1v94c0 18 33 22 33 50V340c0 8-5 12-12 12H52c-7 0-12-4-12-12V168c0-28 33-32 33-50V24h-1z', label: [46, 212, 68, 94], foil: 'M72 20h16v4h-1v60H73V24h-1z', hl: 50 },
-  burgundy: { d: 'M71 20h18v4h-1v86c0 40 35 58 35 104V340c0 8-5 12-12 12H49c-7 0-12-4-12-12V210c0-46 35-64 35-104V24h-1z', label: [44, 236, 72, 88], foil: 'M71 20h18v4h-1v56H72V24h-1z', hl: 47 },
-  flute: { d: 'M73 0h14v4h-1v76c0 60 35 110 35 170V342c0 6-4 10-10 10H55c-6 0-10-4-10-10V250c0-60 35-110 35-170V4h-1z', label: [49, 264, 62, 68], foil: 'M73 0h14v4h-1v70H74V4h-1z', hl: 54 },
-  bocksbeutel: { d: 'M70 118h20v4h-1v74c0 14 11 18 23 26 28 18 44 50 44 74 0 28-10 44-24 60H28C14 336 4 320 4 292c0-24 16-56 44-74 12-8 23-12 23-26v-74h-1z', label: [46, 258, 68, 68], round: true, foil: 'M70 118h20v4h-1v56H71v-56h-1z', hl: 22 },
-  champagne: { d: 'M68 20h24v8h-2v72c0 50 34 76 34 132V340c0 8-5 12-12 12H48c-7 0-12-4-12-12V232c0-56 34-82 34-132V28h-2z', label: [44, 250, 72, 78], foil: 'M68 20h24v8h-2v72c0 18 4 30 9 46H61c5-16 9-28 9-46V28h-2z', hl: 46 },
-  port: { d: 'M70 40h20v6h-1v56c0 12 6 16 16 22 9 6 13 14 13 26v178c0 8-5 12-12 12H54c-7 0-12-4-12-12V150c0-12 4-20 13-26 10-6 16-10 16-22V46h-1z', label: [48, 206, 64, 92], foil: 'M70 40h20v6h-1v46H71V46h-1z', hl: 50 },
-  fiasco: { d: 'M72 10h16v4h-1v130c0 34 45 52 45 116 0 34-17 56-34 66v20c0 4-3 6-7 6H69c-4 0-7-2-7-6v-20c-17-10-34-32-34-66 0-64 45-82 45-116V14h-1z', label: [64, 168, 32, 26], straw: true, foil: 'M72 10h16v4h-1v44H73V14h-1z', hl: 40 }
+const BT_K = 9.6, BT_G = 352;
+const BOTTLES = {
+  bordeaux: { name: 'Bordeaux', wines: 'Bordeaux, Rioja, Cabernet, Merlot, most reds', h: 30, cap: 5.5, fill: 7.6,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [8.2, 1.4], [9.2, 1.75], [10.1, 2.9], [10.8, 3.55], [11.6, 3.75], [29.2, 3.75], [29.8, 3.5], [30, 3.1]], label: [16, 25.5] },
+  burgundy: { name: 'Burgundy', wines: 'Burgundy, Pinot Noir, Chardonnay, Rhône, Loire, Barolo', h: 29.5, cap: 5.5, fill: 7.2,
+    p: [[0, 1.55], [0.6, 1.55], [0.7, 1.4], [7, 1.45], [9, 1.9], [11, 2.75], [13, 3.5], [15, 3.95], [16.5, 4.1], [28.8, 4.1], [29.3, 3.8], [29.5, 3.3]], label: [17.5, 26.5] },
+  flute: { name: 'Alsace flute', wines: 'Riesling, Alsace, Mosel, Austria', h: 35, cap: 7, fill: 9,
+    p: [[0, 1.45], [0.6, 1.45], [0.7, 1.3], [8, 1.35], [12, 1.75], [16, 2.3], [20, 2.9], [23, 3.35], [24.5, 3.5], [34.4, 3.5], [34.8, 3.2], [35, 2.8]], label: [25.5, 32.5] },
+  champagne: { name: 'Champagne', wines: 'Champagne and other sparkling wines', h: 30.5, cap: 11, foil: true, fill: 8,
+    p: [[0, 1.6], [1, 1.6], [1.1, 1.45], [6, 1.55], [9, 2.2], [12, 3.1], [15, 3.9], [17, 4.3], [18, 4.4], [29.8, 4.4], [30.3, 4], [30.5, 3.4]], label: [19.5, 26.5] },
+  provence: { name: 'Provence', wines: 'Rosé from Provence, curved like a skittle', h: 30, cap: 5, fill: 7.2,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [7, 1.4], [10, 1.95], [14, 2.95], [18, 3.6], [21, 3.85], [24, 3.55], [26.5, 3.15], [28.2, 3.2], [29.6, 3.45], [30, 3.05]], label: [16.5, 23.5] },
+  bocksbeutel: { name: 'Bocksbeutel', wines: 'Franken, Silvaner, Mateus', h: 22.5, cap: 4.5, fill: 5.4, round: true,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [5.4, 1.4], [6.4, 1.85], [7.5, 3.2], [9, 5], [11, 6.5], [13.5, 7.35], [15.5, 7.5], [17.5, 7.15], [19.5, 6.3], [21.2, 5.1], [22.2, 4.3], [22.5, 4]], label: [11.8, 19.4] },
+  port: { name: 'Port and Sherry', wines: 'Port, Madeira, Sherry, with a bulge on the neck', h: 30, cap: 4, fill: 7.8,
+    p: [[0, 1.65], [0.6, 1.65], [0.7, 1.4], [3.4, 1.42], [4.6, 1.8], [5.8, 1.42], [8.4, 1.48], [9.4, 1.85], [10.4, 3], [11.2, 3.7], [12, 3.85], [29.3, 3.85], [29.8, 3.5], [30, 3.1]], label: [15.5, 25] },
+  clavelin: { name: 'Clavelin', wines: 'Vin Jaune from the Jura, squat, 62 cl', h: 21, cap: 4, fill: 4.6,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [4.8, 1.4], [5.8, 1.95], [6.6, 3.3], [7.3, 3.8], [20.4, 3.8], [20.8, 3.5], [21, 3.1]], label: [10, 17.5] },
+  tokaji: { name: 'Tokaji and dessert', wines: 'Tokaji, ice wine, sweet wines, slim and tall', h: 30, cap: 6, fill: 9.5,
+    p: [[0, 1.3], [0.6, 1.3], [0.7, 1.15], [10, 1.2], [11.5, 1.7], [12.8, 2.65], [13.6, 3.05], [29.4, 3.05], [29.8, 2.8], [30, 2.4]], label: [18, 26] },
+  fiasco: { name: 'Chianti fiasco', wines: 'Traditional Chianti in straw', h: 31, cap: 4.5, fill: 9.5, straw: 17,
+    p: [[0, 1.4], [0.6, 1.4], [0.7, 1.25], [10.5, 1.4], [13, 2.3], [15, 3.7], [17, 5], [20, 6.2], [23, 6.5], [26, 6], [28, 4.9], [29.2, 3.8], [30, 3.4], [31, 3.4]], label: [12.4, 14.8] }
 };
-const BOTTLE_NAMES = { bordeaux: 'Bordeaux', burgundy: 'Burgundy', flute: 'Riesling and Alsace', bocksbeutel: 'Bocksbeutel', champagne: 'Champagne', port: 'Port', fiasco: 'Chianti fiasco' };
-const BOTTLE_GLASS = { Red: ['#4A1824', '#2A0D14'], White: ['#7C8350', '#4E5530'], 'Rosé': ['#C58E93', '#9C6168'], Sparkling: ['#33452F', '#1C2A1A'], Dessert: ['#9A6424', '#6A4012'], Fortified: ['#3A1712', '#1E0A08'], Orange: ['#A0662E', '#704218'] };
+const BOTTLE_NAMES = Object.fromEntries(Object.keys(BOTTLES).map(k => [k, BOTTLES[k].name]));
+/* the glass colours the glassworks really make; clear glass shows the wine */
+const GLASSES = {
+  black: { name: 'Black', c: ['#26271F', '#0C0D0A'] },
+  green: { name: 'Dark green', c: ['#2E4A2B', '#132416'] },
+  olive: { name: 'Olive green', c: ['#47431F', '#1F1D0A'] },
+  light: { name: 'Light green', c: ['#86A262', '#506A38'] },
+  amber: { name: 'Amber', c: ['#83501E', '#462809'] },
+  clear: { name: 'Clear', c: ['#E7ECE4', '#AEB8B0'] }
+};
+const WINE_IN_GLASS = { Red: ['#6A1424', '#3A0812'], White: ['#EADB8E', '#C9B45C'], 'Rosé': ['#EE9C9E', '#C96A72'], Sparkling: ['#EADFA2', '#C7B66A'], Dessert: ['#DFA83E', '#A9721A'], Fortified: ['#7A3418', '#40160A'], Orange: ['#E09A48', '#A8641C'] };
 
 /* the usual bottle for the type, region and grapes; a shape chosen in Edit wins */
 function bottleAuto(w) {
   const t = `${w.type || ''} ${w.region || ''} ${w.grapes || ''} ${w.name || ''}`;
+  if (/fiasco/i.test(t)) return 'fiasco';
   if (w.type === 'Sparkling' || /champagne|\bcava\b|franciacorta|cr[ée]mant|prosecco|\bsekt\b/i.test(t)) return 'champagne';
   if (w.type === 'Fortified' || /\bport\b|\bporto\b|madeira|sherry|jerez/i.test(t)) return 'port';
-  if (/fiasco/i.test(t)) return 'fiasco';
+  if (/vin jaune|ch[âa]teau-chalon/i.test(t)) return 'clavelin';
+  if (/tokaj|eiswein|ice ?wine/i.test(t)) return 'tokaji';
+  if (w.type === 'Rosé' && /provence|bandol|c[ôo]tes de provence/i.test(t)) return 'provence';
   if (/franken|bocksbeutel|w[üu]rzburg|silvaner/i.test(t)) return 'bocksbeutel';
   if (/riesling|alsace|elsass|mosel|gew[üu]rz|rheingau|pfalz|nahe|wachau|kamptal|gr[üu]ner/i.test(t)) return 'flute';
-  if (/burgund|bourgogne|pinot noir|chardonnay|rh[ôo]ne|syrah|chasselas|nebbiolo|barolo|barbaresco|beaujolais|loire/i.test(t)) return 'burgundy';
+  if (/burgund|bourgogne|pinot noir|chardonnay|rh[ôo]ne|syrah|chasselas|nebbiolo|barolo|barbaresco|beaujolais|loire|sancerre/i.test(t)) return 'burgundy';
   return 'bordeaux';
 }
-const bottleShapeOf = w => (w.profile && BOTTLE_SHAPES[w.profile.bottle] ? w.profile.bottle : bottleAuto(w));
+const bottleShapeOf = w => (w.profile && BOTTLES[w.profile.bottle] ? w.profile.bottle : bottleAuto(w));
+function glassAuto(w, shape) {
+  const k = shape || bottleShapeOf(w);
+  if (w.type === 'Fortified' || k === 'port') return 'black';
+  if (['Rosé', 'Dessert', 'Orange'].includes(w.type) || k === 'tokaji' || k === 'provence') return 'clear';
+  if (w.type === 'Sparkling' || k === 'clavelin') return 'olive';
+  if (w.type === 'White') return 'light';
+  return k === 'burgundy' ? 'olive' : 'green';
+}
+const glassOf = (w, shape) => (w.profile && GLASSES[w.profile.glass] ? w.profile.glass : glassAuto(w, shape));
 
-function bottleSvg(w, shape) {
-  const k = shape || bottleShapeOf(w), s = BOTTLE_SHAPES[k];
-  const g = BOTTLE_GLASS[w.type] || BOTTLE_GLASS.Red;
+/* a smooth outline through the profile points, mirrored */
+function btPath(b) {
+  const top = BT_G - b.h * BT_K;
+  const R = b.p.map(([y, r]) => [80 + r * BT_K, top + y * BT_K]);
+  const L = R.map(([x, y]) => [160 - x, y]).reverse();
+  const n = v => v.toFixed(1);
+  const curve = pts => {
+    let d = '';
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      d += `C${n(p1[0] + (p2[0] - p0[0]) / 6)} ${n(p1[1] + (p2[1] - p0[1]) / 6)} ${n(p2[0] - (p3[0] - p1[0]) / 6)} ${n(p2[1] - (p3[1] - p1[1]) / 6)} ${n(p2[0])} ${n(p2[1])}`;
+    }
+    return d;
+  };
+  return `M${n(L[L.length - 1][0])} ${n(top)}L${n(R[0][0])} ${n(R[0][1])}${curve(R)}L${n(L[0][0])} ${n(L[0][1])}${curve(L)}Z`;
+}
+const btHalf = (b, y) => { const p = b.p; for (let i = 0; i < p.length - 1; i++) if (y >= p[i][0] && y <= p[i + 1][0]) { const f = (y - p[i][0]) / ((p[i + 1][0] - p[i][0]) || 1); return p[i][1] + (p[i + 1][1] - p[i][1]) * f; } return p[p.length - 1][1]; };
+const BT_PATHS = {};
+const btPathOf = k => BT_PATHS[k] || (BT_PATHS[k] = btPath(BOTTLES[k]));
+
+/* the bottle of a wine: its shape and glass, filled up to the neck; in clear glass the wine shows through */
+function bottleSvg(w, shape, glass) {
+  const k = shape || bottleShapeOf(w), b = BOTTLES[k], gk = glass || glassOf(w, k);
+  const d = btPathOf(k), top = BT_G - b.h * BT_K;
   const id = 'bt' + Math.random().toString(36).slice(2, 8);
-  const [lx, ly, lw, lh] = s.label;
+  const clear = gk === 'clear';
+  const rose = w.type === 'Sparkling' && /ros[ée]/i.test(`${w.name} ${w.producer}`);
+  const wine = clear ? (rose ? WINE_IN_GLASS['Rosé'] : WINE_IN_GLASS[w.type] || WINE_IN_GLASS.White) : GLASSES[gk].c;
+  const empty = clear ? ['#F2F4F0', '#B8C2BA'] : GLASSES[gk].c;
   const cap = w.type === 'Sparkling' ? '#BFA884' : ['White', 'Rosé', 'Dessert', 'Orange'].includes(w.type) ? '#6F7783' : '#5E1E2A';
-  const lab = s.round
-    ? `<ellipse cx="${lx + lw / 2}" cy="${ly + lh / 2}" rx="${lw / 2}" ry="${lh / 2}" fill="#EFE6D6"/>`
-    : `<rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" rx="2" fill="#EFE6D6"/>`;
-  // the straw of a Chianti fiasco around its round lower half
-  const straw = s.straw ? `<g clip-path="url(#${id}c)"><rect x="0" y="232" width="160" height="128" fill="#C9B489"/>${[34, 46, 58, 70, 82, 94, 106, 118].map(x => `<path d="M${x} 232c-2 30 2 60 0 90" stroke="#9C8659" stroke-width="1" fill="none" opacity=".7"/>`).join('')}<rect x="0" y="318" width="160" height="4" fill="#9C8659" opacity=".8"/></g>` : '';
-  return `<svg class="bottle-svg" viewBox="0 0 160 360" role="img" aria-label="${esc(BOTTLE_NAMES[k])} bottle">
+  const [l0, l1] = b.label, lc = (l0 + l1) / 2;
+  const fy = top + b.fill * BT_K;
+  let lab, lw;
+  if (b.round) { const r = (l1 - l0) / 2 * BT_K; lw = r * 2; lab = `<ellipse cx="80" cy="${top + lc * BT_K}" rx="${r * 1.02}" ry="${r}" fill="#EFE6D6"/>`; }
+  else { const hw = Math.min(btHalf(b, l0), btHalf(b, l1)) * 0.86 * BT_K; lw = hw * 2; lab = `<rect x="${(80 - hw).toFixed(1)}" y="${top + l0 * BT_K}" width="${(hw * 2).toFixed(1)}" height="${((l1 - l0) * BT_K).toFixed(1)}" rx="1.5" fill="#EFE6D6"/>`; }
+  const ly = top + l0 * BT_K, lh = (l1 - l0) * BT_K;
+  const lines = `<rect x="${(80 - lw * 0.28).toFixed(1)}" y="${(ly + lh * 0.42).toFixed(1)}" width="${(lw * 0.56).toFixed(1)}" height="${Math.max(1.6, lh * 0.045).toFixed(1)}" rx="1" fill="#7A2B37" opacity=".5"/><rect x="${(80 - lw * 0.2).toFixed(1)}" y="${(ly + lh * 0.56).toFixed(1)}" width="${(lw * 0.4).toFixed(1)}" height="${Math.max(1.2, lh * 0.035).toFixed(1)}" rx="1" fill="#5A4A40" opacity=".32"/>`;
+  const straw = b.straw ? `<g clip-path="url(#${id}c)"><rect x="0" y="${top + b.straw * BT_K}" width="160" height="400" fill="#CDB98C"/>${[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5].map(i => `<path d="M${80 + i * 11} ${top + b.straw * BT_K}q${-i} ${(b.h - b.straw) * BT_K * 0.5} 0 ${(b.h - b.straw) * BT_K}" stroke="#9C8659" stroke-width=".8" fill="none" opacity=".75"/>`).join('')}<rect x="0" y="${top + (b.h - 2.2) * BT_K}" width="160" height="3" fill="#9C8659"/></g>` : '';
+  const hx = 80 - btHalf(b, b.h * 0.7) * BT_K * 0.62;
+  return `<svg class="bottle-svg" viewBox="0 0 160 360" role="img" aria-label="${esc(b.name)} bottle, ${esc(GLASSES[gk].name.toLowerCase())} glass">
     <defs>
-      <linearGradient id="${id}g" x1="0" x2="1"><stop offset="0" stop-color="${g[1]}"/><stop offset=".38" stop-color="${g[0]}"/><stop offset="1" stop-color="${g[1]}"/></linearGradient>
-      <linearGradient id="${id}h" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".2"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-      <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset=".72" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></linearGradient>
-      <clipPath id="${id}c"><path d="${s.d}"/></clipPath>
+      <linearGradient id="${id}w" x1="0" x2="1"><stop offset="0" stop-color="${wine[1]}"/><stop offset=".38" stop-color="${wine[0]}"/><stop offset="1" stop-color="${wine[1]}"/></linearGradient>
+      <linearGradient id="${id}e" x1="0" x2="1"><stop offset="0" stop-color="${empty[1]}" stop-opacity="${clear ? 0.45 : 1}"/><stop offset=".38" stop-color="${empty[0]}" stop-opacity="${clear ? 0.35 : 1}"/><stop offset="1" stop-color="${empty[1]}" stop-opacity="${clear ? 0.45 : 1}"/></linearGradient>
+      <linearGradient id="${id}h" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity="${clear ? 0.45 : 0.22}"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset=".75" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient>
+      <clipPath id="${id}c"><path d="${d}"/></clipPath>
     </defs>
-    <path d="${s.d}" fill="url(#${id}g)"/>
-    <g clip-path="url(#${id}c)"><rect x="0" y="0" width="160" height="360" fill="url(#${id}s)"/><rect x="${s.hl}" y="0" width="8" height="360" fill="url(#${id}h)"/></g>
-    ${straw}
-    <path d="${s.foil}" fill="${cap}"/>
-    ${lab}
-    <rect x="${lx + lw * 0.22}" y="${ly + lh * 0.42}" width="${lw * 0.56}" height="${Math.max(2, lh * 0.04)}" rx="1.5" fill="#7A2B37" opacity=".5"/>
-    <rect x="${lx + lw * 0.3}" y="${ly + lh * 0.56}" width="${lw * 0.4}" height="${Math.max(1.6, lh * 0.03)}" rx="1.2" fill="#5A4A40" opacity=".32"/>
+    <g clip-path="url(#${id}c)">
+      <rect x="0" y="0" width="160" height="360" fill="url(#${id}e)"/>
+      ${clear ? '' : `<rect x="0" y="0" width="160" height="${fy.toFixed(1)}" fill="#fff" opacity=".12"/>`}
+      <rect x="0" y="${fy.toFixed(1)}" width="160" height="${(360 - fy).toFixed(1)}" fill="url(#${id}w)"/>
+      <rect x="0" y="0" width="160" height="360" fill="url(#${id}s)"/>
+      <rect x="${hx.toFixed(1)}" y="0" width="7" height="360" fill="url(#${id}h)"/>
+      <rect x="0" y="${top}" width="160" height="${b.cap * BT_K}" fill="${cap}"/>${b.foil ? '' : `<rect x="0" y="${(top + b.cap * BT_K - 1.2).toFixed(1)}" width="160" height="1.2" fill="#000" opacity=".25"/>`}
+    </g>
+    ${clear ? `<path d="${d}" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1"/>` : ''}
+    ${straw}${lab}${lines}
   </svg>`;
 }
+
+/* ---------------------------------------------------------------- choosing shape and glass in Edit */
+
+function bottleFieldHtml() {
+  const w = formBottleWine(), k = D.bottle || bottleAuto(w), g = D.glass || glassAuto(w, k);
+  return `<button type="button" class="bt-field" data-act="bt-open"><span class="bt-mini">${bottleSvg(w, k, g)}</span><span><small class="muted">Bottle</small><b>${esc(BOTTLES[k].name)} · ${esc(GLASSES[g].name)}</b>${D.bottle || D.glass ? '' : '<small class="muted">Chosen automatically</small>'}</span>${ICON.chevron}</button>`;
+}
+/* the wine as the form has it now, for the automatic choice */
+const formBottleWine = () => ({ type: D.fields.type, region: D.fields.region, grapes: D.fields.grapes, name: D.fields.name, producer: D.fields.producer });
+function bottleSheetHtml() {
+  const w = formBottleWine(), auto = bottleAuto(w), k = D.bottle || auto, gAuto = glassAuto(w, k), g = D.glass || gAuto;
+  const card = s => `<button class="bp-card${D.bottle === s ? ' on' : ''}" data-act="bt-shape" data-v="${s}" aria-pressed="${D.bottle === s}">${bottleSvg(w, s, D.glass || glassAuto(w, s))}<b>${esc(BOTTLES[s].name)}</b><small>${esc(BOTTLES[s].wines)}</small>${!D.bottle && s === auto ? '<em>Auto</em>' : ''}</button>`;
+  const swatch = x => `<button class="bp-glass${D.glass === x ? ' on' : ''}" data-act="bt-glass" data-v="${x}" aria-pressed="${D.glass === x}">${bottleSvg(w, k, x)}<small>${esc(GLASSES[x].name)}</small>${!D.glass && x === gAuto ? '<em>Auto</em>' : ''}</button>`;
+  return `<div class="sheet-backdrop" data-act="bt-close"></div><div class="sheet bp-sheet" role="dialog" aria-modal="true" aria-label="Bottle"><div class="grab"></div>
+    <div class="between"><h2 style="font-size:18px;font-weight:600">Bottle</h2><button class="icon-btn" data-act="bt-close" aria-label="Close">${ICON.x}</button></div>
+    <span class="fsec-h">Shape</span>
+    <button class="bp-auto${D.bottle ? '' : ' on'}" data-act="bt-shape" data-v=""><span>Automatic: <b>${esc(BOTTLES[auto].name)}</b></span><span class="small muted">from type, region and grapes</span></button>
+    <div class="bp-grid">${Object.keys(BOTTLES).map(card).join('')}</div>
+    <span class="fsec-h">Glass</span>
+    <button class="bp-auto${D.glass ? '' : ' on'}" data-act="bt-glass" data-v=""><span>Automatic: <b>${esc(GLASSES[gAuto].name)}</b></span><span class="small muted">clear glass shows the wine</span></button>
+    <div class="bp-glasses">${Object.keys(GLASSES).map(swatch).join('')}</div>
+    <button class="btn primary block" data-act="bt-close">Done</button>
+  </div>`;
+}
+function bottleSheetOpen() { RS = { kind: 'bottle' }; renderSheet(); }
+function bottleSheetRefresh() {
+  const sh = $('#sheet-root .bp-sheet'), top = sh ? sh.scrollTop : 0;
+  renderSheet();
+  const n = $('#sheet-root .bp-sheet');
+  if (n) { n.scrollTop = top; n.style.animation = 'none'; }
+  const f = $('#bottle-field'); if (f) f.innerHTML = bottleFieldHtml();
+}
+/* type, region, grapes or name changed in the form: the automatic bottle follows */
+let btFieldT = 0;
+function bottleFieldLater(name) {
+  if (!['type', 'region', 'grapes', 'name'].includes(name)) return;
+  clearTimeout(btFieldT);
+  btFieldT = setTimeout(() => { const f = $('#bottle-field'); if (f && D) f.innerHTML = bottleFieldHtml(); }, 250);
+}
+const BT_ACTS = {
+  'bt-open': () => bottleSheetOpen(),
+  'bt-shape': el => { D.bottle = el.dataset.v; bottleSheetRefresh(); },
+  'bt-glass': el => { D.glass = el.dataset.v; bottleSheetRefresh(); },
+  'bt-close': () => { closeSheet(); const f = $('#bottle-field'); if (f) f.innerHTML = bottleFieldHtml(); }
+};
 
 /* ---------------------------------------------------------------- drawn label, for wines without a photo */
 
@@ -68,13 +180,13 @@ function labelCardHtml(w) {
 /* in the lists: the vintage is the one thing that can still be read */
 const labelMiniHtml = (w, sm) => `<div class="thumb${sm ? ' sm' : ''} dl-mini" aria-hidden="true"><span>${esc(w.vintage || 'NV')}</span><i></i></div>`;
 
-/* the top of the wine page: the bottle on the left, the label on the right */
+/* the top of the wine page: bottle and label side by side in a frame, on one line like on a shelf */
 function wineTopHtml(w) {
   const photo = w.thumb || w.labelFileId;
   const label = photo
     ? `<button class="wtop-lab" data-act="label-zoom" aria-label="Show the label large"><img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}"></button>`
     : `<div class="wtop-lab">${labelCardHtml(w)}</div>`;
-  return `<div class="wtop"><div class="wtop-b">${bottleSvg(w)}</div>${label}</div>`;
+  return `<div class="wframe"><div class="wtop-b">${bottleSvg(w)}</div>${label}</div>`;
 }
 function labelZoom() {
   const img = $('#label-img');
@@ -264,3 +376,48 @@ function cropPreview() {
     } catch (e) { /* corners too close together */ }
   }, 60);
 }
+
+/* ---------------------------------------------------------------- the loupe while dragging a crop point
+   Three times larger than on the screen, with a cross on the point and the edges that meet there.
+   It sits in an upper corner, on the side away from the point. */
+
+function loupeShow(i, ev) {
+  const wrap = $('#crop-wrap'), svgEl = $('#crop-svg');
+  if (!wrap || !svgEl || !D || !D.src) return;
+  let L = $('#loupe');
+  if (!L) {
+    L = document.createElement('div');
+    L.id = 'loupe';
+    L.className = 'loupe';
+    L.innerHTML = '<canvas width="248" height="248"></canvas>';
+    wrap.appendChild(L);
+  }
+  const r = svgEl.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+  const sc = r.width / D.src.width;
+  const mids = cropMids(), pts = D.corners.concat(mids), c = pts[i];
+  const px = c.x * sc + (r.left - wr.left), py = c.y * sc + (r.top - wr.top);
+  const left = px > wr.width / 2;
+  L.style.left = left ? '10px' : '';
+  L.style.right = left ? '' : '10px';
+  L.style.top = py < 150 && ((left && px < 150) || (!left && px > wr.width - 150)) ? '' : '10px';
+  L.style.bottom = L.style.top ? '' : '10px';
+  const cv = L.querySelector('canvas'), x = cv.getContext('2d');
+  const half = 62 / (3 * sc), k = 248 / (half * 2);
+  x.fillStyle = '#000';
+  x.fillRect(0, 0, 248, 248);
+  x.drawImage(D.src, c.x - half, c.y - half, half * 2, half * 2, 0, 0, 248, 248);
+  const to = p => [(p.x - c.x + half) * k, (p.y - c.y + half) * k];
+  const [tl, tr, br, bl] = D.corners;
+  x.strokeStyle = 'rgba(230, 203, 152, .95)';
+  x.lineWidth = 3;
+  x.beginPath();
+  const edge = (a, m, b) => { const q = bezCtrl(a, m, b); x.moveTo(...to(a)); x.quadraticCurveTo(...to(q), ...to(b)); };
+  edge(tl, mids[0], tr); edge(bl, mids[1], br);
+  x.moveTo(...to(tr)); x.lineTo(...to(br)); x.moveTo(...to(tl)); x.lineTo(...to(bl));
+  x.stroke();
+  x.strokeStyle = '#fff';
+  x.lineWidth = 2;
+  x.beginPath(); x.moveTo(124, 98); x.lineTo(124, 150); x.moveTo(98, 124); x.lineTo(150, 124); x.stroke();
+  L.hidden = false;
+}
+function loupeHide() { const L = $('#loupe'); if (L) L.hidden = true; }

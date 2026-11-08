@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 47;
+var API_VERSION = 49;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -39,8 +39,9 @@ var OFFER_COLS = ['key', 'offer', 'date'];
 var INFO_COLS = ['key', 'kind', 'name', 'data', 'date'];
 var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
 // wines ordered but not delivered yet; wineId when it is a wine already in the cellar; price per bottle
-var ORDER_COLS = ['id', 'wineId', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'size', 'qty', 'price', 'priceCur', 'retailer', 'ordered', 'expected', 'sub', 'note', 'details', 'createdAt', 'fit', 'why'];
-var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt', 'fit', 'details'];
+var ORDER_COLS = ['id', 'wineId', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'size', 'qty', 'price', 'priceCur', 'retailer', 'ordered', 'expected', 'sub', 'note', 'details', 'createdAt', 'fit', 'why', 'recBy'];
+var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt', 'fit', 'details', 'recBy'];
+// recBy: who recommended the wine, names separated by commas; it goes on to the order and to the purchase in the journal (people)
 // all countries with their currency [name, currency], and the EU members
 var GEO_COUNTRIES = {"AD":["Andorra","EUR"],"AE":["United Arab Emirates","AED"],"AF":["Afghanistan","AFN"],"AG":["Antigua & Barbuda","XCD"],"AI":["Anguilla","XCD"],"AL":["Albania","ALL"],"AM":["Armenia","AMD"],"AO":["Angola","AOA"],"AR":["Argentina","ARS"],"AS":["American Samoa","USD"],"AT":["Austria","EUR"],"AU":["Australia","AUD"],"AW":["Aruba","AWG"],"AX":["Åland Islands","EUR"],"AZ":["Azerbaijan","AZN"],"BA":["Bosnia and Herzegovina","BAM"],"BB":["Barbados","BBD"],"BD":["Bangladesh","BDT"],"BE":["Belgium","EUR"],"BF":["Burkina Faso","XOF"],"BG":["Bulgaria","BGN"],"BH":["Bahrain","BHD"],"BI":["Burundi","BIF"],"BJ":["Benin","XOF"],"BL":["St. Barthélemy","EUR"],"BM":["Bermuda","BMD"],"BN":["Brunei","BND"],"BO":["Bolivia","BOB"],"BQ":["Caribbean Netherlands","USD"],"BR":["Brazil","BRL"],"BS":["Bahamas","BSD"],"BT":["Bhutan","INR"],"BW":["Botswana","BWP"],"BY":["Belarus","BYN"],"BZ":["Belize","BZD"],"CA":["Canada","CAD"],"CC":["Cocos (Keeling) Islands","AUD"],"CD":["DR Congo","CDF"],"CF":["Central African Republic","XAF"],"CG":["Congo","XAF"],"CH":["Switzerland","CHF"],"CI":["Côte d'Ivoire","XOF"],"CK":["Cook Islands","NZD"],"CL":["Chile","CLP"],"CM":["Cameroon","XAF"],"CN":["China","CNY"],"CO":["Colombia","COP"],"CR":["Costa Rica","CRC"],"CU":["Cuba","CUP"],"CV":["Cape Verde","CVE"],"CW":["Curaçao","XCG"],"CX":["Christmas Island","AUD"],"CY":["Cyprus","EUR"],"CZ":["Czechia","CZK"],"DE":["Germany","EUR"],"DJ":["Djibouti","DJF"],"DK":["Denmark","DKK"],"DM":["Dominica","XCD"],"DO":["Dominican Republic","DOP"],"DZ":["Algeria","DZD"],"EC":["Ecuador","USD"],"EE":["Estonia","EUR"],"EG":["Egypt","EGP"],"EH":["Western Sahara","MAD"],"ER":["Eritrea","ERN"],"ES":["Spain","EUR"],"ET":["Ethiopia","ETB"],"FI":["Finland","EUR"],"FJ":["Fiji","FJD"],"FK":["Falkland Islands","FKP"],"FM":["Micronesia","USD"],"FO":["Faroe Islands","DKK"],"FR":["France","EUR"],"GA":["Gabon","XAF"],"GB":["United Kingdom","GBP"],"GD":["Grenada","XCD"],"GE":["Georgia","GEL"],"GF":["French Guiana","EUR"],"GG":["Guernsey","GBP"],"GH":["Ghana","GHS"],"GI":["Gibraltar","GIP"],"GL":["Greenland","DKK"],"GM":["Gambia","GMD"],"GN":["Guinea","GNF"],"GP":["Guadeloupe","EUR"],"GQ":["Equatorial Guinea","XAF"],"GR":["Greece","EUR"],"GT":["Guatemala","GTQ"],"GU":["Guam","USD"],"GW":["Guinea-Bissau","XOF"],"GY":["Guyana","GYD"],"HK":["Hong Kong","HKD"],"HN":["Honduras","HNL"],"HR":["Croatia","EUR"],"HT":["Haiti","HTG"],"HU":["Hungary","HUF"],"ID":["Indonesia","IDR"],"IE":["Ireland","EUR"],"IL":["Israel","ILS"],"IM":["Isle of Man","GBP"],"IN":["India","INR"],"IQ":["Iraq","IQD"],"IR":["Iran","IRR"],"IS":["Iceland","ISK"],"IT":["Italy","EUR"],"JE":["Jersey","GBP"],"JM":["Jamaica","JMD"],"JO":["Jordan","JOD"],"JP":["Japan","JPY"],"KE":["Kenya","KES"],"KG":["Kyrgyzstan","KGS"],"KH":["Cambodia","KHR"],"KI":["Kiribati","AUD"],"KM":["Comoros","KMF"],"KN":["St. Kitts & Nevis","XCD"],"KP":["North Korea","KPW"],"KR":["South Korea","KRW"],"KW":["Kuwait","KWD"],"KY":["Cayman Islands","KYD"],"KZ":["Kazakhstan","KZT"],"LA":["Laos","LAK"],"LB":["Lebanon","LBP"],"LC":["St. Lucia","XCD"],"LI":["Liechtenstein","CHF"],"LK":["Sri Lanka","LKR"],"LR":["Liberia","LRD"],"LS":["Lesotho","ZAR"],"LT":["Lithuania","EUR"],"LU":["Luxembourg","EUR"],"LV":["Latvia","EUR"],"LY":["Libya","LYD"],"MA":["Morocco","MAD"],"MC":["Monaco","EUR"],"MD":["Moldova","MDL"],"ME":["Montenegro","EUR"],"MF":["St. Martin","EUR"],"MG":["Madagascar","MGA"],"MH":["Marshall Islands","USD"],"MK":["North Macedonia","MKD"],"ML":["Mali","XOF"],"MM":["Myanmar","MMK"],"MN":["Mongolia","MNT"],"MO":["Macao","MOP"],"MP":["Northern Mariana Islands","USD"],"MQ":["Martinique","EUR"],"MR":["Mauritania","MRU"],"MS":["Montserrat","XCD"],"MT":["Malta","EUR"],"MU":["Mauritius","MUR"],"MV":["Maldives","MVR"],"MW":["Malawi","MWK"],"MX":["Mexico","MXN"],"MY":["Malaysia","MYR"],"MZ":["Mozambique","MZN"],"NA":["Namibia","ZAR"],"NC":["New Caledonia","XPF"],"NE":["Niger","XOF"],"NF":["Norfolk Island","AUD"],"NG":["Nigeria","NGN"],"NI":["Nicaragua","NIO"],"NL":["Netherlands","EUR"],"NO":["Norway","NOK"],"NP":["Nepal","NPR"],"NR":["Nauru","AUD"],"NU":["Niue","NZD"],"NZ":["New Zealand","NZD"],"OM":["Oman","OMR"],"PA":["Panama","PAB"],"PE":["Peru","PEN"],"PF":["French Polynesia","XPF"],"PG":["Papua New Guinea","PGK"],"PH":["Philippines","PHP"],"PK":["Pakistan","PKR"],"PL":["Poland","PLN"],"PM":["St. Pierre & Miquelon","EUR"],"PN":["Pitcairn Islands","NZD"],"PR":["Puerto Rico","USD"],"PS":["Palestine","ILS"],"PT":["Portugal","EUR"],"PW":["Palau","USD"],"PY":["Paraguay","PYG"],"QA":["Qatar","QAR"],"RE":["Réunion","EUR"],"RO":["Romania","RON"],"RS":["Serbia","RSD"],"RU":["Russia","RUB"],"RW":["Rwanda","RWF"],"SA":["Saudi Arabia","SAR"],"SB":["Solomon Islands","SBD"],"SC":["Seychelles","SCR"],"SD":["Sudan","SDG"],"SE":["Sweden","SEK"],"SG":["Singapore","SGD"],"SH":["St. Helena","SHP"],"SI":["Slovenia","EUR"],"SJ":["Svalbard & Jan Mayen","NOK"],"SK":["Slovakia","EUR"],"SL":["Sierra Leone","SLE"],"SM":["San Marino","EUR"],"SN":["Senegal","XOF"],"SO":["Somalia","SOS"],"SR":["Suriname","SRD"],"SS":["South Sudan","SSP"],"ST":["São Tomé & Príncipe","STN"],"SV":["El Salvador","USD"],"SX":["Sint Maarten","XCG"],"SY":["Syria","SYP"],"SZ":["Eswatini","SZL"],"TC":["Turks & Caicos Islands","USD"],"TD":["Chad","XAF"],"TG":["Togo","XOF"],"TH":["Thailand","THB"],"TJ":["Tajikistan","TJS"],"TK":["Tokelau","NZD"],"TL":["Timor-Leste","USD"],"TM":["Turkmenistan","TMT"],"TN":["Tunisia","TND"],"TO":["Tonga","TOP"],"TR":["Türkiye","TRY"],"TT":["Trinidad & Tobago","TTD"],"TV":["Tuvalu","AUD"],"TW":["Taiwan","TWD"],"TZ":["Tanzania","TZS"],"UA":["Ukraine","UAH"],"UG":["Uganda","UGX"],"US":["United States","USD"],"UY":["Uruguay","UYU"],"UZ":["Uzbekistan","UZS"],"VA":["Vatican City","EUR"],"VC":["St. Vincent & Grenadines","XCD"],"VE":["Venezuela","VES"],"VG":["British Virgin Islands","USD"],"VI":["U.S. Virgin Islands","USD"],"VN":["Vietnam","VND"],"VU":["Vanuatu","VUV"],"WF":["Wallis & Futuna","XPF"],"WS":["Samoa","WST"],"XK":["Kosovo","EUR"],"YE":["Yemen","YER"],"YT":["Mayotte","EUR"],"ZA":["South Africa","ZAR"],"ZM":["Zambia","ZMW"],"ZW":["Zimbabwe","USD"]};
 var GEO_EU = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"];
@@ -51,7 +52,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '23';
+var SCHEMA_VERSION = '24';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -86,6 +87,7 @@ var ACTIONS = {
   deleteWish: actionDeleteWish_,
   saveOrder: actionSaveOrder_,
   deleteOrder: actionDeleteOrder_,
+  testDigest: actionTestDigest_,
   snapshot: actionSnapshot_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
@@ -386,8 +388,19 @@ function settings_() {
   var c = p.getProperty('CURRENCY');
   var currency = CURRENCIES.indexOf(c) >= 0 ? c : 'CHF';
   var k = p.getProperty('COUNTRY');
-  return { currency: currency, country: COUNTRIES[k] ? k : countryOfCur_(currency) };
+  return { currency: currency, country: COUNTRIES[k] ? k : countryOfCur_(currency), notify: notify_(), mailDefault: ownerMail_() };
 }
+
+/** What the monthly email holds and where it goes; the badges in the app are kept here too. */
+var NOTIFY_DEFAULT = { mail: true, to: '', window: true, orders: true, month: true, badges: true };
+function notify_() {
+  var n = {};
+  try { n = JSON.parse(props_().getProperty('NOTIFY') || '{}') || {}; } catch (e) { n = {}; }
+  var out = {};
+  Object.keys(NOTIFY_DEFAULT).forEach(function (k) { out[k] = n[k] === undefined ? NOTIFY_DEFAULT[k] : (k === 'to' ? String(n[k] || '') : n[k] === true); });
+  return out;
+}
+function ownerMail_() { try { return Session.getEffectiveUser().getEmail() || ''; } catch (e) { return ''; } }
 
 function actionSetSettings_(req) {
   var s = req.settings || {};
@@ -398,6 +411,18 @@ function actionSetSettings_(req) {
   if (s.country !== undefined) {
     if (!COUNTRIES[String(s.country)]) throw new Error('Unsupported country');
     props_().setProperty('COUNTRY', String(s.country));
+  }
+  if (s.notify && typeof s.notify === 'object') {
+    var n = notify_();
+    Object.keys(NOTIFY_DEFAULT).forEach(function (k) {
+      if (s.notify[k] === undefined) return;
+      if (k === 'to') {
+        var to = String(s.notify.to || '').trim();
+        if (to && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new Error('This is not a valid email address.');
+        n.to = to;
+      } else n[k] = s.notify[k] === true;
+    });
+    props_().setProperty('NOTIFY', JSON.stringify(n));
   }
   return settings_();
 }
@@ -1666,7 +1691,7 @@ var INFO_ASK = {
   region: 'the wine region "%s". Sections: "The region" (location, size, history), "Climate and soils", "Wines and grapes" (main grapes and styles), "Where the best wines come from" (sub-regions, appellations, classification). Facts: Country, Climate, Vineyard area, Best known for.',
   grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Styles" (how it is made and blended, where it gives its best wines). Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
   style: 'the wine style "%s". Sections: "What it is", "Typical character", "How to serve it" (temperature, glass, decanting), "How long to keep it". Facts: Serving temperature, Glass, Decanting, Ageing potential.',
-  producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area.',
+  producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area, Production (bottles per year, rounded), Member of (classifications and producer associations it belongs to, for example VDP, Grand Cru Classé en 1855, Union des Grands Crus, Mémoire des Vins Suisses; only ones you are sure of).',
   vintages: 'the vintages of the wine region "%s"'
 };
 
@@ -1679,7 +1704,7 @@ function infoKey_(kind, name, context) {
 /** A grape background from before the charts; it is written again once. */
 function infoOld_(kind, info) {
   if (kind === 'vintages') return !info || Number(info.made) < new Date().getFullYear();   // a new vintage every year
-  var v = (info && info.v) || 0; return kind === 'grape' || kind === 'region' ? v < 3 : kind === 'producer' && v < 2;
+  var v = (info && info.v) || 0; return kind === 'grape' || kind === 'region' || kind === 'producer' ? v < 3 : false;
 }
 
 /** What each kind returns besides the text, for the charts, the map and the links. */
@@ -1692,7 +1717,7 @@ var INFO_MORE = {
   region: ', "grapes": ["the main grape varieties, most important first, up to six, as they are usually written"], "lat": latitude of the center of the region, "lon": longitude of the center, "km": its approximate size from end to end in kilometers, ' +
     '"terms": [{"t": "the words exactly as written in the sections", "k": "grape, area, village or style"}] for the grape varieties, sub regions, appellations, villages and wine styles named in the sections, up to 25, except the region itself',
   style: ', "serve": [lowest, highest] serving temperature in degrees Celsius, "ageing": {"everyday": [from, to], "best": [from, to]} in years after the vintage, for simple wines and for the best wines of this style',
-  producer: ', "website": "the official website of the producer, only if you know it, otherwise empty"'
+  producer: ', "website": "the official website of the producer, only if you know it, otherwise empty", "lat": latitude of the winery, "lon": longitude of the winery, only if you know where it is, otherwise null, "visits": "one short sentence on how visitors can come, for example tastings by appointment or a wine bar, only if you know it, otherwise empty"'
 };
 
 function infoRequest_(kind, name, context) {
@@ -1767,10 +1792,13 @@ function infoFrom_(kind, res) {
     var sa = ageOf(d.ageing); if (sa) info.ageing = sa;
   }
   if (kind === 'producer') {
-    info.v = 2;
+    info.v = 3;
     var site = String(d.website || '').trim();
     if (site && !/^https?:\/\//i.test(site)) site = 'https://' + site;
     info.website = /^https?:\/\/[^\s\/]+\.[^\s]+$/i.test(site) ? site.slice(0, 200) : '';
+    var plat = Number(d.lat), plon = Number(d.lon);
+    if (d.lat !== null && d.lon !== null && isFinite(plat) && isFinite(plon) && Math.abs(plat) <= 90 && Math.abs(plon) <= 180 && (plat || plon)) info.map = { lat: Math.round(plat * 1000) / 1000, lon: Math.round(plon * 1000) / 1000, km: 40 };
+    info.visits = txt(d.visits, 200);
   }
   if (kind === 'grape') {
     var pct = function (v) { var n = Math.round(Number(v)); return n > 0 && n <= 100 ? n : null; };
@@ -2451,44 +2479,103 @@ function parseJson_(text, failMsg) {
 // ---------------------------------------------------------------- monthly digest
 
 function monthlyDigest() {
+  var n = notify_();
+  if (!n.mail) return;
+  var d = digest_(n, false);
+  if (d) sendDigest_(n, d);
+}
+/** The test from Settings: the email as it would look now, also when there is nothing to report. */
+function actionTestDigest_() {
+  var n = notify_();
+  var d = digest_(n, true);
+  var to = sendDigest_(n, d);
+  return { sent: true, to: to };
+}
+function sendDigest_(n, d) {
+  var to = n.to || ownerMail_();
+  if (!to) throw new Error('No email address. Enter one in Settings, Notifications.');
+  MailApp.sendEmail({ to: to, subject: d.subject, name: 'Vintary', htmlBody: d.html });
+  return to;
+}
+
+/** The monthly email: drinking windows, orders and last month in short, as chosen in Settings. Null when there is nothing to say. */
+function digest_(n, test) {
   var now = new Date();
   var t = now.getFullYear() + now.getMonth() / 12;
   var year = now.getFullYear();
-  var wines = readAll_(SHEETS.wines).filter(function (w) { return Number(w.count) > 0; });
-  var past = [], soon = [], peakNew = [];
-  wines.forEach(function (w) {
-    var s = status_(w, t);
-    if (s === 'Past its window') past.push(w);
-    else if (s === 'Drink soon') soon.push(w);
-    else if (s === 'Peak' && Number(w.peakFrom) === year) peakNew.push(w);
-  });
-  if (!past.length && !soon.length && !peakNew.length) return;
+  var tz = Session.getScriptTimeZone();
+  var today = Utilities.formatDate(now, tz, 'yyyy-MM-dd'), thisMonth = today.slice(0, 7);
+  var all = readAll_(SHEETS.wines);
+  var cur = settings_().currency;
+  var title = function (w) { return [w.producer, w.name, w.vintage].filter(function (x) { return x !== '' && x !== null && x !== undefined; }).join(' '); };
+  var parts = [], counts = { drink: 0, orders: 0 };
 
-  var line = function (w) {
-    var title = [w.producer, w.name, w.vintage].filter(function (x) { return x !== '' && x !== null; }).join(' ');
-    var where = parseStock_(w.stock).map(function (e) {
-      return e.n + ' at ' + [e.loc, e.shelf ? 'shelf ' + e.shelf : '', e.pos].filter(String).join(', ');
-    }).join('; ');
-    return '<li><b>' + esc_(title) + '</b>, ' + w.count + ' btl' + (where ? ' (' + esc_(where) + ')' : '') + '</li>';
-  };
-  var block = function (title, list, note) {
-    if (!list.length) return '';
-    return '<h3 style="margin:16px 0 4px">' + title + '</h3><p style="margin:0 0 6px;color:#666">' + note + '</p><ul>' + list.map(line).join('') + '</ul>';
-  };
+  if (n.window) {
+    var wines = all.filter(function (w) { return Number(w.count) > 0; });
+    var past = [], soon = [], peakNew = [];
+    wines.forEach(function (w) {
+      var s = status_(w, t);
+      if (s === 'Past its window') past.push(w);
+      else if (s === 'Drink soon') soon.push(w);
+      else if (s === 'Peak' && Number(w.peakFrom) === year) peakNew.push(w);
+    });
+    var line = function (w) {
+      var where = parseStock_(w.stock).map(function (e) {
+        return e.n + ' at ' + [e.loc, e.shelf ? 'shelf ' + e.shelf : '', e.pos].filter(String).join(', ');
+      }).join('; ');
+      return '<li><b>' + esc_(title(w)) + '</b>, ' + w.count + ' btl' + (where ? ' (' + esc_(where) + ')' : '') + '</li>';
+    };
+    var block = function (h, list, note) {
+      if (!list.length) return '';
+      return '<h3 style="margin:16px 0 4px">' + h + '</h3><p style="margin:0 0 6px;color:#666">' + note + '</p><ul>' + list.map(line).join('') + '</ul>';
+    };
+    var b = block('Past its window', past, 'Open these first.') + block('Drink soon', soon, 'Past their peak, still drinking well.') + block('Now at peak', peakNew, 'They entered their peak this year.');
+    counts.drink = past.length + soon.length;
+    if (b) parts.push(b);
+  }
+
+  if (n.orders) {
+    var orders = readAll_(SHEETS.orders).filter(function (o) { return o.id; });
+    var d10 = function (v) { return String(v || '').replace(/^'/, '').slice(0, 10); };
+    var sub = function (o) { return o.sub === true || String(o.sub).toLowerCase() === 'true'; };
+    var late = orders.filter(function (o) { return !sub(o) && d10(o.expected) && d10(o.expected) < today; });
+    var due = orders.filter(function (o) { return !sub(o) && d10(o.expected).slice(0, 7) === thisMonth && d10(o.expected) >= today; });
+    var oline = function (o) { return '<li><b>' + esc_(title(o)) + '</b>, ' + o.qty + ' btl' + (o.retailer ? ' from ' + esc_(o.retailer) : '') + (d10(o.expected) ? ', expected ' + d10(o.expected) : '') + '</li>'; };
+    var ob = (late.length ? '<h3 style="margin:16px 0 4px">Overdue deliveries</h3><p style="margin:0 0 6px;color:#666">Maybe ask the shop.</p><ul>' + late.map(oline).join('') + '</ul>' : '') +
+      (due.length ? '<h3 style="margin:16px 0 4px">Expected this month</h3><ul>' + due.map(oline).join('') + '</ul>' : '');
+    counts.orders = late.length;
+    if (ob) parts.push(ob);
+  }
+
+  if (n.month) {
+    var prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var pm = Utilities.formatDate(prev, tz, 'yyyy-MM'), pmName = Utilities.formatDate(prev, tz, 'MMMM');
+    var moves = readAll_(SHEETS.removals).filter(function (r) { return String(r.date || '').replace(/^'/, '').slice(0, 7) === pm; });
+    var opened = moves.filter(function (r) { return r.dir === 'out'; }), bought = moves.filter(function (r) { return r.dir === 'in' && r.type === 'Purchase'; });
+    var sum = function (list) { return list.reduce(function (a, r) { return a + (Number(r.qty) || 1); }, 0); };
+    var stock = all.reduce(function (a, w) { return a + (Number(w.count) || 0); }, 0);
+    var hist = readAll_(SHEETS.history).filter(function (r) { return r.month; }).sort(function (a, b) { return String(a.month) < String(b.month) ? -1 : 1; }).pop();
+    var byId = {};
+    all.forEach(function (w) { byId[w.id] = w; });
+    var best = opened.map(function (r) { return byId[r.wineId]; }).filter(function (w) { return w && w.myRating !== '' && w.myRating !== null && !isNaN(Number(w.myRating)); })
+      .sort(function (a, b) { return Number(b.myRating) - Number(a.myRating); })[0];
+    if (opened.length || bought.length || test) {
+      parts.push('<h3 style="margin:16px 0 4px">' + esc_(pmName) + ' in short</h3><ul>' +
+        '<li>' + sum(opened) + ' bottles opened, ' + sum(bought) + ' bought</li>' +
+        '<li>' + stock + ' bottles in your cellar' + (hist && Number(hist.street) ? ', worth about ' + cur + ' ' + Math.round(Number(hist.street)).toLocaleString('de-CH') : '') + '</li>' +
+        (best ? '<li>Your best wine: <b>' + esc_(title(best)) + '</b>, ' + Math.round(Number(best.myRating)) + '%</li>' : '') + '</ul>');
+    }
+  }
+
+  if (!parts.length && !test) return null;
   var html = '<div style="font-family:Arial,sans-serif;font-size:14px">' +
     '<p style="margin:0 0 2px;font-family:Georgia,serif;font-size:22px;color:#620018">Vintary</p>' +
     '<p style="margin:0 0 14px;color:#888;font-style:italic">Wine, made personal.</p>' +
-    '<p>Here is your monthly drinking window update.</p>' +
-    block('Past its window', past, 'Open these first.') +
-    block('Drink soon', soon, 'Past their peak, still drinking well.') +
-    block('Now at peak', peakNew, 'They entered their peak this year.') +
-    '</div>';
-  MailApp.sendEmail({
-    to: Session.getEffectiveUser().getEmail(),
-    subject: 'Vintary: ' + (past.length + soon.length) + ' wines to drink soon',
-    name: 'Vintary',
-    htmlBody: html
-  });
+    '<p>' + (test ? 'This is a test of your monthly email.' : 'Here is your monthly update.') + '</p>' +
+    (parts.join('') || '<p style="color:#666">Nothing to report this month.</p>') +
+    '<p style="margin:18px 0 0;color:#999;font-size:12px">Change what this email holds in Vintary, Settings, Notifications.</p></div>';
+  var subject = 'Vintary: ' + (counts.drink ? counts.drink + ' wines to drink soon' : counts.orders ? counts.orders + ' overdue ' + (counts.orders === 1 ? 'delivery' : 'deliveries') : 'your monthly update');
+  return { html: html, subject: (test ? '[Test] ' : '') + subject };
 }
 
 function status_(w, t) {
