@@ -788,11 +788,17 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .cf-photo span { flex: 1; color: var(--text-2); }
 .cf-link { align-self: flex-start; padding: 2px 0; border: 0; background: transparent; color: var(--gold); font: inherit; font-size: 13px; text-align: left; }
 .cf-link b { font-weight: 600; }
+.cf-nophoto { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 15px; line-height: 1.45; color: var(--text-2); }
+.cf-nophoto svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--gold); }
+.cf-step .vq-all { margin-top: -2px; }
+.somm-cands { display: flex; flex-direction: column; gap: 8px; }
+.somm-cand { height: auto; min-height: 48px; padding: 8px 14px; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
 .cf-foods { gap: 6px; }
 .cf-foods .tp-food { padding: 9px 2px 8px; gap: 4px; font-size: 12px; }
 .cf-foods .tp-food svg { width: 24px; height: 24px; }
-.cf-input { max-width: none; margin: 0; }
-.cf-input textarea { min-height: 48px; }
+.cf-input { max-width: none; margin: 0; border-radius: 16px; }
+.cf-input { flex-wrap: wrap; justify-content: flex-end; align-items: center; padding: 6px 6px 6px 14px; }
+.cf-input textarea { flex: 1 1 100%; min-height: 86px; }
 /* the food verdict or two dishes in a wine check */
 .somm-food { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface); }
 .somm-food > svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--gold); }
@@ -1062,7 +1068,8 @@ button.pl-due { text-decoration: underline dotted rgba(255,255,255,.25); text-un
 .pl-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .pl-acts .pl-check { align-self: auto; }
 .mv-to { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
-.mv-to .chips .chip svg { width: 14px; height: 14px; }
+.bm-tos { display: flex; flex-direction: column; gap: 8px; }
+.bm-to svg { width: 18px; height: 18px; }
 .pl-sh .bm-all { height: 26px; padding: 0 10px; font-size: 12px; }
 .chk-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .chk-row.changed .stepper span { color: var(--gold); font-weight: 700; }

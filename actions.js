@@ -196,6 +196,7 @@ const ACTS = {
   'ds-rate': el => { if (RS && RS.kind === 'taste') setTasteRating((RS.rating === null ? 80 : RS.rating) + Number(el.dataset.d)); },
   'wl-save': el => { const p = WL.result && WL.result.picks[Number(el.dataset.i)]; if (p) listSave(p); },
   'somm-example': el => sommAsk(el.dataset.v),
+  'somm-cand': el => sommAsk(el.dataset.v, null, el.dataset.v),
   'voice-lang': () => voiceLangNext(),
   'wl-budget-clear': () => { WL.min = ''; WL.max = ''; document.querySelectorAll('[data-input=wl-min], [data-input=wl-max]').forEach(i => { i.value = ''; }); wlBudgetRefresh(); sommSave(); },
   'somm-mic': () => { if (SOMM.listening) voiceStop(); else sommStartVoice(); },
@@ -204,7 +205,7 @@ const ACTS = {
   'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = ['check', 'list'].includes(el.dataset.v) ? el.dataset.v : 'cellar'; SOMM.tips = false; SOMM.photo = null; sommSave(); history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
   'dup-keep': () => { const w = findDuplicate(D.fields); if (w) D.dupIgnore = w.id; renderDup(); },
   'dup-add': el => { const id = el.dataset.id; D = null; go('#/wine/' + encodeURIComponent(id)); setTimeout(() => openAddSheet(id), 200); },
-  'somm-retry': () => { const last = sommThread().pop(); if (last) sommAsk(last.q, last.img); },
+  'somm-retry': () => { const last = sommThread().pop(); if (last) sommAsk(last.q, last.img, last.picked); },
   'somm-photo-rm': () => { SOMM.photo = null; sommRefresh(false); },
   'cf-food': el => {
     const k = el.dataset.v, cur = sommFoods();

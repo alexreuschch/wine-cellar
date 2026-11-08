@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 51;
+var API_VERSION = 52;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1592,6 +1592,17 @@ function offerRequest_(wine, region, uses) {
   };
 }
 
+/** Finds the wine a typed or dictated text names, on the web, with spelling and speech errors in mind. */
+function identifyRequest_(text) {
+  var prompt = 'The owner of a wine cellar typed or dictated this, maybe with spelling or speech recognition errors, in any language: "' + String(text).slice(0, 300) + '". ' +
+    'Find the wine it names. Search the web for it, also with similar spellings of the producer and the wine. ' +
+    'Return ONLY a JSON object, no other text: {"found": true, "wine": "producer name vintage", "region": "region, country", "grapes": "", "facts": "two sentences from what you found: style, grapes, ageing"}. ' +
+    'If it names only a kind of wine or an appellation without a producer, for example "Barolo 2019", that is fine: return it with "found": true at once, without searching. ' +
+    'If several wines could be meant and you cannot decide, return {"found": false, "candidates": [{"wine": "producer name vintage", "region": "region, country"}]} with up to three. ' +
+    'If the text names no wine at all, return {"found": false, "candidates": []}.';
+  return { model: props_().getProperty('PRICE_MODEL') || PRICE_MODEL, max_tokens: 2000, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }], messages: [{ role: 'user', content: prompt }] };
+}
+
 /** The offer from a reply, or null when there is no usable offer with a product link. */
 function offerFrom_(res) {
   if (!res) return null;
@@ -1989,6 +2000,17 @@ function actionSommelier_(req) {
   // in a restaurant the food can come from its own field, kept for the evening
   var food = check ? String(req.food || '').trim().slice(0, 200) : '';
   if (food) q += '\n(What the owner eats: ' + food + ')';
+  // a wine named in words, not on a photo: found on the web first, so a small producer or a misheard name is the right wine
+  var picked = String(req.picked || '').trim().slice(0, 200);
+  if (picked) q += '\n(The owner confirmed the wine: ' + picked + ')';
+  else if (check && !image && !(req.history || []).length) {
+    var idn = null;
+    try { idn = parseJson_(textOf_(callClaude_(identifyRequest_(String(req.question || '')))), 'No wine'); } catch (e) { idn = null; }
+    if (idn && idn.found && idn.wine) q += '\n(Found on the web: ' + [idn.wine, idn.region, idn.grapes].filter(String).join(', ') + '. ' + String(idn.facts || '').slice(0, 400) + ')';
+    else if (idn && Array.isArray(idn.candidates) && idn.candidates.length) {
+      return { answer: '', picks: [], buy: '', wine: '', fit: null, candidates: idn.candidates.slice(0, 3).map(function (c) { return { wine: String(c.wine || ''), region: String(c.region || '') }; }).filter(function (c) { return c.wine; }) };
+    }
+  }
   var ctx = cellarContext_();
   var system = check
     ? CHECK_RULES + '\n\nThe owner is in ' + shopScope_().name + ', where prices are usually in ' + shopScope_().cur + '. The owner shows prices in ' + settings_().currency + '.' +
@@ -2005,13 +2027,13 @@ function actionSommelier_(req) {
   messages.push({ role: 'user', content: image
     ? [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } }, { type: 'text', text: q.slice(0, 1000) }]
     : q.slice(0, 1000) });
-  var res = callClaude_({
-    model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL,
-    max_tokens: 1400,
-    system: system,
-    messages: messages
-  });
-  var d = parseJson_(textOf_(res), 'The sommelier gave no answer. Please try again.');
+  var body = { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2400, system: system, messages: messages };
+  var res = callClaude_(body), d;
+  try { d = parseJson_(textOf_(res), 'x'); } catch (e) {
+    // an answer in words instead of the agreed form: asked once more for the form, before the owner sees an error
+    var again = messages.concat([{ role: 'assistant', content: textOf_(res).slice(0, 3000) || '...' }, { role: 'user', content: 'Please give your answer again as ONLY the JSON object described in the rules, no other text.' }]);
+    d = parseJson_(textOf_(callClaude_(Object.assign({}, body, { messages: again }))), 'The sommelier gave no answer. Please try again.');
+  }
   var ids = {};
   ctx.wines.forEach(function (w) { ids[String(w.id)] = true; });
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)

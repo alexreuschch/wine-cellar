@@ -435,7 +435,7 @@ async function chkSave() {
 function mvFootHtml() {
   const n = mvCount(), to = PMOVE.to, list = mvList();
   const locs = S.locations.slice();
-  const chips = locs.map(l => `<button class="chip${lc(l) === lc(to.loc) ? ' on' : ''}" data-act="bm-loc" data-v="${esc(l)}">${locIcon(l)}${esc(l)}</button>`).join('');
+  const chips = locs.map(l => `<button class="btn ${lc(l) === lc(to.loc) ? 'primary' : 'outline-gold'} block bm-to" data-act="bm-loc" data-v="${esc(l)}" aria-pressed="${lc(l) === lc(to.loc)}">${locIcon(l)}${esc(l)}</button>`).join('');
   let room = '';
   if (to.loc && n && lc(to.loc) !== lc(PMOVE.loc)) {
     const sp = locSpace(to.loc), need = list.reduce((a, x) => a + x.n * spaceOf(x.w), 0);
@@ -443,7 +443,7 @@ function mvFootHtml() {
   }
   const same = to.loc && list.length && list.every(x => samePlace(x.e, to));
   const where = to.loc ? placeLabel(to) : '';
-  return `<div class="mv-to"><span class="small muted">Move to</span><div class="chips">${chips}</div>
+  return `<div class="mv-to"><span class="small muted">Move to</span><div class="bm-tos">${chips}</div>
     ${to.loc && !isCase(to.loc) ? `<div class="store-row"><div class="field">Shelf (optional)<div class="stepper"><button data-act="bm-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span class="shelf-val">${esc(shelfText(to.loc, to.shelf))}</span><button data-act="bm-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>${posFieldHtml('mv')}</div>${posPanelHtml('mv')}` : ''}
     ${room}${same ? '<p class="small muted" style="margin:0">That is where they are already.</p>' : ''}</div>
     <div class="grid2"><button class="btn" data-act="bm-cancel">Cancel</button><button class="btn primary" data-act="bm-done"${!n || !to.loc || same ? ' disabled' : ''}>${n ? `Move ${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'Move'}</button></div>

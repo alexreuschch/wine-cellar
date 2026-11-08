@@ -145,6 +145,8 @@ function sommAnswerHtml(t) {
   const check = t.mode === 'check';
   if (t.error) return `<div class="somm-a error"><p>${esc(t.error)}</p><button class="link-btn" data-act="somm-retry">${ICON.refresh}Try again</button></div>`;
   if (!t.a) return `<div class="somm-a"><p class="somm-wait">${check ? 'Looking at this wine' : 'Looking through your cellar'}<span>.</span><span>.</span><span>.</span></p></div>`;
+  // not sure which wine: up to three to choose from, one tap checks it
+  if (check && !t.a.wine && (t.a.candidates || []).length) return `<div class="somm-a"><p>Which wine do you mean?</p><div class="somm-cands">${t.a.candidates.map(c => `<button class="btn accent block somm-cand" data-act="somm-cand" data-v="${esc(c.wine)}"><b>${esc(c.wine)}</b>${c.region ? `<span class="tiny muted">${esc(c.region)}</span>` : ''}</button>`).join('')}</div><p class="tiny muted" style="margin:0">None of them? Ask again with the producer, or take a photo.</p></div>`;
   const picks = (t.a.picks || []).map(p => {
     const w = wineById(p.id);
     if (!w) return '';
@@ -232,14 +234,14 @@ function checkFlowHtml() {
     ? `<div class="cf-photo"><img src="${esc(ph.thumb)}" alt="Photo of the wine"><span class="small">Photo ready.</span><label class="link-btn">Retake<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>`
     : `<div class="grid2"><label class="btn primary">${ICON.camera}Take a photo<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><label class="btn">Gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label></div>
       ${resto ? '<p class="tiny muted" style="margin:0">Name, vintage and price in the picture. Or the bottle, if the waiter shows it before opening.</p>' : ''}
-      <p class="tiny muted" style="margin:0">No photo? Say or type the wine name below.</p>
+      <p class="cf-nophoto">${ICON.edit}<span>No photo? Type or dictate the wine name in the question field below.</span></p>
       ${resto ? '<button class="cf-link" data-act="somm-mode" data-v="list">Comparing several wines? Use <b>Wine list</b></button>' : ''}`;
   const on = sommFoods();
   const keys = SOMM.foodsAll ? CHECK_FOODS : CHECK_FOODS.slice(0, 8).concat(CHECK_FOODS.slice(8).filter(k => on.includes(k)));
   const tiles = `<div class="tp-foods cf-foods">${keys.map(k => `<button class="tp-food${on.includes(k) ? ' on' : ''}" data-act="cf-food" data-v="${k}" aria-pressed="${on.includes(k)}">${FOODS[k][1]}<span>${esc(FOODS[k][0])}</span></button>`).join('')}</div>
-    <button class="cf-link" data-act="cf-food-all">${SOMM.foodsAll ? 'Fewer' : `More: ${CHECK_FOODS.length - 8} other kinds of food`}</button>`;
+    <button class="link-btn vq-all" data-act="cf-food-all">${SOMM.foodsAll ? 'Show fewer' : `Show all ${CHECK_FOODS.length} kinds of food`}${ICON.chevron}</button>`;
   const ask = `<div class="somm-input cf-input${SOMM.listening ? ' listening' : ''}">
-      <textarea id="somm-text" data-input="somm-text" rows="2" placeholder="${esc(sommPlaceholder())}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
+      <textarea id="somm-text" data-input="somm-text" rows="3" placeholder="${esc(sommPlaceholder())}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
       ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
       <button class="somm-send" data-act="somm-send" aria-label="Check the wine"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button></div>
     <p id="somm-hint" class="tiny muted somm-hint" style="margin:0">${sommHint()}</p>`;
@@ -461,7 +463,7 @@ async function listSave(p) {
 }
 
 
-async function sommAsk(text, photo) {
+async function sommAsk(text, photo, picked) {
   const q = str(text).trim();
   const img = photo || SOMM.photo;
   if (SOMM.busy) return;
@@ -471,7 +473,7 @@ async function sommAsk(text, photo) {
   if (mode !== SOMM.mode) { SOMM.mode = mode; history.replaceState(null, '', '#/sommelier/' + mode); render(); }
   const th = SOMM.threads[mode];
   const history = th.filter(t => t.a).slice(-3).map(t => ({ q: t.q || (t.a.wine ? `Will I like this wine? (label photo of ${t.a.wine})` : 'Will I like this wine?'), a: JSON.stringify(t.a) }));
-  const turn = { q, a: null, error: '', photo: img ? img.thumb : '', img, mode };
+  const turn = { q, a: null, error: '', photo: img ? img.thumb : '', img, mode, picked: picked || '' };
   th.push(turn);
   SOMM.photo = null;
   SOMM.draft = '';
@@ -486,7 +488,7 @@ async function sommAsk(text, photo) {
     turn.where = where; turn.price = price;
     if (mode === 'check' && SOMM.redo) { SOMM.redo = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }
     turn.food = mode === 'check' ? sommFoodText() : '';
-    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '', food: turn.food });
+    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '', food: turn.food, picked: picked || '' });
   } catch (e) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
   }
