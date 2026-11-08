@@ -42,17 +42,18 @@ function viewHome() {
   const soon = own.filter(w => w.count > 0 && statusOf(w) === 'Drink soon').length;
   const past = own.filter(w => w.count > 0 && statusOf(w) === 'Past its window').length;
   const late = S.orders.filter(orderOverdue).length;
-  const chip = (attrs, n, label, cls) => `<a class="${cls || ''}" ${attrs}><b>${n}</b> ${label}</a>`;
+  // in the colours used everywhere: the status of the drinking window, red for an overdue delivery
+  const chip = (attrs, n, label, c) => `<a ${attrs}${c ? ` class="tone" style="--c:${c}"` : ''}><b>${n}</b> ${label}</a>`;
   const stat = [chip('href="#/cellar"', btl, btl === 1 ? 'bottle' : 'bottles'),
-    past ? chip('data-act="gd-window" data-v="Past its window"', past, 'past their window', 'warn') : '',
-    soon ? chip('data-act="gd-window" data-v="Drink soon"', soon, 'to drink soon', 'warn') : '',
-    late ? chip('data-act="go-orders"', late, late === 1 ? 'delivery overdue' : 'deliveries overdue', 'warn') : ''].join('');
+    past ? chip('data-act="gd-window" data-v="Past its window"', past, 'past their window', STATUS['Past its window'].c) : '',
+    soon ? chip('data-act="gd-window" data-v="Drink soon"', soon, 'to drink soon', STATUS['Drink soon'].c) : '',
+    late ? chip('data-act="go-orders"', late, late === 1 ? 'delivery overdue' : 'deliveries overdue', '#E06C6C') : ''].join('');
   const st = gdStarted();
   const started = st.every(x => x[4]) ? '' : `<h3 class="gd-h">Get started</h3>${st.map(([k, ic, t, s, done]) => gdRow(`href="#/home" data-act="gd-start" data-k="${k}"`, ic, t, s, done)).join('')}`;
   const daily = GD_DAILY.map(([h, ic, t, s]) => gdRow(h === 'ext' ? 'href="#/top" data-act="gd-ext"' : `href="${h}"`, ic, t, s)).join('');
   return `<main class="screen has-nav home">
     <header class="top"><h1 class="title home-title"><img src="icon-192.png" alt="" width="34" height="34">Vintary</h1>
-      <div class="top-actions"><a class="icon-btn magic-btn" href="#/sommelier" aria-label="AI Sommelier">${ICON.magic}</a><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>
+      <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>
     <div class="hm-stat">${stat}</div>
     <h2 class="home-q">What would you like to do?</h2>
     ${started}

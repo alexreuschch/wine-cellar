@@ -1321,7 +1321,8 @@ button.rec-by { align-self: flex-start; border: 0; background: none; padding: 0;
 .hm-stat { display: flex; flex-wrap: wrap; gap: 6px; }
 .hm-stat a { display: inline-flex; gap: 6px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; }
 .hm-stat a b { color: var(--gold); }
-.hm-stat a.warn b { color: #E2B357; }
+.hm-stat a.tone { color: var(--c); border-color: color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.hm-stat a.tone b { color: var(--c); }
 .gd-h { margin: 6px 0 0; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .gd-row { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); }
 .gd-row:hover { color: var(--text); }
