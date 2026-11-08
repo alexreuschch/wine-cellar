@@ -776,9 +776,23 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .where-row .toggle button svg { width: 15px; height: 15px; }
 .where-row .toggle button.on { background: var(--gold); color: var(--on-gold); font-weight: 600; }
 .where-row.need { border-color: var(--gold); }
-.where-food { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
-.where-food small { font-size: 12px; opacity: .8; }
-.where-food input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; min-width: 0; }
+/* Will I like it? as steps from top to bottom */
+.check-flow { display: flex; flex-direction: column; gap: 14px; }
+.cf-step { display: flex; flex-direction: column; gap: 8px; }
+.cf-step h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.cf-step h3 small { font-weight: 400; font-size: 12px; color: var(--muted); }
+.cf-n { flex: none; width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold); font-size: 12px; font-weight: 700; }
+.cf-step .btn svg { width: 18px; height: 18px; }
+.cf-photo { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.cf-photo img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; }
+.cf-photo span { flex: 1; color: var(--text-2); }
+.cf-link { align-self: flex-start; padding: 2px 0; border: 0; background: transparent; color: var(--gold); font: inherit; font-size: 13px; text-align: left; }
+.cf-link b { font-weight: 600; }
+.cf-foods { gap: 6px; }
+.cf-foods .tp-food { padding: 9px 2px 8px; gap: 4px; font-size: 12px; }
+.cf-foods .tp-food svg { width: 24px; height: 24px; }
+.cf-input { max-width: none; margin: 0; }
+.cf-input textarea { min-height: 48px; }
 /* the food verdict or two dishes in a wine check */
 .somm-food { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface); }
 .somm-food > svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--gold); }

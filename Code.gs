@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 50;
+var API_VERSION = 51;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1899,7 +1899,7 @@ var SOMMELIER_RULES = [
 
 var CHECK_RULES = [
   'You are a warm, knowledgeable sommelier. The owner of a private cellar looks at a wine that is NOT in their cellar, for example in a shop, at a restaurant or at a friend, and wants to know if they will like it.',
-  'You get a photo of the label or a description, maybe with a price, plus the cellar, the finished wines with ratings and the journal of the owner.',
+  'You get a photo of the label, or of a line on a restaurant wine list, or a description, maybe with a price, plus the cellar, the finished wines with ratings and the journal of the owner. On a wine list photo read the wine name, vintage and the price on the list; that price is a restaurant price, put it in "price" and "priceCur".',
   'Rules:',
   '1. Identify the wine: producer, name and vintage. Put them in "wine". If you are unsure, say what you think it is. If the label or the question shows a bottle size other than 75 cl, add it to "wine", for example "Domaine X Pinot Noir 2019 (Magnum, 150 cl)", and a price refers to that bottle.',
   '2. Judge how well it fits the taste of the owner, based on the wines they rated highly or low, their favorites and what they drink often. Give "fit" from 0 to 100.',

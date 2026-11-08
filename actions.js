@@ -151,7 +151,7 @@ const ACTS = {
   'wish-offer': el => { const x = S.wishlist.find(w => w.id === el.dataset.id); if (x) consOffer(x, 'wish:' + x.id, x.id); },
   'wish-del': el => wishDelete(el.dataset.id),
   'wish-add': el => wishToCellar(el.dataset.id),
-  'somm-where': el => { if (el.dataset.v === 'restaurant' && sommWhere() !== 'restaurant') SOMM.food = ''; SOMM.where = el.dataset.v; SOMM.whereAt = Date.now(); sommSave(); render(); },
+  'somm-where': el => { SOMM.where = el.dataset.v; SOMM.whereAt = Date.now(); sommSave(); render(); },
   'somm-send': () => { if (SOMM.mode === 'list') { listAnalyze(); return; } const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
   'wl-go': () => listAnalyze(),
   'about-more': el => { if (el.closest('.prev-sheet')) { U.aboutOpen = U.aboutOpen === 'preview' ? null : 'preview'; renderPreview(); return; } const id = (location.hash.split('/')[2] || ''); U.aboutOpen = U.aboutOpen === decodeURIComponent(id) ? null : decodeURIComponent(id); refreshView(); },
@@ -205,7 +205,14 @@ const ACTS = {
   'dup-keep': () => { const w = findDuplicate(D.fields); if (w) D.dupIgnore = w.id; renderDup(); },
   'dup-add': el => { const id = el.dataset.id; D = null; go('#/wine/' + encodeURIComponent(id)); setTimeout(() => openAddSheet(id), 200); },
   'somm-retry': () => { const last = sommThread().pop(); if (last) sommAsk(last.q, last.img); },
-  'somm-photo-rm': () => { SOMM.photo = null; const pb = $('#somm-photo-box'); if (pb) pb.innerHTML = ''; },
+  'somm-photo-rm': () => { SOMM.photo = null; sommRefresh(false); },
+  'cf-food': el => {
+    const k = el.dataset.v, cur = sommFoods();
+    SOMM.foods = cur.includes(k) ? cur.filter(x => x !== k) : cur.concat(k);
+    SOMM.foodsAt = Date.now();
+    sommSave(); sommRefresh(false);
+  },
+  'cf-food-all': () => { SOMM.foodsAll = !SOMM.foodsAll; sommRefresh(false); },
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
 
   rate: el => {
@@ -450,7 +457,6 @@ const INPUTS = {
   'somm-text': el => { SOMM.draft = el.value; autosize(el); },
   'somm-vin': el => { const t = sommThread()[Number(el.dataset.i)]; if (t) { t.vin = t.vin || {}; t.vin.draft = el.value.replace(/\D/g, '').slice(0, 4); } },
   'ja-text': el => { JA.draft = el.value; autosize(el); },
-  'somm-food': el => { SOMM.food = el.value; SOMM.whereAt = Date.now(); sommSave(); },
   'wl-min': el => { WL.min = el.value; wlBudgetRefresh(); },
   'tp-note': el => { const a = D.profile.aromas[Number(el.dataset.i)]; if (a) a.n = el.value; D.touched.add('profile'); },
   'tp-field': el => { D.profile[el.dataset.k] = el.value; D.touched.add('profile'); if (el.classList.contains('autosize')) autosize(el); },
@@ -537,10 +543,8 @@ const CHANGES = {
       const c = await loadPhoto(file);
       const full = toJpeg(c, 1280, 0.82), thumb = toJpeg(c, 240, 0.7);
       SOMM.photo = { b64: full.split(',')[1], thumb };
-      const pb = $('#somm-photo-box');
-      if (pb) pb.innerHTML = sommPhotoHtml();
-      const ta = $('#somm-text');
-      if (ta) { ta.placeholder = sommPlaceholder(); ta.focus(); }
+      // no keyboard: the question is optional, the steps below stay in view
+      sommRefresh(false);
     } catch (e) { toast(e.message); }
     el.value = '';
   },

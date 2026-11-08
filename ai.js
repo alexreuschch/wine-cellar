@@ -6,15 +6,17 @@
 
 /* ------------------------------------------------------------ AI sommelier */
 
-const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', food: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '' };
+const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', foods: [], foodsAt: 0, foodsAll: false, busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '' };
 const sommThread = () => SOMM.threads[SOMM.mode] || [];
 /* wine list in a restaurant: photos of the pages, price range and food, then three picks */
 const WL = { pages: [], min: '', max: '', result: null, error: '', busy: false };
 const WL_KIND = { range: ['Best in your range', 'safe'], value: ['Best value', 'value'], gem: ['Hidden gem', 'disc'] };
 const SOMM_EXAMPLES = ['I feel like a fresh white wine tonight', 'Steak with salad, which wine fits?', 'Cheese fondue for four people', 'Something special for a birthday dinner under CHF 80', 'Which bottles should I open this month?'];
-/* a wine to take home, or one for the meal in a restaurant: other examples and words for each */
-const CHECK_EXAMPLES = ['Barolo 2019, is it for me?', 'Gantenbein Pinot Noir 2020 for a roast chicken', 'Château Musar 2016, what would I cook with it?'];
-const RESTO_EXAMPLES = ['Barolo 2019, is it for me?', 'Gantenbein Pinot Noir 2020', 'Château Musar 2016 or a Rioja Reserva?'];
+/* the food for a wine check, chosen as tiles and kept for the evening; the common ones first */
+const CHECK_FOODS = ['beef', 'lamb', 'poultry', 'fish', 'seafood', 'pasta', 'vegetarian', 'hardcheese', 'pork', 'game', 'pizza', 'mushrooms', 'spicy', 'asian', 'softcheese', 'curedmeat', 'dessert', 'aperitif'];
+const FOOD_HINT = { beef: 'steak with pepper sauce and fries', lamb: 'rack of lamb with rosemary', poultry: 'roast chicken with lemon', fish: 'grilled sea bass with butter sauce', seafood: 'mussels in white wine', pasta: 'pasta with tomato and basil', vegetarian: 'vegetable risotto', hardcheese: 'aged Gruyère', pork: 'pork roast with mustard', game: 'venison with red cabbage', pizza: 'pizza with salami', mushrooms: 'mushroom risotto', spicy: 'Thai red curry', asian: 'Peking duck', softcheese: 'Brie and Camembert', curedmeat: 'Parma ham and salami', dessert: 'chocolate cake', aperitif: 'nuts and olives' };
+const sommFoods = () => (Date.now() - SOMM.foodsAt < 3 * 3600e3 ? SOMM.foods.filter(k => FOODS[k]) : []);
+const sommFoodText = () => sommFoods().map(k => FOODS[k][0]).join(', ');
 
 /* how to use the sommelier for the cellar, shown before the first question and again with Tips */
 function sommGuideHtml() {
@@ -42,14 +44,14 @@ function checkGuideHtml() {
   return `<div class="somm-guide">
     <h3>How it works</h3>
     <ul>
-      <li><b>Photograph the label</b> or type the name, producer and vintage.</li>
-      <li><b>Compare with the shop price</b>, the cheapest price in online shops of the country set above. In a restaurant choose <b>Restaurant price</b> for a fair price range on the wine list. Compare it with the shelf or the list yourself.</li>
-      <li><b>Say what you eat.</b> In a restaurant use the field under Restaurant price, it is kept for the evening. At home add a dish to your question, or get two dishes to cook with it.</li>
-      <li><b>Mention a price</b> only if you want a verdict on it, for example “55 on the wine list”.</li>
-      <li><b>Ask a follow-up</b>, for example “what would I eat with it?” or “is the 2019 better?”.</li>
+      <li><b>Compare with</b> the shop price, or in a restaurant with the restaurant price, and check the country.</li>
+      <li><b>Photograph the wine</b>: in a shop the label, in a restaurant the line on the wine list with its price. No photo? Say or type the name in the question.</li>
+      <li><b>Tap what you eat</b> or plan to cook. It is kept for the evening.</li>
+      <li><b>Ask your question</b>, typed or spoken, and tell more about the food, for example “steak with pepper sauce and fries, does it fit?”.</li>
+      <li><b>Ask a follow-up</b> after the answer, for example “is the 2019 better?”.</li>
     </ul>
     <h3>What you get</h3>
-    <p>How well the wine fits your taste in percent, based on your ratings, favorites and journal. The price in local shops, in a restaurant a fair price range, its style, and which wines in your cellar are similar, so you see if you already have something like it.</p>
+    <p>How well the wine fits your taste in percent, how it goes with your food, the price in local shops and in a restaurant a fair price range, and which wines in your cellar are similar.</p>
     <p class="tiny muted">Answers come from AI. Each check costs about 5 cents, a little less when the wine was checked in the last 14 days.</p>
   </div>`;
 }
@@ -59,8 +61,7 @@ function checkGuideHtml() {
 const WHERE_TTL = 3 * 3600e3;
 const sommWhere = () => (SOMM.where === 'restaurant' && Date.now() - SOMM.whereAt < WHERE_TTL ? 'restaurant' : 'shop');
 const whereRowHtml = () => { const w = sommWhere(); const b = (v, ic, label) => `<button class="${w === v ? 'on' : ''}" data-act="somm-where" data-v="${v}" aria-pressed="${w === v}">${ic}${label}</button>`;
-  const food = w === 'restaurant' ? `<label class="where-food"><span>What are you eating? <small>optional</small></span><input data-input="somm-food" placeholder="For example veal with morels" value="${esc(SOMM.food)}" autocapitalize="sentences" enterkeyhint="done"></label>` : '';
-  return `<div class="where-row" id="where-row"><span>Compare with</span><div class="toggle">${b('shop', ICON.cart, 'Shop price')}${b('restaurant', ICON.dining, 'Restaurant price')}</div>${food}${countryBtnHtml('in')}${redoHtml('check')}</div>`; };
+  return `<div class="where-row" id="where-row"><span>Compare with</span><div class="toggle">${b('shop', ICON.cart, 'Shop price')}${b('restaurant', ICON.dining, 'Restaurant price')}</div>${countryBtnHtml('in')}${redoHtml('check')}</div>`; };
 /* the country prices are checked in, shown where you start the analysis */
 const countryBtnHtml = lead => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>${lead} ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
 /* after the country was changed, offer to run the last analysis again for it */
@@ -216,21 +217,37 @@ async function sommVintage(i) {
 }
 
 function sommIntroHtml() {
-  if (SOMM.mode === 'check') {
-    return `<div class="somm-intro">
-      <div class="check-hero">
-        <p style="margin:0">${sommWhere() === 'restaurant' ? 'Photograph the label or the line on the wine list, and say what you eat. See if it suits <b>you and your food</b>, and what a fair price is.' : 'For wines that are <b>not in your cellar</b>, in a shop or at a friend\'s. Photograph the label or type the name. See if it suits your taste, what it costs in shops and what to cook with it.'}</p>
-        <label class="btn primary big block">${ICON.camera}Take a photo of the label<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>
-        <label class="btn block">Choose from gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label>
-      </div>
-      <p class="small muted" style="margin:0">Or type it, for example:</p>
-      <div class="somm-examples">${(sommWhere() === 'restaurant' ? RESTO_EXAMPLES : CHECK_EXAMPLES).map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
-      ${checkGuideHtml()}</div>`;
-  }
+  if (SOMM.mode === 'check') return checkFlowHtml();
   return `<div class="somm-intro"><p class="muted">Tell me what you feel like, what you are eating or what the occasion is. I suggest wines from your cellar. Tap an example to try it.</p>
     <div class="somm-examples">${SOMM_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
     ${sommGuideHtml()}
     <button class="somm-switch" data-act="somm-mode" data-v="check">${ICON.camera}<span>Looking at a wine in a shop or restaurant? <b>Will I like it?</b></span></button></div>`;
+}
+
+/* Will I like it?, from top to bottom: where (above), the photo, the food as tiles, one field for the question */
+function checkFlowHtml() {
+  const resto = sommWhere() === 'restaurant', ph = SOMM.photo;
+  const step = (n, title, body, opt) => `<section class="cf-step"><h3><span class="cf-n">${n}</span>${title}${opt ? ' <small>optional</small>' : ''}</h3>${body}</section>`;
+  const photo = ph
+    ? `<div class="cf-photo"><img src="${esc(ph.thumb)}" alt="Photo of the wine"><span class="small">Photo ready.</span><label class="link-btn">Retake<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>`
+    : `<div class="grid2"><label class="btn primary">${ICON.camera}Take a photo<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><label class="btn">Gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label></div>
+      ${resto ? '<p class="tiny muted" style="margin:0">Name, vintage and price in the picture. Or the bottle, if the waiter shows it before opening.</p>' : ''}
+      <p class="tiny muted" style="margin:0">No photo? Say or type the wine name below.</p>
+      ${resto ? '<button class="cf-link" data-act="somm-mode" data-v="list">Comparing several wines? Use <b>Wine list</b></button>' : ''}`;
+  const on = sommFoods();
+  const keys = SOMM.foodsAll ? CHECK_FOODS : CHECK_FOODS.slice(0, 8).concat(CHECK_FOODS.slice(8).filter(k => on.includes(k)));
+  const tiles = `<div class="tp-foods cf-foods">${keys.map(k => `<button class="tp-food${on.includes(k) ? ' on' : ''}" data-act="cf-food" data-v="${k}" aria-pressed="${on.includes(k)}">${FOODS[k][1]}<span>${esc(FOODS[k][0])}</span></button>`).join('')}</div>
+    <button class="cf-link" data-act="cf-food-all">${SOMM.foodsAll ? 'Fewer' : `More: ${CHECK_FOODS.length - 8} other kinds of food`}</button>`;
+  const ask = `<div class="somm-input cf-input${SOMM.listening ? ' listening' : ''}">
+      <textarea id="somm-text" data-input="somm-text" rows="2" placeholder="${esc(sommPlaceholder())}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
+      ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
+      <button class="somm-send" data-act="somm-send" aria-label="Check the wine"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button></div>
+    <p id="somm-hint" class="tiny muted somm-hint" style="margin:0">${sommHint()}</p>`;
+  return `<div class="check-flow">
+    ${step(2, resto ? 'Photograph the wine on the list' : 'Photograph the label', photo, true)}
+    ${step(3, resto ? 'What are you eating?' : 'What do you plan to cook?', tiles, true)}
+    ${step(4, 'Your question', ask)}
+    ${checkGuideHtml()}</div>`;
 }
 
 function sommThreadHtml() {
@@ -241,7 +258,13 @@ function sommThreadHtml() {
 }
 
 const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${SOMM.mode === 'list' ? (WL.pages.length || WL.result ? `<button class="btn ghost" style="height:40px" data-act="wl-clear">New wine list</button>` : '') : sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
-const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? (sommWhere() === 'restaurant' ? (SOMM.photo ? 'Add a question, or just send' : 'Wine name from the list') : SOMM.photo ? 'Add a dish or a question, or just send' : 'Wine name, and a dish if you like') : 'What do you feel like?');
+const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? checkPlaceholder() : 'What do you feel like?');
+function checkPlaceholder() {
+  if (sommThread().length) return 'Ask a follow-up, for example is the 2019 better?';
+  if (!SOMM.photo) return 'Wine name and your question, for example Barolo 2019 with steak and pepper sauce, does it fit?';
+  const f = sommFoods();
+  return f.length ? `Tell more, for example ${FOOD_HINT[f[0]] || 'what exactly you eat'}` : 'Your question, for example with pasta, does it fit?';
+}
 const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop or restaurant.' : SOMM.mode === 'list' ? 'Find the best wines on a restaurant wine list.' : 'Advice from the wines in your cellar.');
 
 function viewSommelier() {
@@ -255,20 +278,18 @@ function viewSommelier() {
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
     <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>
     <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
-    ${check ? whereRowHtml() : ''}
+    ${check ? `<section class="cf-step cf-where"><h3><span class="cf-n">1</span>Where are you?</h3>${whereRowHtml()}</section>` : ''}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
   </main>
-  <div class="somm-bar${check ? ' check' : ''}${list ? ' list' : ''}">
-    <div id="somm-photo-box">${sommPhotoHtml()}</div>
+  ${check && !sommThread().length ? '' : `<div class="somm-bar${check ? ' check' : ''}${list ? ' list' : ''}">
     <div class="somm-input${SOMM.listening ? ' listening' : ''}">
-      ${check ? `<label class="somm-cam" aria-label="Photo of a wine label">${ICON.camera}<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>` : ''}
       <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${sommPlaceholder()}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
       ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
       <button class="somm-send" data-act="somm-send" aria-label="${list ? 'Find the best wines' : 'Send'}"${SOMM.busy || (list && (WL.busy || !WL.pages.length)) ? ' disabled' : ''}>${ICON.send}</button>
     </div>
     <p id="somm-hint" class="tiny muted somm-hint">${sommHint()}</p>
-  </div>`;
+  </div>`}`;
 }
 
 function sommRefresh(scroll) {
@@ -439,12 +460,12 @@ async function listSave(p) {
   }
 }
 
-const sommPhotoHtml = () => (SOMM.photo ? `<div class="somm-photo"><img src="${esc(SOMM.photo.thumb)}" alt="Label photo"><span class="small">Label photo ready. Add a question, or just send.</span><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>` : '');
 
 async function sommAsk(text, photo) {
   const q = str(text).trim();
   const img = photo || SOMM.photo;
-  if ((!q && !img) || SOMM.busy) return;
+  if (SOMM.busy) return;
+  if (!q && !img) { if (SOMM.mode === 'check') toast('Photograph the wine, or say or type its name.'); return; }
   if (SOMM.listening) sommStopVoice();
   const mode = img ? 'check' : SOMM.mode;
   if (mode !== SOMM.mode) { SOMM.mode = mode; history.replaceState(null, '', '#/sommelier/' + mode); render(); }
@@ -453,19 +474,18 @@ async function sommAsk(text, photo) {
   const turn = { q, a: null, error: '', photo: img ? img.thumb : '', img, mode };
   th.push(turn);
   SOMM.photo = null;
-  const pb = $('#somm-photo-box');
-  if (pb) pb.innerHTML = '';
   SOMM.draft = '';
   SOMM.voiced = false;
   SOMM.busy = true;
   SOMM.tips = false;
-  sommRefresh(true);
+  // the first wine of a check: the steps make room for the answer and the field for follow-ups
+  if (mode === 'check' && th.length === 1) { render(); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } else sommRefresh(true);
   try {
     const where = mode === 'check' ? sommWhere() : '';
     const price = null;   // no price field: a price you mention in the question is read by the sommelier
     turn.where = where; turn.price = price;
     if (mode === 'check' && SOMM.redo) { SOMM.redo = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }
-    turn.food = where === 'restaurant' ? str(SOMM.food).trim() : '';
+    turn.food = mode === 'check' ? sommFoodText() : '';
     turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '', food: turn.food });
   } catch (e) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
@@ -509,7 +529,7 @@ async function sommRedoCheck() {
    Photos are kept as small previews only; the full pages of a wine list are needed again only for a new analysis. */
 function sommSave() {
   const turns = m => (SOMM.threads[m] || []).filter(t => t.a || t.error).slice(-20).map(t => ({ q: t.q, a: t.a, error: t.error, photo: t.photo || '', mode: t.mode, where: t.where || '', price: t.price || null, food: t.food || '' }));
-  const data = { threads: { cellar: turns('cellar'), check: turns('check') }, mode: SOMM.mode, where: SOMM.where, whereAt: SOMM.whereAt, food: SOMM.food,
+  const data = { threads: { cellar: turns('cellar'), check: turns('check') }, mode: SOMM.mode, where: SOMM.where, whereAt: SOMM.whereAt, foods: SOMM.foods, foodsAt: SOMM.foodsAt,
     wl: { result: WL.result, min: WL.min, max: WL.max, pages: WL.result ? WL.pages.map(p => ({ thumb: p.thumb })) : [] } };
   try { localStorage.setItem('wc-somm', JSON.stringify(data)); }
   catch (e) {
@@ -523,7 +543,8 @@ function sommLoad() {
   if (!d) return;
   ['cellar', 'check'].forEach(m => { if (d.threads && Array.isArray(d.threads[m])) SOMM.threads[m] = d.threads[m]; });
   if (['cellar', 'check', 'list'].includes(d.mode)) SOMM.mode = d.mode;
-  if (d.where) { SOMM.where = d.where; SOMM.whereAt = Number(d.whereAt) || 0; SOMM.food = str(d.food); }
+  if (d.where) { SOMM.where = d.where; SOMM.whereAt = Number(d.whereAt) || 0; }
+  if (Array.isArray(d.foods)) { SOMM.foods = d.foods.filter(k => FOODS[k]); SOMM.foodsAt = Number(d.foodsAt) || 0; }
   if (d.wl) { WL.result = d.wl.result || null; WL.min = str(d.wl.min); WL.max = str(d.wl.max); WL.pages = Array.isArray(d.wl.pages) ? d.wl.pages : []; }
 }
 
