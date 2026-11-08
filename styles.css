@@ -1164,9 +1164,9 @@ button.ab-fact > svg:last-child { width: 16px; height: 16px; color: var(--muted)
 .filter-panel .chip svg { width: 14px; height: 14px; }
 .chip[hidden] { display: none; }
 .chip.fmore, .chip.fless { color: var(--gold); border-style: dashed; }
-.fsecs { gap: 12px; }
-.fsec { gap: 6px; }
-.taste-filter { gap: 8px; }
-.taste-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; column-gap: 8px; }
-.taste-row.aromas { grid-template-columns: 1fr; row-gap: 6px; }
+.fsecs { gap: 10px; }
+.fsec { gap: 4px; }
+.taste-filter { gap: 10px; }
+.taste-row { display: flex; flex-direction: column; gap: 4px; }
+.fsec-h, .taste-lbl { font-size: 12px; line-height: 16px; color: var(--text-2); letter-spacing: .02em; }
 .fnote { margin: -4px 0 0; }
