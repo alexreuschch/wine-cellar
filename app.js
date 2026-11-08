@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.11.2';
+const APP_VERSION = '3.11.3';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -778,6 +778,26 @@ async function cacheLabel(fileId, b64) {
    speech or 3 minutes in all it stops by itself, so the microphone never stays open unnoticed. */
 const VOICE = { on: false, rec: null, o: null, base: '', done: '', sess: '', t0: 0, last: 0, timer: null, fails: 0 };
 const voiceJoin = (...a) => a.map(x => String(x || '').trim()).filter(Boolean).join(' ');
+/* the phone hears one language at a time: EN or DE, switched with the small chip next to every microphone */
+const VOICE_LANGS = [['en-US', 'EN', 'English'], ['de-CH', 'DE', 'German']];
+function voiceLang() {
+  let v = VOICE.lang || null;
+  if (!v) try { v = localStorage.getItem('wc-voice-lang'); } catch (e) { /* no storage: the default */ }
+  return VOICE_LANGS.find(x => x[0] === v) || (/^de/i.test(navigator.language || '') ? VOICE_LANGS[1] : VOICE_LANGS[0]);
+}
+const voiceOther = l => VOICE_LANGS.find(x => x !== l);
+function voiceLangHtml() {
+  const l = voiceLang();
+  return `<button type="button" class="voice-lang" data-act="voice-lang" aria-label="Speaking ${l[2]}, tap for ${voiceOther(l)[2]}">${l[1]}</button>`;
+}
+function voiceLangNext() {
+  const l = voiceOther(voiceLang());
+  try { localStorage.setItem('wc-voice-lang', l[0]); } catch (e) { /* kept for this visit only */ }
+  VOICE.lang = l[0];
+  document.querySelectorAll('.voice-lang').forEach(b => { b.textContent = l[1]; b.setAttribute('aria-label', `Speaking ${l[2]}, tap for ${voiceOther(l)[2]}`); });
+  // while listening: the recognition starts again in the new language, the text so far stays
+  if (VOICE.on && VOICE.rec) { try { VOICE.rec.stop(); } catch (e) { /* it restarts by itself */ } }
+}
 function voiceStart(o) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { toast('Voice input is not available here. Use the microphone on your keyboard instead.', 5000); return false; }
@@ -792,7 +812,7 @@ function voiceStart(o) {
 function voiceListen() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SR();
-  rec.lang = navigator.language || 'en-US';
+  rec.lang = VOICE.lang || voiceLang()[0];
   rec.interimResults = true;
   rec.continuous = false;
   rec.onresult = e => {

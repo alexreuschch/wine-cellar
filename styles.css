@@ -809,6 +809,10 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .note-voice textarea { flex: 1; min-height: 64px; }
 .note-voice .somm-mic { border: 1px solid var(--line); margin-bottom: 4px; }
 .note-voice .somm-mic.on { border-color: transparent; }
+/* EN or DE for speaking, next to every microphone */
+.voice-lang { flex: none; align-self: center; min-width: 30px; height: 24px; padding: 0 6px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--gold); font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .06em; cursor: pointer; }
+.somm-input .voice-lang { margin-bottom: 8px; align-self: flex-end; }
+.voice-btns { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 
 /* taste profile as four tiles: the word of the level, five segments and a heart where your favorites lie */
 .tt-wrap { display: flex; flex-direction: column; gap: 8px; }

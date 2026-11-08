@@ -196,6 +196,7 @@ const ACTS = {
   'ds-rate': el => { if (RS && RS.kind === 'taste') setTasteRating((RS.rating === null ? 80 : RS.rating) + Number(el.dataset.d)); },
   'wl-save': el => { const p = WL.result && WL.result.picks[Number(el.dataset.i)]; if (p) listSave(p); },
   'somm-example': el => sommAsk(el.dataset.v),
+  'voice-lang': () => voiceLangNext(),
   'somm-mic': () => { if (SOMM.listening) voiceStop(); else sommStartVoice(); },
   'somm-tips': () => { SOMM.tips = !SOMM.tips; render(); },
   'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.redo = ''; SOMM.threads[SOMM.mode] = []; SOMM.draft = ''; SOMM.voiced = false; SOMM.photo = null; sommSave(); render(); },

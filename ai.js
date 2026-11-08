@@ -252,7 +252,7 @@ function viewSommelier() {
     <div class="somm-input${SOMM.listening ? ' listening' : ''}">
       ${check ? `<label class="somm-cam" aria-label="Photo of a wine label">${ICON.camera}<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>` : ''}
       <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${sommPlaceholder()}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
-      <button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
+      ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
       <button class="somm-send" data-act="somm-send" aria-label="${list ? 'Find the best wines' : 'Send'}"${SOMM.busy || (list && (WL.busy || !WL.pages.length)) ? ' disabled' : ''}>${ICON.send}</button>
     </div>
     <p id="somm-hint" class="tiny muted somm-hint">${sommHint()}</p>
@@ -768,7 +768,7 @@ function viewDiscover() {
     <section class="ins-sec"><div class="sec-head"><h2>What are you looking for?</h2></div>
       <div class="chips">${CONS_FOCUS.map(f => `<button class="chip${CONS.focus === f ? ' on' : ''}" data-act="cons-focus" data-v="${esc(f)}">${esc(f)}</button>`).join('')}</div>
       <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
-      <div class="field"><label for="cons-note">Anything else? (optional)</label><div class="note-voice"><textarea id="cons-note" data-input="cons-note" rows="2" placeholder="Type or speak, for example more whites for summer, wines for guests">${esc(CONS.note)}</textarea><button class="somm-mic${CONS.listening ? ' on' : ''}" id="cons-mic" data-act="cons-mic" aria-label="${CONS.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div>
+      <div class="field"><label for="cons-note">Anything else? (optional)</label><div class="note-voice"><textarea id="cons-note" data-input="cons-note" rows="2" placeholder="Type or speak, for example more whites for summer, wines for guests">${esc(CONS.note)}</textarea><div class="voice-btns">${voiceLangHtml()}<button class="somm-mic${CONS.listening ? ' on' : ''}" id="cons-mic" data-act="cons-mic" aria-label="${CONS.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div></div>
         <span class="tiny muted" id="cons-mic-hint">${CONS.listening ? 'Listening. Take your time, tap stop when you are done. Then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.'}</span></div>
       <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Choosing wines and checking shops…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
       <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops for ' + esc(shopCountryName()) + ', so you only get wines you can buy.' : 'You only get wines that an online shop for ' + esc(shopCountryName()) + ' sells right now, with price and link. One round takes about a minute and costs about 15 to 20 cents, less when offers from the last 14 days can be reused.'}</p>
@@ -1129,7 +1129,7 @@ function viewJournalAI() {
   <div class="somm-bar">
     <div class="somm-input${JA.listening ? ' listening' : ''}">
       <textarea id="ja-text" data-input="ja-text" rows="1" placeholder="${JA.listening ? 'Listening…' : 'Ask about your journal'}" aria-label="Your question">${esc(JA.draft)}</textarea>
-      <button class="somm-mic${JA.listening ? ' on' : ''}" data-act="ja-mic" aria-label="${JA.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
+      ${voiceLangHtml()}<button class="somm-mic${JA.listening ? ' on' : ''}" data-act="ja-mic" aria-label="${JA.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
       <button class="somm-send" data-act="ja-send" aria-label="Send"${JA.busy ? ' disabled' : ''}>${ICON.send}</button>
     </div>
     <p id="ja-hint" class="tiny muted somm-hint">${jaHint()}</p>
