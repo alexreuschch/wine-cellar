@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.8.1';
+const APP_VERSION = '3.8.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -901,6 +901,7 @@ function afterRender(r) {
     if (img && w.labelFileId) imageUrl(w.labelFileId).then(u => { img.src = u; }).catch(() => { /* keep thumbnail */ });
   }
   if (r.p === 'sommelier') { const ta = $('#somm-text'); if (ta) autosize(ta); }
+  clampChips();
   // a jump to a section, for example the wishlist from Insights
   if (U.jumpTo) { const el = $('#' + U.jumpTo); U.jumpTo = null; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -10); } }
   if (r.p === 'journal-ai') { const ta = $('#ja-text'); if (ta) autosize(ta); }

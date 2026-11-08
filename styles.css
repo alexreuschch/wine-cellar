@@ -1157,3 +1157,16 @@ button.ab-fact > div { flex: 1; min-width: 0; }
 button.ab-fact > svg:last-child { width: 16px; height: 16px; color: var(--muted); margin: 0; }
 .vc-chart { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
 .vc-chart svg { width: 16px; height: 16px; }
+
+/* 3.8.2: compact filter chips, two rows, the rest behind +N */
+.filter-panel .chips { gap: 6px; }
+.filter-panel .chip { height: 32px; padding: 0 11px; gap: 5px; }
+.filter-panel .chip svg { width: 14px; height: 14px; }
+.chip[hidden] { display: none; }
+.chip.fmore, .chip.fless { color: var(--gold); border-style: dashed; }
+.fsecs { gap: 12px; }
+.fsec { gap: 6px; }
+.taste-filter { gap: 8px; }
+.taste-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; column-gap: 8px; }
+.taste-row.aromas { grid-template-columns: 1fr; row-gap: 6px; }
+.fnote { margin: -4px 0 0; }

@@ -251,7 +251,7 @@ function filterArea(ctx) {
   const cur = tabs.find(t => t[0] === st.tab);
   const nSel = t => t[2].reduce((a, k) => a + facetN(ctx, k), 0);
   const tabBar = `<div class="ftabs" role="tablist" style="grid-template-columns:repeat(${tabs.length}, minmax(0, 1fr))">${tabs.map(t => `<button role="tab" aria-selected="${t === cur}" class="ftab${t === cur ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t[0]}">${t[1]}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
-  return `<div class="card filter-panel">${tabBar}<div id="facet-chips-${ctx}" class="fsecs">${tabSecsHtml(ctx, cur[2], allVals)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}</div>`;
+  return `<div class="card filter-panel">${tabBar}<div id="facet-chips-${ctx}" class="fsecs">${tabSecsHtml(ctx, cur[2], allVals)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}${filterNote(ctx)}</div>`;
 }
 
 /* the filter tabs: groups of facets, one tab each; without groups every facet is its own tab */
@@ -268,13 +268,17 @@ function tabSecsHtml(ctx, ks, allVals) {
   const many = ks.length > 1;
   const secs = ks.map(k => {
     const def = c.facets[k];
-    const search = allVals[k] && allVals[k].length > 12 && def.kind !== 'taste'
+    const search = st.all[k] && allVals[k] && allVals[k].length > 12 && def.kind !== 'taste'
       ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" data-ctx="${ctx}" data-k="${k}" aria-label="Search ${def.plural}" placeholder="Search ${def.plural}" value="${esc(st.q[k] || '')}"></label>` : '';
     const title = many && def.sec !== '' ? `<span class="fsec-h">${esc(def.sec || def.label)}</span>` : '';
     return `<div class="fsec">${title}${search}<div id="facet-chips-${ctx}-${k}">${facetChipsHtml(ctx, k)}</div></div>`;
   }).join('');
-  const plain = ks.some(k => { const d = c.facets[k]; return !isRange(d) && !isRating(d); });
-  return `${secs}${plain ? `<p class="muted tiny" style="margin:0">Numbers count the ${c.noun} that match together with your other filters.</p>` : ''}`;
+  return secs;
+}
+/* one short note for the whole filter */
+function filterNote(ctx) {
+  const st = fst(ctx), none = st.tab === 'taste' && CTX[ctx].facets.taste ? tasteNone(ctx) : 0;
+  return `<p class="muted tiny fnote">Numbers count the matching ${CTX[ctx].noun}. Within a group any choice fits, across groups all must fit.${none ? ` ${none} without taste profile ${none === 1 ? 'is' : 'are'} not counted.` : ''}</p>`;
 }
 
 function facetChipsHtml(ctx, k) {
@@ -289,21 +293,36 @@ function facetChipsHtml(ctx, k) {
   const q = lc((st.q[k] || '').trim());
   const selected = chosen.map(v => vals.find(x => x.key === v) || all.find(x => x.key === v) || { key: v, name: v, n: 0 });
   let rest = vals.filter(x => !chosen.includes(x.key));
-  let more = '', boxed = false;
-  if (q) rest = byName(rest.filter(x => lc(x.name).includes(q)));
-  else if (st.all[k] && rest.length > 8) { rest = def.order ? rest : byName(rest); boxed = true; }
-  else if (rest.length > 8) { more = `<button class="chip" data-act="f-more" data-ctx="${ctx}" data-k="${k}">Show all ${rest.length}</button>`; rest = rest.slice(0, 8); }
+  if (q) rest = rest.filter(x => lc(x.name).includes(q));
   const dot = x => (def.dot && def.dot(x.name) ? `<span class="dot" style="--c:${def.dot(x.name)}"></span>` : '');
   const lead = x => (def.lead ? def.lead(x.name) : '');
   const chip = (x, on) => `<button class="chip${on ? ' on' : ''}" data-act="f-chip" data-ctx="${ctx}" data-k="${k}" data-v="${esc(x.key)}">${dot(x)}${lead(x)}${esc(x.name)}${on ? ICON.x : ` <span class="n">${x.n}</span>`}</button>`;
-  const parts = [];
-  if (selected.length) parts.push(`<div class="chips">${selected.map(x => chip(x, true)).join('')}</div>`);
-  if (rest.length) parts.push(`<div class="chips${boxed ? ' scroll-box' : ''}">${rest.map(x => chip(x, false)).join('')}${more}</div>`);
-  else if (q) parts.push('<p class="muted small" style="margin:0">No match.</p>');
-  if (boxed) parts.push(`<div><button class="chip" data-act="f-less" data-ctx="${ctx}" data-k="${k}">Show fewer</button></div>`);
-  const how = (def.order || def.sort) && !q ? (def.sortHint || '') : q || boxed ? 'A to Z.' : rest.length + selected.length > 4 ? 'Most common first.' : '';
-  if (how) parts.push(`<p class="muted tiny" style="margin:0">${how}</p>`);
-  return `<div style="display:flex;flex-direction:column;gap:8px">${parts.join('')}</div>`;
+  if (q && !rest.length && !selected.length) return '<p class="muted small" style="margin:0">No match.</p>';
+  return chipsBox(ctx, k, selected.map(x => chip(x, true)).join('') + rest.map(x => chip(x, false)).join(''), !!q);
+}
+/* chips of one group: two rows at most, the rest behind +N; chosen ones come first and always show */
+function chipsBox(ctx, k, inner, open) {
+  const st = fst(ctx), all = open || st.all[k];
+  return `<div class="chips fchips${all ? '' : ' clamp'}" data-ctx="${ctx}" data-k="${k}">${inner}${st.all[k] ? `<button class="chip fless" data-act="f-less" data-ctx="${ctx}" data-k="${k}">Show fewer</button>` : ''}</div>`;
+}
+/* after drawing: hide what does not fit into two rows and offer +N instead */
+function clampChips(root) {
+  (root || document).querySelectorAll('.fchips.clamp').forEach(box => {
+    const chips = [...box.children].filter(x => x.classList.contains('chip'));
+    if (chips.length < 2) return;
+    const tops = [...new Set(chips.map(x => x.offsetTop))].sort((a, b) => a - b);
+    if (tops.length <= 2) return;
+    const limit = tops[1];
+    const more = document.createElement('button');
+    more.className = 'chip fmore';
+    more.dataset.act = 'f-more'; more.dataset.ctx = box.dataset.ctx; more.dataset.k = box.dataset.k;
+    box.appendChild(more);
+    let cut = chips.findIndex(x => x.offsetTop > limit);
+    const fit = () => { chips.forEach((x, i) => { x.hidden = i >= cut && !x.classList.contains('on'); }); more.textContent = `+${chips.filter(x => x.hidden).length}`; };
+    fit();
+    while (more.offsetTop > limit && cut > 1) { cut--; fit(); }
+    if (!chips.some(x => x.hidden)) more.remove();
+  });
 }
 
 /* the taste tab: one row of three steps per axis, then the main aromas with their symbols */
@@ -321,9 +340,12 @@ function tasteChipsHtml(ctx, k) {
     return chips ? `<div class="taste-row"><span class="taste-lbl">${label}</span><div class="chips">${chips}</div></div>` : '';
   }).join('');
   const aromas = Object.keys(AROMAS).map(g => { const [name, col, ic] = AROMAS[g]; return chip(lc(`Aroma: ${name}`), name, `<span class="taste-ic" style="--ac:${col}">${ic}</span>`, 'aroma'); }).join('');
-  const none = pool.filter(it => !tasteVals(it).length).length;
-  return `<div class="taste-filter">${rows}${aromas ? `<div class="taste-row aromas"><span class="taste-lbl">Main aromas</span><div class="chips">${aromas}</div></div>` : ''}
-    <p class="muted tiny" style="margin:0">Within a row any choice fits, across rows all have to fit.${none ? ` ${none} ${none === 1 ? 'wine has' : 'wines have'} no taste profile yet${chosen.length ? ' and ' + (none === 1 ? 'is' : 'are') + ' left out' : ''}. Complete them in Settings, Wine info.` : ''}</p></div>`;
+  return `<div class="taste-filter">${rows}${aromas ? `<div class="taste-row aromas"><span class="taste-lbl">Main aromas</span>${chipsBox(ctx, 'aroma', aromas)}</div>` : ''}</div>`;
+}
+/* wines the taste filter cannot judge */
+function tasteNone(ctx) {
+  const c = CTX[ctx];
+  return c.items().filter(it => c.text(it) && passes(ctx, it, 'taste') && !tasteVals(it).length).length;
 }
 
 /* street price range: a bar with two handles */

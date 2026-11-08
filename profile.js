@@ -463,6 +463,23 @@ async function openInfo(kind, name, context) {
   renderInfo();
 }
 function closeInfo() { INFO.kind = null; renderInfo(); }
+/* leaving a background for the filtered cellar: Back brings you to it again, open where you were */
+function infoLeave() {
+  const b = $('#info-root .info-body');
+  U.infoBack = { hash: location.hash, kind: INFO.kind, name: INFO.name, context: INFO.context, vAll: INFO.vAll, top: b ? b.scrollTop : 0 };
+  closeInfo();
+}
+function infoReturn() {
+  const x = U.infoBack;
+  if (!x) return;
+  if (location.hash !== x.hash) { if (!['cellar', 'wine', 'edit', 'journal'].includes(route().p)) U.infoBack = null; return; }
+  U.infoBack = null;
+  openInfo(x.kind, x.name, x.context);
+  INFO.vAll = x.vAll;
+  renderInfo();
+  const b = $('#info-root .info-body');
+  if (b && x.top) b.scrollTop = x.top;
+}
 
 /* your own wines with it, to open the cellar filtered */
 function infoMine() {

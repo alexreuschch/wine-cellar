@@ -205,13 +205,14 @@ function viewInsights() {
 /* a filter opened from Insights or a background chip is only for this visit: leaving that screen brings back what was set before */
 function jumpStart(p) {
   if (U.jump && U.jump.p === p) return;
-  U.jump = { p, f: p === 'window' ? null : U.f[p], search: U.search, jSearch: U.jSearch, winFilter: U.winFilter, termPool: U.termPool };
+  U.jump = { p, from: location.hash, f: p === 'window' ? null : U.f[p], search: U.search, jSearch: U.jSearch, winFilter: U.winFilter, termPool: U.termPool };
 }
 function jumpCheck() {
   const j = U.jump;
   if (!j) return;
   const p = route().p;
-  if (p === j.p || p === 'wine' || p === 'edit' || p === 'add') return;
+  // back where the jump started, for example the wine whose region you looked at: the filter is gone again
+  if (location.hash !== j.from && (p === j.p || p === 'wine' || p === 'edit' || p === 'add')) return;
   if (j.p === 'window') U.winFilter = j.winFilter;
   else U.f[j.p] = j.f || newF();
   if (j.p === 'cellar') { U.search = j.search; U.termPool = j.termPool; }

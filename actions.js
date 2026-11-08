@@ -16,7 +16,7 @@ const ACTS = {
   },
   'f-tab': el => { U.f[el.dataset.ctx].tab = el.dataset.v; refreshView(); },
   'f-more': el => { U.f[el.dataset.ctx].all[el.dataset.k] = true; refreshView(); },
-  'f-less': el => { U.f[el.dataset.ctx].all[el.dataset.k] = false; refreshView(); },
+  'f-less': el => { const st = U.f[el.dataset.ctx]; st.all[el.dataset.k] = false; st.q[el.dataset.k] = ''; refreshView(); },
   'f-clear': el => { const st = U.f[el.dataset.ctx]; st.sel = {}; st.range = {}; st.rating = null; st.fav = false; refreshView(); },
   'rt-fav': el => { const st = U.f[el.dataset.ctx]; st.fav = !st.fav; refreshView(); },
   'rating-clear': el => { U.f[el.dataset.ctx].rating = null; refreshView(); },
@@ -160,11 +160,11 @@ const ACTS = {
   'vint-close': () => vintageClose(),
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
-  'info-term': el => { const x = { k: el.dataset.k, t: el.dataset.t, region: el.dataset.r || '' }; closeInfo(); if (x.k === 'grape') insightsGo('grape', x.t); else insightsGo('term', x); },
+  'info-term': el => { const x = { k: el.dataset.k, t: el.dataset.t, region: el.dataset.r || '' }; infoLeave(); if (x.k === 'grape') insightsGo('grape', x.t); else insightsGo('term', x); },
   'vint-open': el => openVintage(el.dataset.r, el.dataset.y),
   'vint-all': () => { INFO.vAll = !INFO.vAll; if (!INFO.vAll) INFO.vFocus = null; renderInfo(); },
-  'vint-mine': el => { const r = str(INFO.name).split(',')[0].trim(), y = el.dataset.y; closeInfo(); insightsGo('regvint', `${r}|${y}`); },
-  'info-mine': () => { const m = infoMine(); closeInfo(); if (m.go) insightsGo(m.go[0], m.go[1]); },
+  'vint-mine': el => { const r = str(INFO.name).split(',')[0].trim(), y = el.dataset.y; infoLeave(); insightsGo('regvint', `${r}|${y}`); },
+  'info-mine': () => { const m = infoMine(); infoLeave(); if (m.go) insightsGo(m.go[0], m.go[1]); },
   'complete-all': () => completeAll(),
   'tp-set': el => { const k = el.dataset.k, v = Number(el.dataset.v); D.profile[k] = D.profile[k] === v ? null : v; D.touched.add('profile'); renderProfileEditor(); },
   'tp-aroma': el => {
@@ -421,7 +421,7 @@ const INPUTS = {
     const l = $('#wine-list'), f = $('#facet-chips-cellar'), d = $('#drink-soon');
     if (l) l.innerHTML = cellarList();
     if (d) d.innerHTML = drinkSoonHtml();
-    if (f) f.innerHTML = tabSecsHtml('cellar');
+    if (f) { f.innerHTML = tabSecsHtml('cellar'); clampChips(f); }
   },
   facetq: el => { const ctx = el.dataset.ctx, k = el.dataset.k, st = U.f[ctx]; st.q[k] = el.value; const f = $(`#facet-chips-${ctx}-${k}`); if (f) f.innerHTML = facetChipsHtml(ctx, k); },
   rs: el => {
@@ -466,7 +466,7 @@ const INPUTS = {
     U.jSearch = el.value;
     const l = $('#journal-list'), f = $('#facet-chips-journal');
     if (l) l.innerHTML = journalList();
-    if (f) f.innerHTML = tabSecsHtml('journal');
+    if (f) { f.innerHTML = tabSecsHtml('journal'); clampChips(f); }
   },
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); if (['producer', 'name', 'vintage'].includes(el.name)) renderDup(); } if (el.classList.contains('autosize')) autosize(el); },
   rscore: el => { if (D) D.ratings[Number(el.dataset.i)].score = el.value; }
@@ -645,7 +645,9 @@ function init() {
     if (RS) closeSheet();
     if (RT) { RT = null; renderRatingSheet(); }
     if (RH.view) { RH.view = ''; rhRender(); }
+    if (INFO.kind) closeInfo();
     render();
+    infoReturn();
   });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && CFG && !isFormRoute()) sync(true); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ });
