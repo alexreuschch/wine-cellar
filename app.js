@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.11.3';
+const APP_VERSION = '3.12.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -288,6 +288,8 @@ const placeLabel = e => [e.loc || 'No location', shelfLabel(e.loc, shelfVal(e.sh
 const placeOf = e => ({ loc: str(e.loc), shelf: shelfVal(e.shelf), pos: str(e.pos).trim() });
 
 const inEntries = w => S.removals.filter(r => r.wineId === w.id && r.dir === 'in');
+/* a bottle that was really opened: not sold, given away or a correction after a check */
+const isOpened = r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift' && r.type !== 'Correction';
 const isGift = w => inEntries(w).some(r => r.type === 'Received');
 
 /** Average purchase price per bottle over all purchases and gifts (gifts count as 0). Null when no price is known. */
@@ -583,6 +585,7 @@ const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gif
   : t === 'Sale' ? `<span class="badge sale">${ICON.cash}Sale</span>`
   : t === 'Purchase' ? `<span class="badge purchase">${ICON.cart}Purchase</span>`
   : t === 'Added' ? '<span class="badge">Added</span>'
+  : t === 'Correction' ? `<span class="badge correction">${ICON.check}Stock correction</span>`
   : t === 'Discovery' ? `<span class="badge discovery">${ICON.spark}Discovery</span>`
   : `<span class="badge${t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`);
 

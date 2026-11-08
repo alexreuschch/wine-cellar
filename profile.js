@@ -715,7 +715,7 @@ function producerMineHtml(mine) {
   const rated = mine.all.filter(x => x.myRating !== null);
   const avg = rated.length ? Math.round(rated.reduce((a, x) => a + x.myRating, 0) / rated.length) : null;
   const moves = S.removals.filter(r => ids.has(r.wineId));
-  const opened = moves.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift').map(r => r.date).sort().pop();
+  const opened = moves.filter(isOpened).map(r => r.date).sort().pop();
   const buys = moves.filter(r => r.dir === 'in' && r.type === 'Purchase');
   const shops = [...buys.reduce((m, r) => (r.retailer ? m.set(r.retailer, (m.get(r.retailer) || 0) + (r.qty || 1)) : m), new Map())].sort((a, b) => b[1] - a[1]).map(x => x[0]);
   const priced = buys.filter(r => r.price !== null);

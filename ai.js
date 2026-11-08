@@ -6,13 +6,15 @@
 
 /* ------------------------------------------------------------ AI sommelier */
 
-const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '' };
+const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', food: '', busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '' };
 const sommThread = () => SOMM.threads[SOMM.mode] || [];
 /* wine list in a restaurant: photos of the pages, price range and food, then three picks */
 const WL = { pages: [], min: '', max: '', result: null, error: '', busy: false };
 const WL_KIND = { range: ['Best in your range', 'safe'], value: ['Best value', 'value'], gem: ['Hidden gem', 'disc'] };
 const SOMM_EXAMPLES = ['I feel like a fresh white wine tonight', 'Steak with salad, which wine fits?', 'Cheese fondue for four people', 'Something special for a birthday dinner under CHF 80', 'Which bottles should I open this month?'];
-const CHECK_EXAMPLES = ['Is a Barolo 2019 a good choice for me?', 'Gantenbein Pinot Noir 2020', 'Château Musar 2016, does it go with lamb?'];
+/* a wine to take home, or one for the meal in a restaurant: other examples and words for each */
+const CHECK_EXAMPLES = ['Barolo 2019, is it for me?', 'Gantenbein Pinot Noir 2020 for a roast chicken', 'Château Musar 2016, what would I cook with it?'];
+const RESTO_EXAMPLES = ['Barolo 2019, is it for me?', 'Gantenbein Pinot Noir 2020', 'Château Musar 2016 or a Rioja Reserva?'];
 
 /* how to use the sommelier for the cellar, shown before the first question and again with Tips */
 function sommGuideHtml() {
@@ -41,24 +43,24 @@ function checkGuideHtml() {
     <h3>How it works</h3>
     <ul>
       <li><b>Photograph the label</b> or type the name, producer and vintage.</li>
-      <li><b>Add the price</b> you see, for example “39 in the shop” or “85 on the wine list”. It is compared with the cheapest online shop in the country set above, in its currency and in yours.</li>
+      <li><b>Compare with the shop price</b>, the cheapest price in online shops of the country set above. In a restaurant choose <b>Restaurant price</b> for a fair price range on the wine list. Compare it with the shelf or the list yourself.</li>
+      <li><b>Say what you eat.</b> In a restaurant use the field under Restaurant price, it is kept for the evening. At home add a dish to your question, or get two dishes to cook with it.</li>
+      <li><b>Mention a price</b> only if you want a verdict on it, for example “55 on the wine list”.</li>
       <li><b>Ask a follow-up</b>, for example “what would I eat with it?” or “is the 2019 better?”.</li>
     </ul>
     <h3>What you get</h3>
-    <p>How well the wine fits your taste in percent, based on your ratings, favorites and journal. The price in local shops next to your price, its style, and which wines in your cellar are similar, so you see if you already have something like it.</p>
+    <p>How well the wine fits your taste in percent, based on your ratings, favorites and journal. The price in local shops, in a restaurant a fair price range, its style, and which wines in your cellar are similar, so you see if you already have something like it.</p>
     <p class="tiny muted">Answers come from AI. Each check costs about 5 cents, a little less when the wine was checked in the last 14 days.</p>
   </div>`;
 }
 
-/* shop or restaurant: a must for Will I like it?, asked again after some hours so it is not forgotten */
+/* compare with the shop price, or in a restaurant also with a fair price on the wine list;
+   the restaurant is kept for some hours, then it is the shop price again */
 const WHERE_TTL = 3 * 3600e3;
-const sommWhere = () => (SOMM.where && Date.now() - SOMM.whereAt < WHERE_TTL ? SOMM.where : null);
+const sommWhere = () => (SOMM.where === 'restaurant' && Date.now() - SOMM.whereAt < WHERE_TTL ? 'restaurant' : 'shop');
 const whereRowHtml = () => { const w = sommWhere(); const b = (v, ic, label) => `<button class="${w === v ? 'on' : ''}" data-act="somm-where" data-v="${v}" aria-pressed="${w === v}">${ic}${label}</button>`;
-  // in a shop the shelf price is a must, in a restaurant the menu price is optional, elsewhere there is none
-  const c = countryCur(travelCountry());
-  const price = w === 'shop' || w === 'restaurant' ? `<label class="where-price${w === 'shop' && !sommPrice() ? ' need' : ''}"><span>${w === 'shop' ? 'Price on the shelf' : 'Price on the menu <small>optional</small>'}</span><input id="somm-price" data-input="somm-price" inputmode="decimal" placeholder="${w === 'shop' ? 'Required' : 'If you know it'}" value="${esc(SOMM.price)}"><em>${esc(c)}</em></label>` : '';
-  return `<div class="where-row${w ? '' : ' need'}" id="where-row"><span>${w ? 'You are' : 'Where are you? Choose first'}</span><div class="toggle three">${b('shop', ICON.cart, 'Shop')}${b('restaurant', ICON.dining, 'Restaurant')}${b('other', ICON.pin, 'Elsewhere')}</div>${countryBtnHtml('in')}${price}${redoHtml('check')}</div>`; };
-const sommPrice = () => { const v = parseMoney(SOMM.price); return v && v > 0 ? v : null; };
+  const food = w === 'restaurant' ? `<label class="where-food"><span>What are you eating? <small>optional</small></span><input data-input="somm-food" placeholder="For example veal with morels" value="${esc(SOMM.food)}" autocapitalize="sentences" enterkeyhint="done"></label>` : '';
+  return `<div class="where-row" id="where-row"><span>Compare with</span><div class="toggle">${b('shop', ICON.cart, 'Shop price')}${b('restaurant', ICON.dining, 'Restaurant price')}</div>${food}${countryBtnHtml('in')}${redoHtml('check')}</div>`; };
 /* the country prices are checked in, shown where you start the analysis */
 const countryBtnHtml = lead => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>${lead} ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
 /* after the country was changed, offer to run the last analysis again for it */
@@ -93,6 +95,16 @@ function shopLineHtml(o, tripCur, abroad) {
   return `<div class="wl-shop">${flagOfCode(o.country)}<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)}${abroad && land ? `, ${esc(land)}` : ''}${esc(own)}${o.vintage ? `, vintage ${esc(o.vintage)}` : ''}</a>${ICON.link}</div>`;
 }
 /* the price you saw next to the price in local shops, or a reference from abroad */
+/* the food: how the wine goes with what you eat, or two dishes for it */
+const PAIR = { great: ['Great with your food', 'up'], works: ['Works with your food', ''], 'not ideal': ['Not ideal with your food', 'down'] };
+function foodHtml(a) {
+  if (a.pairing && PAIR[a.pairing.verdict]) {
+    const [label, cls] = PAIR[a.pairing.verdict];
+    return `<div class="somm-food">${ICON.dining}<div><p class="verdict"><b class="${cls}">${label}</b></p>${a.food ? `<p class="tiny muted" style="margin:0">${esc(a.food)}</p>` : ''}${a.pairing.why ? `<p class="small" style="margin:0">${esc(a.pairing.why)}</p>` : ''}</div></div>`;
+  }
+  if (a.dishes && a.dishes.length) return `<div class="somm-food">${ICON.dining}<p class="small" style="margin:0"><b>${a.priceWhere === 'restaurant' ? 'Goes well with' : 'Cook with it'}</b><br>${a.dishes.map(esc).join(' · ')}</p></div>`;
+  return '';
+}
 function priceCheckHtml(a) {
   if (!a.wine || !a.country) return '';
   const where = SHOP_COUNTRIES[a.country] || a.country, tripCur = countryCur(a.country);
@@ -100,7 +112,7 @@ function priceCheckHtml(a) {
   const rows = [];
   const resto = a.priceWhere === 'restaurant', typ = a.typical || [2, 3];
   const typText = `${fmtNum(typ[0], 1)} to ${fmtNum(typ[1], 1)}×`;
-  rows.push(`<div class="row where"><span>${resto ? `${ICON.dining}At a restaurant` : a.priceWhere === 'other' ? `${ICON.pin}Elsewhere` : `${ICON.cart}In a shop`}</span></div>`);
+  rows.push(`<div class="row where"><span>${resto ? `${ICON.dining}Restaurant price` : `${ICON.cart}Shop price`}</span></div>`);
   const other = a.priceWhere === 'other';
   if (a.price && !other) rows.push(`<div class="row"><span>${resto ? 'Price on the menu' : 'Price on the shelf'}</span><b>${esc(dualPrice(a.price, a.priceCur))}</b></div>`);
   if (o) rows.push(`<div class="row"><span>${other ? `Costs about this in ${abroad ? 'shops abroad' : 'shops'}` : abroad ? 'Reference price abroad' : `Cheapest shop in ${esc(where)}`}</span><b>${esc(tripPrice(o.v, o.cur, tripCur))}</b></div>`);
@@ -120,7 +132,7 @@ function priceCheckHtml(a) {
   } else if (o && resto) {
     // no menu price given: what would be a fair price for it in a restaurant here
     const lo = convTo(o.v * typ[0], o.cur, tripCur), hi = convTo(o.v * typ[1], o.cur, tripCur);
-    if (lo && hi) verdict = `<p class="small" style="margin:0">A fair restaurant price here: <b>${esc(tripCur)} ${fmtNum(Math.round(lo), 0)} to ${fmtNum(Math.round(hi), 0)}</b>, the usual ${typText} of the shop price for wines at this price. Add the price on the menu for a verdict.</p>`;
+    if (lo && hi) verdict = `<p class="small" style="margin:0">A fair restaurant price here: <b>${esc(tripCur)} ${fmtNum(Math.round(lo), 0)} to ${fmtNum(Math.round(hi), 0)}</b>, the usual ${typText} of the shop price for wines at this price.</p>`;
   }
   const none = `No online shop in ${esc(where)} sells this wine right now`;
   const note = abroad ? `<p class="tiny muted" style="margin:0">${none}. The reference comes from a shop abroad, converted to ${esc(tripCur)}.</p>`
@@ -149,7 +161,7 @@ function sommAnswerHtml(t) {
   const i = sommThread().indexOf(t);
   const win = check ? checkWindowHtml(t.a) || vintageAskHtml(t, i) : '';
   const taste = check && t.a.wine && i >= 0 ? sgActionsHtml('check:' + i) : '';
-  return `<div class="somm-a">${fit}${win}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
+  return `<div class="somm-a">${fit}${check ? foodHtml(t.a) : ''}${win}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
 
@@ -207,12 +219,12 @@ function sommIntroHtml() {
   if (SOMM.mode === 'check') {
     return `<div class="somm-intro">
       <div class="check-hero">
-        <p style="margin:0">For wines that are <b>not in your cellar</b>: in a shop, at a restaurant or at a friend's. Photograph the label or type the name, and see if it suits you.</p>
+        <p style="margin:0">${sommWhere() === 'restaurant' ? 'Photograph the label or the line on the wine list, and say what you eat. See if it suits <b>you and your food</b>, and what a fair price is.' : 'For wines that are <b>not in your cellar</b>, in a shop or at a friend\'s. Photograph the label or type the name. See if it suits your taste, what it costs in shops and what to cook with it.'}</p>
         <label class="btn primary big block">${ICON.camera}Take a photo of the label<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>
         <label class="btn block">Choose from gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label>
       </div>
       <p class="small muted" style="margin:0">Or type it, for example:</p>
-      <div class="somm-examples">${CHECK_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
+      <div class="somm-examples">${(sommWhere() === 'restaurant' ? RESTO_EXAMPLES : CHECK_EXAMPLES).map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
       ${checkGuideHtml()}</div>`;
   }
   return `<div class="somm-intro"><p class="muted">Tell me what you feel like, what you are eating or what the occasion is. I suggest wines from your cellar. Tap an example to try it.</p>
@@ -229,7 +241,7 @@ function sommThreadHtml() {
 }
 
 const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${SOMM.mode === 'list' ? (WL.pages.length || WL.result ? `<button class="btn ghost" style="height:40px" data-act="wl-clear">New wine list</button>` : '') : sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
-const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? (SOMM.photo ? 'Add a question, or just send' : 'Wine name and vintage') : 'What do you feel like?');
+const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? (sommWhere() === 'restaurant' ? (SOMM.photo ? 'Add a question, or just send' : 'Wine name from the list') : SOMM.photo ? 'Add a dish or a question, or just send' : 'Wine name, and a dish if you like') : 'What do you feel like?');
 const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop or restaurant.' : SOMM.mode === 'list' ? 'Find the best wines on a restaurant wine list.' : 'Advice from the wines in your cellar.');
 
 function viewSommelier() {
@@ -357,7 +369,7 @@ function listHtml() {
       ${WL.pages.length ? `<div class="wl-pages">${pages}</div>` : '<p class="small muted" style="margin:0">Photograph the pages of the wine list you want to compare, one after the other.</p>'}
       ${full ? '' : `<label class="btn ${WL.pages.length ? '' : 'primary big '}block">${ICON.camera}${WL.pages.length ? 'Add page' : 'Take a photo of the first page'}<input type="file" accept="image/*" capture="environment" data-change="wl-photo" hidden></label>
       <label class="btn ghost block">Choose from gallery<input type="file" accept="image/*" multiple data-change="wl-photo" hidden></label>`}
-      <div class="sec-head" style="margin-top:6px"><h2>Your budget per bottle</h2><span class="small muted">optional</span></div>
+      <div class="sec-head" style="margin-top:6px"><h2>Your budget per bottle</h2><span id="wl-budget-end">${wlBudgetEnd()}</span></div>
       <p class="small muted" style="margin:-4px 0 0">How much you want to spend on one bottle, in ${esc(countryCur(travelCountry()))} as on the list. The best wine within it becomes your first pick, <b>Best in your range</b>. Leave it empty for no limit.</p>
       <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
       <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
@@ -368,6 +380,9 @@ function listHtml() {
   return `${result}${setup}${res || WL.busy ? '' : listGuideHtml()}`;
 }
 
+/* Clear only while something is set, else the hint that it is optional */
+const wlBudgetEnd = () => (str(WL.min).trim() || str(WL.max).trim() ? `<button class="link-btn" data-act="wl-budget-clear" style="height:auto">${ICON.x}Clear</button>` : '<span class="small muted">optional</span>');
+function wlBudgetRefresh() { const e = $('#wl-budget-end'); if (e) e.innerHTML = wlBudgetEnd(); }
 async function listAnalyze(foodAgain) {
   if (WL.busy || !WL.pages.length) { if (!WL.pages.length) toast('Take a photo of at least one page first.'); return; }
   // pages kept from an earlier session are only previews: a new analysis needs the photos again
@@ -432,19 +447,6 @@ async function sommAsk(text, photo) {
   if ((!q && !img) || SOMM.busy) return;
   if (SOMM.listening) sommStopVoice();
   const mode = img ? 'check' : SOMM.mode;
-  if (mode === 'check' && !sommWhere()) {
-    if (SOMM.mode !== 'check') { SOMM.mode = 'check'; history.replaceState(null, '', '#/sommelier/check'); render(); }
-    const row = $('#where-row');
-    if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
-    toast('Choose Shop, Restaurant or Elsewhere first. Prices are judged differently.');
-    return;
-  }
-  if (mode === 'check' && sommWhere() === 'shop' && !sommPrice()) {
-    const inp = $('#somm-price');
-    if (inp) { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus(); }
-    toast(str(SOMM.price).trim() ? 'The shelf price needs a number, for example 45.90.' : 'Enter the shelf price to compare.');
-    return;
-  }
   if (mode !== SOMM.mode) { SOMM.mode = mode; history.replaceState(null, '', '#/sommelier/' + mode); render(); }
   const th = SOMM.threads[mode];
   const history = th.filter(t => t.a).slice(-3).map(t => ({ q: t.q || (t.a.wine ? `Will I like this wine? (label photo of ${t.a.wine})` : 'Will I like this wine?'), a: JSON.stringify(t.a) }));
@@ -460,11 +462,11 @@ async function sommAsk(text, photo) {
   sommRefresh(true);
   try {
     const where = mode === 'check' ? sommWhere() : '';
-    const price = where === 'shop' || where === 'restaurant' ? sommPrice() : null;
+    const price = null;   // no price field: a price you mention in the question is read by the sommelier
     turn.where = where; turn.price = price;
     if (mode === 'check' && SOMM.redo) { SOMM.redo = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }
-    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '' });
-    if (mode === 'check') { SOMM.price = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }   // the next wine has its own price
+    turn.food = where === 'restaurant' ? str(SOMM.food).trim() : '';
+    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '', food: turn.food });
   } catch (e) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
   }
@@ -492,7 +494,7 @@ async function sommRedoCheck() {
   SOMM.busy = true;
   sommRefresh(true);
   try {
-    t.a = await api('sommelier', { question: q, history, image: t.img ? t.img.b64 : null, mode: 'check', country: c, where, price, priceCur: price ? countryCur(c) : '' });
+    t.a = await api('sommelier', { question: q, history, image: t.img ? t.img.b64 : null, mode: 'check', country: c, where, price, priceCur: price ? countryCur(c) : '', food: t.food || (old && old.food) || '' });
     t.where = where; t.price = price;
   } catch (e) {
     t.a = old;
@@ -506,8 +508,8 @@ async function sommRedoCheck() {
 /* the conversations, the wine checks and the last wine list stay after closing the app, until you tap New question, New wine or New wine list.
    Photos are kept as small previews only; the full pages of a wine list are needed again only for a new analysis. */
 function sommSave() {
-  const turns = m => (SOMM.threads[m] || []).filter(t => t.a || t.error).slice(-20).map(t => ({ q: t.q, a: t.a, error: t.error, photo: t.photo || '', mode: t.mode, where: t.where || '', price: t.price || null }));
-  const data = { threads: { cellar: turns('cellar'), check: turns('check') }, mode: SOMM.mode, where: SOMM.where, whereAt: SOMM.whereAt,
+  const turns = m => (SOMM.threads[m] || []).filter(t => t.a || t.error).slice(-20).map(t => ({ q: t.q, a: t.a, error: t.error, photo: t.photo || '', mode: t.mode, where: t.where || '', price: t.price || null, food: t.food || '' }));
+  const data = { threads: { cellar: turns('cellar'), check: turns('check') }, mode: SOMM.mode, where: SOMM.where, whereAt: SOMM.whereAt, food: SOMM.food,
     wl: { result: WL.result, min: WL.min, max: WL.max, pages: WL.result ? WL.pages.map(p => ({ thumb: p.thumb })) : [] } };
   try { localStorage.setItem('wc-somm', JSON.stringify(data)); }
   catch (e) {
@@ -521,7 +523,7 @@ function sommLoad() {
   if (!d) return;
   ['cellar', 'check'].forEach(m => { if (d.threads && Array.isArray(d.threads[m])) SOMM.threads[m] = d.threads[m]; });
   if (['cellar', 'check', 'list'].includes(d.mode)) SOMM.mode = d.mode;
-  if (d.where) { SOMM.where = d.where; SOMM.whereAt = Number(d.whereAt) || 0; }
+  if (d.where) { SOMM.where = d.where; SOMM.whereAt = Number(d.whereAt) || 0; SOMM.food = str(d.food); }
   if (d.wl) { WL.result = d.wl.result || null; WL.min = str(d.wl.min); WL.max = str(d.wl.max); WL.pages = Array.isArray(d.wl.pages) ? d.wl.pages : []; }
 }
 
@@ -647,7 +649,7 @@ function quantile(sorted, q) {
 function tasteProfile() {
   const stock = S.wines.filter(w => w.count > 0);
   const since = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
-  const opened = S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift');
+  const opened = S.removals.filter(isOpened);
   const recent = opened.filter(r => str(r.date) >= since);
   const qty = r => Number(r.qty) || 1;
   // bottles ever owned per wine: purchases and gifts in, otherwise the stock plus what went out
@@ -876,7 +878,7 @@ function sommTaste(i) {
   if (!t || !t.a) return;
   const a = t.a, x = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: (str(a.wine).match(/\b(19|20)\d{2}\b/) || [''])[0], type: '', region: a.region || '', grapes: '' };
   const o = a.offer || a.worldOffer;
-  openDiscovery(x, { venue: a.priceWhere || sommWhere() || '', price: a.price || '', priceCur: a.price ? a.priceCur : countryCur(a.country || travelCountry()), shopRef: o ? { v: o.v, cur: o.cur } : null, offer: a.offer || null });
+  openDiscovery(x, { venue: a.priceWhere === 'restaurant' ? 'restaurant' : '', price: a.price || '', priceCur: a.price ? a.priceCur : countryCur(a.country || travelCountry()), shopRef: o ? { v: o.v, cur: o.cur } : null, offer: a.offer || null });
 }
 function listTaste(i) {
   const res = WL.result, p = res && res.picks[i];

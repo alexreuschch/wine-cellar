@@ -118,15 +118,17 @@ function posFormat(o) {
 const POSUI = { k: null };
 function posGet(k) {
   if (k === 'rs') return RS ? RS.pos : '';
+  if (k === 'mv') return PMOVE.to.pos;
   const i = Number(str(k).slice(3));
   return D && D.stock[i] ? D.stock[i].pos : '';
 }
 function posSet(k, v) {
   if (k === 'rs') { if (RS) RS.pos = v; return; }
+  if (k === 'mv') { PMOVE.to.pos = v; return; }
   const i = Number(str(k).slice(3));
   if (D && D.stock[i]) D.stock[i].pos = v;
 }
-function posRerender(k) { if (k === 'rs') renderSheet(); else renderStockBox(); }
+function posRerender(k) { if (k === 'rs') renderSheet(); else if (k === 'mv') plRefresh(); else renderStockBox(); }
 
 function posFieldHtml(k) {
   const v = posGet(k), open = POSUI.k === k;
@@ -293,6 +295,16 @@ const isFolded = (loc, filtered, checking) => FOLD.has(lc(loc)) && !filtered && 
 
 /* the check: place by place, every wine there with its count */
 const PCHK = { loc: null, counts: {}, ok: {} };
+/* moving many bottles at once: how many of each go, and where to */
+const PMOVE = { loc: null, sel: {}, to: { loc: '', shelf: null, pos: '' } };
+const plRefresh = () => { const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); };
+const mvVal = key => PMOVE.sel[key] || 0;
+function mvList() {
+  const out = [];
+  S.wines.forEach(w => w.stock.forEach((e, i) => { const n = Math.min(mvVal(chkKey(w, i)), e.n); if (n > 0 && lc(e.loc) === lc(PMOVE.loc)) out.push({ w, e, i, n }); }));
+  return out;
+}
+const mvCount = () => mvList().reduce((a, x) => a + x.n, 0);
 const chkKey = (w, i) => `${w.id}|${i}`;
 const chkVal = (w, i) => (PCHK.counts[chkKey(w, i)] !== undefined ? PCHK.counts[chkKey(w, i)] : w.stock[i].n);
 function chkChanges() {
@@ -317,22 +329,25 @@ function placesHtml() {
 function placeCardHtml(loc, items, filtered) {
   const info = locInfoOf(loc), sp = locSpace(loc), ty = locTypeOf(loc);
   const checking = !!PCHK.loc && lc(PCHK.loc) === lc(loc);
+  const moving = !checking && !!PMOVE.loc && lc(PMOVE.loc) === lc(loc);
   const sh = {};
   items.forEach(x => { const s = shelfVal(x.e.shelf); const k = s === null ? 'none' : String(s); (sh[k] = sh[k] || []).push(x); });
   const keys = Object.keys(sh).filter(k => k !== 'none').map(Number).sort((a, b) => (info.zeroBottom ? b - a : a - b)).map(String);
   if (sh.none) keys.push('none');
   const sub = [ty && lc(LOC_TYPE_NAME[ty]) !== lc(loc) ? (ty === 'case' && info.owc ? 'Original wooden case' : LOC_TYPE_NAME[ty]) : '', info.checked ? `Checked on ${fmtDate(info.checked)}` : ''].filter(Boolean).join(' · ');
-  const fold = isFolded(loc, filtered, checking);
+  const fold = isFolded(loc, filtered, checking || moving);
   const head = `<button class="pl-head" data-act="pl-fold" data-v="${esc(loc)}" aria-expanded="${!fold}" aria-label="${fold ? 'Open' : 'Fold'} ${esc(loc)}"><span class="loc-ic">${locIcon(loc)}</span><span class="pl-name"><b>${esc(loc)}</b>${sub ? `<span class="tiny muted">${esc(sub)}</span>` : ''}</span><span class="pl-count"><b>${sp.cap ? `${sp.bottles}/${sp.cap}` : sp.bottles}</b><small>${sp.bottles === 1 && !sp.cap ? 'bottle' : 'bottles'}</small></span><span class="pl-chev${fold ? '' : ' open'}">${ICON.chevron}</span></button>`;
   const fill = sp.cap && info.kind !== 'short' ? `<div class="fill-bar ${fillCls(sp.pct)}"><i style="width:${Math.max(2, sp.pct)}%"></i></div>` : '';
-  const dueLine = checking ? '' : dueHtml(items, false);
-  const body = keys.map(k => shelfBlockHtml(loc, k, sh[k], checking, keys.length === 1)).join('');
+  const dueLine = checking || moving ? '' : dueHtml(items, false);
+  const body = keys.map(k => shelfBlockHtml(loc, k, sh[k], checking, keys.length === 1, moving)).join('');
   const n = checking ? chkChanges() : 0;
   const foot = checking
     ? `<p class="small" style="margin:0">Count what lies here. Tap ✓ when a number is right, or change it with minus and plus. Wines that are not here: set them to 0.</p>
       <div class="grid2"><button class="btn" data-act="chk-cancel">Cancel</button><button class="btn primary" data-act="chk-done">${n ? `Done, ${n} ${n === 1 ? 'change' : 'changes'}` : 'Done, all right'}</button></div>`
-    : filtered || U.onlyDue ? '' : `<button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button>`;
+    : moving ? mvFootHtml()
+    : filtered || U.onlyDue ? '' : `<div class="pl-acts"><button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button><button class="btn ghost pl-check" data-act="bm-start" data-v="${esc(loc)}">${ICON.move}Move bottles</button></div>`;
   if (fold) return `<section class="pl-card folded" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}</section>`;
+  if (moving) return `<section class="pl-card checking moving" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}<p class="small" style="margin:0">Choose how many bottles of each wine go. <b>All</b> takes a whole shelf. Then choose where they go.</p>${body}${foot}</section>`;
   return `<section class="pl-card${checking ? ' checking' : ''}" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}${checking ? foot.split('<div class="grid2">')[0] : ''}${body}${checking ? '<div class="grid2">' + foot.split('<div class="grid2">')[1] : foot}</section>`;
 }
 
@@ -354,15 +369,21 @@ function dueHtml(items, short) {
   const txt = parts.join('<span class="muted"> · </span>');
   return U.onlyDue ? `<span class="pl-due${short ? ' sm' : ''}">${txt}</span>` : `<button class="pl-due${short ? ' sm' : ''}" data-act="pl-due" aria-label="Show only the bottles to open">${txt}</button>`;
 }
-function shelfBlockHtml(loc, k, xs, checking, only) {
+function shelfBlockHtml(loc, k, xs, checking, only, moving) {
   const s = k === 'none' ? null : Number(k), z = s === null ? null : zoneAt(loc, s);
   const title = s === null ? (isCase(loc) || only ? '' : 'No shelf') : shelfLabel(loc, s);
   xs = xs.slice().sort((a, b) => { const ra = posRank(a.e.pos), rb = posRank(b.e.pos); for (let j = 0; j < ra.length; j++) if (ra[j] !== rb[j]) return ra[j] - rb[j]; return wineTitle(a.w).localeCompare(wineTitle(b.w)) || str(a.w.vintage).localeCompare(str(b.w.vintage)); });
   const n = xs.reduce((a, x) => a + x.e.n, 0);
   const count = `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
-  const due = checking ? '' : dueHtml(xs, true);
+  const due = checking || moving ? '' : dueHtml(xs, true);
+  const allOn = moving && xs.every(x => mvVal(chkKey(x.w, x.i)) >= x.e.n);
   const rows = xs.map(x => {
     const meta = [x.w.vintage, posShow(x.e.pos)].filter(Boolean).join(' · ');
+    if (moving) {
+      const key = chkKey(x.w, x.i), v = Math.min(mvVal(key), x.e.n);
+      return `<div class="chk-row${v ? ' changed' : ''}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="tiny muted">${esc(meta)}${meta ? ' · ' : ''}${x.e.n} here</span></span>
+        <div class="stepper sm"><button data-act="bm-n" data-k="${esc(key)}" data-d="-1" aria-label="Move fewer">${ICON.minus}</button><span>${v}</span><button data-act="bm-n" data-k="${esc(key)}" data-d="1" aria-label="Move more">${ICON.plus}</button></div></div>`;
+    }
     if (checking) {
       const key = chkKey(x.w, x.i), v = chkVal(x.w, x.i), ok = PCHK.ok[key] && v === x.e.n;
       return `<div class="chk-row${ok ? ' ok' : ''}${v !== x.e.n ? ' changed' : ''}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="tiny muted">${esc(meta)}${v !== x.e.n ? ` · was ${x.e.n}` : ''}</span></span>
@@ -374,7 +395,8 @@ function shelfBlockHtml(loc, k, xs, checking, only) {
       <div class="pl-end"><div class="stepper sm"><button data-act="minus" data-id="${id}" data-i="${x.i}" aria-label="Take a bottle from ${place}">${ICON.minus}</button><span>${x.e.n}</span><button data-act="plus" data-id="${id}" data-i="${x.i}" aria-label="Add bottles to ${place}">${ICON.plus}</button></div><a class="pl-pill" href="#/wine/${encodeURIComponent(x.w.id)}" aria-label="Open ${esc(wineTitle(x.w))}">${pill(x.w)}</a></div></div>`;
   }).join('');
   const zc = z ? ` style="--zc:${zoneColor(z)}"` : '';
-  return `<div class="pl-shelf"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span>${due ? ` <span class="muted">·</span> ${due}` : ''}</span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
+  const all = moving ? `<button class="chip bm-all${allOn ? ' on' : ''}" data-act="bm-all" data-keys="${esc(xs.map(x => chkKey(x.w, x.i)).join(','))}" aria-pressed="${allOn}">All</button>` : '';
+  return `<div class="pl-shelf"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span>${due ? ` <span class="muted">·</span> ${due}` : ''}</span>${all || (z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : '')}</div>${rows}</div>`;
 }
 
 async function chkSave() {
@@ -392,7 +414,9 @@ async function chkSave() {
       const stock = w.stock.map((e, i) => Object.assign({}, e, { n: lc(e.loc) === lc(loc) ? chkVal(w, i) : e.n })).filter(e => e.n > 0);
       const count = stock.reduce((a, e) => a + e.n, 0);
       const next = Object.assign({}, w, { stock, count });
-      const entries = journalForCorrection(w, count - w.count, stock, fullName(w));
+      const delta = count - w.count;
+      // what the check found is its own journal entry; purchases stay as they were
+      const entries = delta ? [{ id: newId(delta > 0 ? 'i' : 'r'), wineId: w.id, dir: delta > 0 ? 'in' : 'out', type: 'Correction', qty: Math.abs(delta), loc, date: todayISO(), price: '', priceCur: '', wineName: fullName(w), note: `${delta > 0 ? 'Found' : 'Missing'} in the check of ${loc}` }] : [];
       const d = await api('saveWine', { wine: serialWine(next), image: null, entries });
       upsertWine(normWine(d.wine || d));
       (d.entries || []).map(normRemoval).forEach(r => { S.removals = S.removals.filter(x => x.id !== r.id).concat([r]); });
@@ -405,6 +429,54 @@ async function chkSave() {
   } catch (e) {
     busy(false);
     toast('Not saved: ' + e.message);
+  }
+}
+/* where the chosen bottles go: location, shelf and position, with a warning when it is too full */
+function mvFootHtml() {
+  const n = mvCount(), to = PMOVE.to, list = mvList();
+  const locs = S.locations.slice();
+  const chips = locs.map(l => `<button class="chip${lc(l) === lc(to.loc) ? ' on' : ''}" data-act="bm-loc" data-v="${esc(l)}">${locIcon(l)}${esc(l)}</button>`).join('');
+  let room = '';
+  if (to.loc && n && lc(to.loc) !== lc(PMOVE.loc)) {
+    const sp = locSpace(to.loc), need = list.reduce((a, x) => a + x.n * spaceOf(x.w), 0);
+    if (sp.cap && sp.kind !== 'short' && need > sp.free) room = `<p class="space-note warn">${ICON.info}<span>${esc(to.loc)} has about ${sp.free} ${sp.free === 1 ? 'place' : 'places'} free, you move ${n} ${n === 1 ? 'bottle' : 'bottles'}.</span></p>`;
+  }
+  const same = to.loc && list.length && list.every(x => samePlace(x.e, to));
+  const where = to.loc ? placeLabel(to) : '';
+  return `<div class="mv-to"><span class="small muted">Move to</span><div class="chips">${chips}</div>
+    ${to.loc && !isCase(to.loc) ? `<div class="store-row"><div class="field">Shelf (optional)<div class="stepper"><button data-act="bm-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span class="shelf-val">${esc(shelfText(to.loc, to.shelf))}</span><button data-act="bm-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>${posFieldHtml('mv')}</div>${posPanelHtml('mv')}` : ''}
+    ${room}${same ? '<p class="small muted" style="margin:0">That is where they are already.</p>' : ''}</div>
+    <div class="grid2"><button class="btn" data-act="bm-cancel">Cancel</button><button class="btn primary" data-act="bm-done"${!n || !to.loc || same ? ' disabled' : ''}>${n ? `Move ${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'Move'}</button></div>
+    ${n && where ? `<p class="tiny muted" style="margin:0;text-align:center">${n} ${n === 1 ? 'bottle' : 'bottles'} to ${esc(where)}</p>` : ''}`;
+}
+async function mvSave() {
+  const list = mvList(), to = { loc: PMOVE.to.loc, shelf: PMOVE.to.shelf, pos: PMOVE.to.pos };
+  if (!list.length || !to.loc) return;
+  const n = mvCount();
+  const byWine = new Map();
+  list.forEach(x => { if (!samePlace(x.e, to)) (byWine.get(x.w) || byWine.set(x.w, []).get(x.w)).push(x); });
+  busy(true, 'Moving…');
+  try {
+    for (const [w, xs] of byWine) {
+      // take them from where they are, put them to the new place, together with bottles already there
+      const stock = w.stock.map((e, i) => { const x = xs.find(y => y.i === i); return Object.assign({}, e, { n: e.n - (x ? x.n : 0) }); });
+      const moved = xs.reduce((a, x) => a + x.n, 0);
+      const there = stock.find(e => samePlace(e, to));
+      if (there) there.n += moved; else stock.push({ loc: to.loc, shelf: to.shelf, pos: to.pos, n: moved });
+      const next = Object.assign({}, w, { stock: stock.filter(e => e.n > 0) });
+      const d = await api('saveWine', { wine: serialWine(next), image: null, entries: [] });
+      upsertWine(normWine(d.wine || d));
+    }
+    persist();
+    Object.assign(PMOVE, { loc: null, sel: {}, to: { loc: '', shelf: null, pos: '' } });
+    POSUI.k = null;
+    busy(false);
+    refreshView();
+    toast(`${n} ${n === 1 ? 'bottle' : 'bottles'} moved to ${placeLabel(to)}.`);
+  } catch (e) {
+    busy(false);
+    refreshView();
+    toast('Not all moved: ' + e.message);
   }
 }
 function markChecked(loc) {
@@ -429,7 +501,7 @@ Object.assign(PL_ACTS, {
       const l = $('#wine-list'); if (l) l.innerHTML = cellarList();
       return;
     }
-    CVIEW = v; PCHK.loc = null; render();
+    CVIEW = v; PCHK.loc = null; PMOVE.loc = null; render();
     if (v === 'places' && !store.get('wc-pl-hint', false)) { store.set('wc-pl-hint', true); setTimeout(() => toast('Tap a location to fold it. Tap Places again to fold or open all.', 6000), 400); }
   },
   'pl-fold': el => {
@@ -441,9 +513,34 @@ Object.assign(PL_ACTS, {
   'chk-start': el => {
     if (PCHK.loc && chkChanges() && !confirm('Leave the check of ' + PCHK.loc + ' without saving?')) return;
     Object.assign(PCHK, { loc: el.dataset.v, counts: {}, ok: {} });
+    PMOVE.loc = null;
     const l = $('#wine-list'); if (l) l.innerHTML = cellarList();
     const c = document.getElementById('pl-' + lc(el.dataset.v).replace(/[^a-z0-9]+/g, '-')); if (c) c.scrollIntoView({ block: 'start' });
   },
+  'bm-start': el => {
+    if (PCHK.loc && chkChanges() && !confirm('Leave the check of ' + PCHK.loc + ' without saving?')) return;
+    PCHK.loc = null;
+    Object.assign(PMOVE, { loc: el.dataset.v, sel: {}, to: { loc: '', shelf: null, pos: '' } });
+    POSUI.k = null;
+    plRefresh();
+    const c = document.getElementById('pl-' + lc(el.dataset.v).replace(/[^a-z0-9]+/g, '-')); if (c) c.scrollIntoView({ block: 'start' });
+  },
+  'bm-n': el => {
+    const [id, i] = el.dataset.k.split('|'), w = wineById(id);
+    if (!w || !w.stock[Number(i)]) return;
+    PMOVE.sel[el.dataset.k] = clamp(mvVal(el.dataset.k) + Number(el.dataset.d), 0, w.stock[Number(i)].n);
+    plRefresh();
+  },
+  'bm-all': el => {
+    const keys = el.dataset.keys.split(','), full = k => { const [id, i] = k.split('|'), w = wineById(id); return w && w.stock[Number(i)] ? w.stock[Number(i)].n : 0; };
+    const on = keys.every(k => mvVal(k) >= full(k));
+    keys.forEach(k => { PMOVE.sel[k] = on ? 0 : full(k); });
+    plRefresh();
+  },
+  'bm-loc': el => { const t = PMOVE.to; if (lc(t.loc) !== lc(el.dataset.v)) Object.assign(t, { loc: el.dataset.v, shelf: null, pos: '' }); POSUI.k = null; plRefresh(); },
+  'bm-shelf': el => { PMOVE.to.shelf = shelfStep(PMOVE.to.shelf, Number(el.dataset.d)); plRefresh(); },
+  'bm-cancel': () => { Object.assign(PMOVE, { loc: null, sel: {}, to: { loc: '', shelf: null, pos: '' } }); POSUI.k = null; plRefresh(); },
+  'bm-done': () => mvSave(),
   'chk-cancel': () => { PCHK.loc = null; PCHK.counts = {}; PCHK.ok = {}; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
   'chk-n': el => {
     const [id, i] = el.dataset.k.split('|'), w = wineById(id);

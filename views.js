@@ -157,7 +157,7 @@ function viewInsights() {
     ${barRows(bandRows.filter(b => b.n > 0).concat(noStreet ? [{ label: 'No street price', n: noStreet }] : []), { share: true, total })}`));
 
   // consumption over the last 12 months
-  const opened = S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift');
+  const opened = S.removals.filter(isOpened);
   const months = [];
   const d0 = new Date(now.getFullYear(), now.getMonth(), 1);
   for (let i = 11; i >= 0; i--) { const d = new Date(d0.getFullYear(), d0.getMonth() - i, 1); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; months.push({ key, label: d.toLocaleDateString('en-US', { month: 'narrow' }), n: 0, go: ['month', key] }); }
@@ -229,7 +229,7 @@ function insightsGo(k, v) {
     U.jSearch = '';
     const name = monthOf({ date: v });
     U.f.journal.sel.month = [lc(name)];
-    U.f.journal.sel.type = [...new Set(S.removals.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift' && monthOf(r) === name).map(r => lc(entryType(r))))];
+    U.f.journal.sel.type = [...new Set(S.removals.filter(r => isOpened(r) && monthOf(r) === name).map(r => lc(entryType(r))))];
     go('#/journal');
     return;
   }
@@ -433,7 +433,7 @@ function personSummary(p) {
   const name = person ? person.name : p;
   const n = t => all.filter(r => r.type === t).reduce((a, r) => a + r.qty, 0);
   const given = n('Gift'), sold = n('Sale'), received = n('Received');
-  const shared = all.filter(r => r.dir === 'out' && r.type !== 'Gift' && r.type !== 'Sale').reduce((a, r) => a + r.qty, 0);
+  const shared = all.filter(isOpened).reduce((a, r) => a + r.qty, 0);
   const pl = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const stats = [shared ? pl(shared, 'bottle shared', 'bottles shared') : '', given ? pl(given, 'given as gift', 'given as gifts') : '', sold ? pl(sold, 'sold', 'sold') : '', received ? pl(received, 'received as gift', 'received as gifts') : ''].filter(Boolean).join(' · ');
   const sales = all.filter(r => r.type === 'Sale' && r.price !== null);

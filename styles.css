@@ -255,6 +255,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .badge { display: inline-flex; align-items: center; gap: 4px; }
 .badge svg { width: 12px; height: 12px; }
 .badge.received { background: #3A2E18; color: var(--gold); }
+.badge.correction { background: transparent; border: 1px solid var(--line); color: var(--muted); }
 .gift-mark { display: inline-flex; vertical-align: -2px; color: var(--gold); margin-left: 6px; }
 .toggle button { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .static { height: 46px; display: flex; align-items: center; padding: 0 12px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 15px; }
@@ -775,12 +776,14 @@ h1 .disc-tag { font-size: 12px; vertical-align: 7px; }
 .where-row .toggle button svg { width: 15px; height: 15px; }
 .where-row .toggle button.on { background: var(--gold); color: var(--on-gold); font-weight: 600; }
 .where-row.need { border-color: var(--gold); }
-.where-price { display: grid; grid-template-columns: 1fr 110px auto; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
-.where-price small { font-size: 12px; opacity: .8; }
-.where-price input { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; text-align: right; min-width: 0; }
-.where-price em { font-style: normal; color: var(--text); font-weight: 500; }
-.where-price.need input { border-color: var(--gold); }
-.where-price.need > span { color: var(--gold); font-weight: 600; }
+.where-food { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.where-food small { font-size: 12px; opacity: .8; }
+.where-food input { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; min-width: 0; }
+/* the food verdict or two dishes in a wine check */
+.somm-food { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface); }
+.somm-food > svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--gold); }
+.somm-food > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.somm-food .verdict { margin: 0; }
 .where-row.need > span { color: var(--gold); font-weight: 600; }
 .where-row.flash { animation: where-flash .9s ease 2; }
 @keyframes where-flash { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 45%, transparent); } }
@@ -1041,6 +1044,12 @@ button.pl-due { text-decoration: underline dotted rgba(255,255,255,.25); text-un
 .pl-wn { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-n { flex: none; min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 14px; background: var(--line-soft); font-size: 14px; font-weight: 600; }
 .pl-check { align-self: flex-start; height: 40px; font-size: 15px; }
+/* check and move side by side under a place */
+.pl-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.pl-acts .pl-check { align-self: auto; }
+.mv-to { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
+.mv-to .chips .chip svg { width: 14px; height: 14px; }
+.pl-sh .bm-all { height: 26px; padding: 0 10px; font-size: 12px; }
 .chk-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .chk-row.changed .stepper span { color: var(--gold); font-weight: 700; }
 .stepper.sm button { width: 36px; height: 38px; }
@@ -1280,3 +1289,4 @@ button.rec-by { align-self: flex-start; border: 0; background: none; padding: 0;
 .pm-bar b { text-align: right; font-weight: 600; }
 .pm-none { margin: 0; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 14px; font-size: 14px; color: var(--muted); }
 .pm-nr { grid-column: 2 / 4; text-align: right; font-size: 12px; }
+.moving .pl-sh { flex-direction: row; justify-content: space-between; align-items: center; gap: 8px; }

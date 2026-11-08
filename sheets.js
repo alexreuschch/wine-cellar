@@ -85,8 +85,9 @@ function openEditEntry(id, record) {
     pp: newPicker('people', r.people, { withHearts: r.dir === 'out', hearts }),
     rp: newPicker('retailers', r.retailer, { single: true }), website: site, websiteInit: site
   };
-  if (r.dir === 'out' && !REMOVAL_TYPES.includes(RS.type)) RS.type = 'Other';
-  if (r.dir === 'in' && !ADD_TYPES.some(t => t[0] === RS.type)) RS.type = 'Added';
+  RS.wasCorr = r.type === 'Correction';
+  if (r.dir === 'out' && !REMOVAL_TYPES.includes(RS.type) && !RS.wasCorr) RS.type = 'Other';
+  if (r.dir === 'in' && !ADD_TYPES.some(t => t[0] === RS.type) && !RS.wasCorr) RS.type = 'Added';
   if (isBuyIn(RS)) { RS.unit = r.price === null || r.price === '' ? null : unitOf(r.price, r.priceCur); RS.price = totalOf(RS.unit, RS.qty); RS.priceInit = RS.price; }
   if (r.dir === 'in' && r.type === 'Purchase') RS.rec = recNew(r.people);
   renderSheet();
@@ -114,7 +115,8 @@ function renderSheet() {
   const out = RS.kind === 'out';
   const title = RS.mode === 'add' ? (out ? 'Bottle removed' : 'Bottles added') : RS.mode === 'record' && !RS.id ? 'Add purchase record' : 'Edit entry';
   const sub = esc(name) + (RS.mode === 'add' && w ? ` · ${w.count} in stock` : '') + link;
-  const types = out ? REMOVAL_TYPES.map(t => [t, t]) : ADD_TYPES;
+  // a correction from a check stays one unless you choose what it really was, for example Dinner
+  const types = (out ? REMOVAL_TYPES.map(t => [t, t]) : ADD_TYPES).concat(RS.wasCorr ? [['Correction', 'Correction']] : []);
   const typeGrid = `<div style="display:flex;flex-direction:column;gap:8px"><span class="small muted">${out ? 'Type' : 'Reason'}</span><div class="grid3">${types.map(([v, l]) => `<button class="btn${v === RS.type ? ' primary' : ''}" style="height:44px;font-size:14px;padding:0 6px" data-act="rs-type" data-v="${v}">${l}</button>`).join('')}</div></div>`;
   let locs = '';
   if (RS.mode === 'add' && out) {

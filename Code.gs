@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 49;
+var API_VERSION = 50;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1907,9 +1907,10 @@ var CHECK_RULES = [
   '4. Say whether the cellar already holds similar wines in enough bottles.',
   '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Fewer is fine.',
   '6. Answer in the language of the question; if there is no question, in English. Keep "answer" to three to five sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "typicalMarkup": [2, 3], "drinkFrom": 2026, "peakFrom": 2029, "peakUntil": 2035, "drinkUntil": 2040, "drinkNote": "one short sentence"}.',
+  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "typicalMarkup": [2, 3], "drinkFrom": 2026, "peakFrom": 2029, "peakUntil": 2035, "drinkUntil": 2040, "drinkNote": "one short sentence", "pairing": null, "dishes": ["dish", "dish"]}.',
   '8. "typicalMarkup" is the usual range by which restaurants in the country where the owner is now multiply the shop price of a wine in the same price class as this one, for example [2.5, 3.5]. Restaurants usually multiply everyday wines more and expensive wines less, so judge it for the shop price of this wine in that country, not for wine in general. Give it always.',
-  '9. Give the drinking window of exactly this vintage from your knowledge, as years: "drinkFrom", "peakFrom", "peakUntil", "drinkUntil". Use null for all four only if you cannot judge it, for example without a vintage. "drinkNote" is one short sentence for today, for example "Still young: decant it for an hour, or keep it until 2029." or "At its best now."'
+  '9. Give the drinking window of exactly this vintage from your knowledge, as years: "drinkFrom", "peakFrom", "peakUntil", "drinkUntil". Use null for all four only if you cannot judge it, for example without a vintage. "drinkNote" is one short sentence for today, for example "Still young: decant it for an hour, or keep it until 2029." or "At its best now."',
+  '10. Food. If the owner says what they eat or names a dish, judge that pairing in "pairing": {"verdict": "great|works|not ideal", "why": "one sentence"}, and in "answer" talk about their taste. If no food is given, set "pairing" to null and give in "dishes" two dishes the wine goes well with: in a restaurant two dishes that are typical on a menu, otherwise two dishes to cook at home. With a pairing, "dishes" stays empty.'
 ].join('\n');
 
 /** The drinking window from an AI answer, as whole years in order, or null. */
@@ -1956,7 +1957,7 @@ function cellarContext_() {
   });
   var names = {};
   all.forEach(function (w) { names[w.id] = [w.producer, w.name, w.vintage].filter(String).join(' '); });
-  var journal = readAll_(SHEETS.removals).filter(function (r) { return r.dir === 'out' || r.dir === 'taste'; })
+  var journal = readAll_(SHEETS.removals).filter(function (r) { return (r.dir === 'out' && r.type !== 'Correction') || r.dir === 'taste'; })
     .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); }).slice(0, 40)
     .map(function (r) {
       return [r.date, r.wineName || names[r.wineId] || r.wineId, r.dir === 'taste' ? 'tasted elsewhere' + (r.venue ? ' (' + r.venue + ')' : '') : r.type, r.occasion, r.people ? 'with ' + r.people : '', r.food ? 'food: ' + r.food : '', r.note ? 'note: ' + r.note : '', r.hearts ? 'favorite of ' + r.hearts : ''].filter(String).join(' | ');
@@ -1985,11 +1986,14 @@ function actionSommelier_(req) {
   var given = where !== 'other' && Number(req.price) > 0 ? Math.round(Number(req.price) * 100) / 100 : null;
   var givenCur = given && CURRENCIES.indexOf(String(req.priceCur)) >= 0 ? String(req.priceCur) : '';
   if (given) q += '\n(' + (where === 'restaurant' ? 'Price on the menu' : 'Price on the shelf') + ': ' + (givenCur || '') + ' ' + given + ')';
+  // in a restaurant the food can come from its own field, kept for the evening
+  var food = check ? String(req.food || '').trim().slice(0, 200) : '';
+  if (food) q += '\n(What the owner eats: ' + food + ')';
   var ctx = cellarContext_();
   var system = check
     ? CHECK_RULES + '\n\nThe owner is in ' + shopScope_().name + ', where prices are usually in ' + shopScope_().cur + '. The owner shows prices in ' + settings_().currency + '.' +
-      (where === 'restaurant' ? ' The owner is in a restaurant, so a price they mention is a restaurant price.'
-        : where === 'shop' ? ' The owner is in a shop, so a price they mention is a shop price.'
+      (where === 'restaurant' ? ' The owner is in a restaurant and chooses a wine for their meal, so judge the food pairing first; a price they mention is a restaurant price.'
+        : where === 'shop' ? ' The owner is not in a restaurant, for example in a shop, at a friend or at a tasting, so a price they mention is a shop price.'
         : where === 'other' ? ' The owner is neither in a shop nor in a restaurant, for example at a friend or a tasting; a price they mention is what the wine costs in a shop.' : '') + '\n\n' + ctx.text + '\n\nFINISHED WINES (no bottles left):\n' + (finishedContext_().join('\n') || 'None yet.')
     : SOMMELIER_RULES + '\n\n' + ctx.text + '\n\nTASTE HISTORY (finished wines and discoveries tasted elsewhere, not in the cellar, never pick them):\n' + (finishedContext_().join('\n') || 'None yet.');
   var messages = [];
@@ -2016,6 +2020,12 @@ function actionSommelier_(req) {
   var out = { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
   // what the app needs to keep the wine as a discovery, if the owner tastes it
   if (check && d.wine && (d.producer || d.name)) out.info = { producer: String(d.producer || ''), name: String(d.name || ''), vintage: d.vintage ? String(d.vintage) : '', type: String(d.type || ''), region: String(d.region || ''), grapes: String(d.grapes || '') };
+  if (check) {
+    var pv = d.pairing && typeof d.pairing === 'object' ? String(d.pairing.verdict || '').toLowerCase() : '';
+    out.pairing = ['great', 'works', 'not ideal'].indexOf(pv) >= 0 ? { verdict: pv, why: String(d.pairing.why || '').slice(0, 300) } : null;
+    out.dishes = out.pairing ? [] : (Array.isArray(d.dishes) ? d.dishes : []).map(String).filter(String).slice(0, 2);
+    out.food = food;
+  }
   if (check) { var win = windowFrom_(d); if (win && out.info) Object.assign(out.info, win); if (win) { out.window = win; out.drinkNote = String(d.drinkNote || '').slice(0, 240); } }
   if (check && out.wine) {
     // the price in local shops of the country the owner is in, reused for 14 days
@@ -2551,7 +2561,7 @@ function digest_(n, test) {
     var prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     var pm = Utilities.formatDate(prev, tz, 'yyyy-MM'), pmName = Utilities.formatDate(prev, tz, 'MMMM');
     var moves = readAll_(SHEETS.removals).filter(function (r) { return String(r.date || '').replace(/^'/, '').slice(0, 7) === pm; });
-    var opened = moves.filter(function (r) { return r.dir === 'out'; }), bought = moves.filter(function (r) { return r.dir === 'in' && r.type === 'Purchase'; });
+    var opened = moves.filter(function (r) { return r.dir === 'out' && r.type !== 'Correction'; }), bought = moves.filter(function (r) { return r.dir === 'in' && r.type === 'Purchase'; });
     var sum = function (list) { return list.reduce(function (a, r) { return a + (Number(r.qty) || 1); }, 0); };
     var stock = all.reduce(function (a, w) { return a + (Number(w.count) || 0); }, 0);
     var hist = readAll_(SHEETS.history).filter(function (r) { return r.month; }).sort(function (a, b) { return String(a.month) < String(b.month) ? -1 : 1; }).pop();
