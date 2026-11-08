@@ -111,6 +111,7 @@ const CTX = {
       person: { label: 'Person', plural: 'people', of: r => namesOf(r.people) },
       type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Discovery', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added'] },
       retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) },
+      producer: { hidden: true, label: 'Producer', plural: 'producers', of: r => { const w = wineById(r.wineId); return w && w.producer ? [w.producer] : []; } },
       month: { hidden: true, label: 'Month', plural: 'months', sortHint: 'Newest first. ', of: r => (monthOf(r) ? [monthOf(r)] : []), sort: (a, b) => monthKey(b.name).localeCompare(monthKey(a.name)) }
     },
     items: () => allEntries(),

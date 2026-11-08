@@ -233,6 +233,16 @@ function insightsGo(k, v) {
     go('#/journal');
     return;
   }
+  if (k === 'pjournal') {
+    // from the producer sheet: your entries of this producer with this retailer or this person
+    jumpStart('journal');
+    U.f.journal = newF();
+    U.jSearch = '';
+    U.f.journal.sel[v.k] = [lc(v.v)];
+    U.f.journal.sel.producer = [lc(v.producer)];
+    go('#/journal');
+    return;
+  }
   if (k === 'person' || k === 'jtype') {
     jumpStart('journal');
     U.f.journal = newF();

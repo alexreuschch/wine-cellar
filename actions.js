@@ -161,6 +161,7 @@ const ACTS = {
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
   'info-term': el => { const x = { k: el.dataset.k, t: el.dataset.t, region: el.dataset.r || '' }; infoLeave(); if (x.k === 'grape') insightsGo('grape', x.t); else insightsGo('term', x); },
+  'info-j': (el, e) => { if (e) e.preventDefault(); const x = { k: el.dataset.k, v: el.dataset.v, producer: INFO.name }; infoLeave(); insightsGo('pjournal', x); },
   'info-wine': (el, e) => { if (e) e.preventDefault(); const h = el.getAttribute('href'); infoLeave(); go(h); },
   'vint-open': el => openVintage(el.dataset.r, el.dataset.y),
   'vint-all': () => { INFO.vAll = !INFO.vAll; if (!INFO.vAll) INFO.vFocus = null; renderInfo(); },

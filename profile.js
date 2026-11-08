@@ -717,21 +717,22 @@ function producerMineHtml(mine) {
   const moves = S.removals.filter(r => ids.has(r.wineId));
   const opened = moves.filter(r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift').map(r => r.date).sort().pop();
   const buys = moves.filter(r => r.dir === 'in' && r.type === 'Purchase');
-  const shops = [...buys.reduce((m, r) => (r.retailer ? m.set(r.retailer, (m.get(r.retailer) || 0) + (r.qty || 1)) : m), new Map())].sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => x[0]);
+  const shops = [...buys.reduce((m, r) => (r.retailer ? m.set(r.retailer, (m.get(r.retailer) || 0) + (r.qty || 1)) : m), new Map())].sort((a, b) => b[1] - a[1]).map(x => x[0]);
   const priced = buys.filter(r => r.price !== null);
   const avgPrice = priced.length ? priced.reduce((a, r) => a + (conv(r.price, r.priceCur) || 0) * (r.qty || 1), 0) / priced.reduce((a, r) => a + (r.qty || 1), 0) : null;
   const recs = [...new Set(buys.flatMap(r => namesOf(r.people)))];
   const dash = '<span class="muted">–</span>';
+  const links = (k, list) => list.map(v => `<a class="pm-link" href="#/journal" data-act="info-j" data-k="${k}" data-v="${esc(v)}">${esc(v)}</a>`).join(', ');
   const row = (k, v) => `<div class="pm-row"><span>${k}</span><b>${v || dash}</b></div>`;
   const byRating = list => list.slice().sort((a, b) => (b.myRating === null ? -1 : b.myRating) - (a.myRating === null ? -1 : a.myRating) || str(b.vintage).localeCompare(str(a.vintage)));
   const bar = x => `<a class="pm-bar" href="#/wine/${encodeURIComponent(x.id)}" data-act="info-wine"><span class="ellipsis">${esc(x.name || x.producer)} ${esc(x.vintage || '')}</span>${x.myRating !== null ? `${segsHtml(x.myRating, 6)}<b>${x.myRating}%</b>` : '<small class="muted pm-nr">Not rated yet</small>'}</a>`;
   return `<div class="gi-sec pm"><h3>With this producer</h3>
     <div class="pm-rows">
-      ${row('Wines', mine.all.length ? `${mine.all.length}, ${btl ? `${btl} ${btl === 1 ? 'bottle' : 'bottles'} in your cellar` : 'none in your cellar now'}` : 'None in your cellar')}
+      ${row('Wines', mine.all.length ? `${mine.all.length} ${mine.all.length === 1 ? 'product' : 'products'}, ${btl ? `${btl} ${btl === 1 ? 'bottle' : 'bottles'} in your cellar` : 'none in your cellar now'}` : 'None in your cellar')}
       ${row('Your rating', avg !== null ? `${avg}% on average` : '')}
       ${row('Last opened', opened ? esc(fmtDate(opened)) : '')}
-      ${row('Bought at', shops.length ? `${esc(shops.join(', '))}${avgPrice !== null ? `, ${esc(money(avgPrice))} per bottle on average` : ''}` : '')}
-      ${row('Recommended by', recs.length ? esc(recs.join(', ')) : '')}
+      ${row('Bought at', shops.length ? `${links('retailer', shops)}${avgPrice !== null ? `<small class="pm-sub">${esc(money(avgPrice))} per bottle on average</small>` : ''}` : '')}
+      ${row('Recommended by', recs.length ? links('person', recs) : '')}
     </div>
     ${mine.all.length ? `<div class="pm-bars"><span class="tiny muted">Your wines</span>${byRating(mine.all).map(bar).join('')}</div>` : ''}
     ${tasted.length ? `<div class="pm-bars"><span class="tiny muted">Tasted elsewhere</span>${byRating(tasted).map(bar).join('')}</div>` : ''}

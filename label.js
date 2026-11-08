@@ -88,7 +88,9 @@ const BT_PATHS = {};
 const btPathOf = k => BT_PATHS[k] || (BT_PATHS[k] = btPath(BOTTLES[k]));
 
 /* the bottle of a wine: its shape and glass, filled up to the neck; in clear glass the wine shows through */
-function bottleSvg(w, shape, glass) {
+/* on the wine page a 30 cm bottle fills the frame, other shapes keep their real size to it */
+const BT_FRAME = 254;
+function bottleSvg(w, shape, glass, tight) {
   const k = shape || bottleShapeOf(w), b = BOTTLES[k], gk = glass || glassOf(w, k);
   const d = btPathOf(k), top = BT_G - b.h * BT_K;
   const id = 'bt' + Math.random().toString(36).slice(2, 8);
@@ -106,7 +108,9 @@ function bottleSvg(w, shape, glass) {
   const lines = `<rect x="${(80 - lw * 0.28).toFixed(1)}" y="${(ly + lh * 0.42).toFixed(1)}" width="${(lw * 0.56).toFixed(1)}" height="${Math.max(1.6, lh * 0.045).toFixed(1)}" rx="1" fill="#7A2B37" opacity=".5"/><rect x="${(80 - lw * 0.2).toFixed(1)}" y="${(ly + lh * 0.56).toFixed(1)}" width="${(lw * 0.4).toFixed(1)}" height="${Math.max(1.2, lh * 0.035).toFixed(1)}" rx="1" fill="#5A4A40" opacity=".32"/>`;
   const straw = b.straw ? `<g clip-path="url(#${id}c)"><rect x="0" y="${top + b.straw * BT_K}" width="160" height="400" fill="#CDB98C"/>${[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5].map(i => `<path d="M${80 + i * 11} ${top + b.straw * BT_K}q${-i} ${(b.h - b.straw) * BT_K * 0.5} 0 ${(b.h - b.straw) * BT_K}" stroke="#9C8659" stroke-width=".8" fill="none" opacity=".75"/>`).join('')}<rect x="0" y="${top + (b.h - 2.2) * BT_K}" width="160" height="3" fill="#9C8659"/></g>` : '';
   const hx = 80 - btHalf(b, b.h * 0.7) * BT_K * 0.62;
-  return `<svg class="bottle-svg" viewBox="0 0 160 360" role="img" aria-label="${esc(b.name)} bottle, ${esc(GLASSES[gk].name.toLowerCase())} glass">
+  const mr = Math.max(...b.p.map(q => q[1])) * BT_K;
+  const vb = tight ? `${(80 - mr - 2).toFixed(1)} ${(top - 2).toFixed(1)} ${(mr * 2 + 4).toFixed(1)} ${(b.h * BT_K + 4).toFixed(1)}` : '0 0 160 360';
+  return `<svg class="bottle-svg" viewBox="${vb}"${tight ? ` style="height:${Math.min(BT_FRAME, b.h * BT_FRAME / 30).toFixed(0)}px"` : ''} role="img" aria-label="${esc(b.name)} bottle, ${esc(GLASSES[gk].name.toLowerCase())} glass">
     <defs>
       <linearGradient id="${id}w" x1="0" x2="1"><stop offset="0" stop-color="${wine[1]}"/><stop offset=".38" stop-color="${wine[0]}"/><stop offset="1" stop-color="${wine[1]}"/></linearGradient>
       <linearGradient id="${id}e" x1="0" x2="1"><stop offset="0" stop-color="${empty[1]}" stop-opacity="${clear ? 0.45 : 1}"/><stop offset=".38" stop-color="${empty[0]}" stop-opacity="${clear ? 0.35 : 1}"/><stop offset="1" stop-color="${empty[1]}" stop-opacity="${clear ? 0.45 : 1}"/></linearGradient>
@@ -186,7 +190,7 @@ function wineTopHtml(w) {
   const label = photo
     ? `<button class="wtop-lab" data-act="label-zoom" aria-label="Show the label large"><img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}"></button>`
     : `<div class="wtop-lab">${labelCardHtml(w)}</div>`;
-  return `<div class="wframe"><div class="wtop-b">${bottleSvg(w)}</div>${label}</div>`;
+  return `<div class="wframe"><div class="wtop-b">${bottleSvg(w, null, null, true)}</div>${label}</div>`;
 }
 function labelZoom() {
   const img = $('#label-img');
