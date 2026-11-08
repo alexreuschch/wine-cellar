@@ -1096,3 +1096,12 @@ main:has(.pl-card.checking) ~ .fab { display: none; }
 .cons-check > svg:first-child { flex: none; color: var(--gold); }
 .cons-check span { flex: 1; }
 .cons-check b { color: var(--text); font-weight: 600; }
+
+/* 3.7.2: toast with a button, short question, wishlist link in the consultant, total price */
+.toast.act { display: flex; align-items: center; gap: 12px; pointer-events: auto; padding: 8px 8px 8px 16px; width: max-content; }
+.toast.act span { flex: 1; }
+.toast.act button { flex: none; height: 32px; padding: 0 12px; border-radius: 9px; border: 0; background: #1A1410; color: #F3ECE6; font: inherit; font-weight: 600; cursor: pointer; }
+#ask-root .sheet-backdrop { z-index: 70; }
+#ask-root .sheet { z-index: 71; }
+button.cons-check { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.buy-status { margin-top: -4px; }

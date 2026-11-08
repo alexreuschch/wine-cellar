@@ -10,6 +10,29 @@ const newPicker = (source, names, opts = {}) => ({
 });
 const priceInput = (v, c) => { const x = conv(v, c); return x === null ? '' : x.toFixed(2); };
 
+/* Purchase price as one Total field. It starts as bottles times the price per bottle and can be overwritten,
+   for a discount or shipping. More or fewer bottles keep the price per bottle that the total gives. */
+const unitOf = (v, c) => { const x = parseMoney(priceInput(v, c)); return x === null ? null : x; };
+const totalOf = (unit, qty) => (unit === null || unit === undefined ? '' : (Math.round(unit * qty * 100) / 100).toFixed(2));
+function totalSetQty(st) {
+  if (st.unit === null || st.unit === undefined) return;
+  st.price = totalOf(st.unit, st.qty);
+  const i = $('.sheet input[name=price]'); if (i) i.value = st.price;
+  totalPerRefresh(st);
+}
+function totalTyped(st) {
+  const p = parseMoney(st.price);
+  st.unit = p === null || !st.qty ? null : p / st.qty;
+  totalPerRefresh(st);
+}
+const totalPerText = st => { const p = parseMoney(st.price); return p !== null && st.qty > 1 ? `That is ${money(p / st.qty)} per bottle.` : ''; };
+function totalPerRefresh(st) { const t = $('#total-per'); if (t) t.textContent = totalPerText(st); }
+const totalFieldHtml = (st, k) => `<div class="field"><label for="total-in">Total${curLabel()}</label><input id="total-in" name="price" data-input="${k}" inputmode="decimal" placeholder="For example 270.00" value="${esc(st.price)}"><span class="muted tiny" id="total-per">${totalPerText(st)}</span></div>`;
+const unitPrice = st => (st.unit === null || st.unit === undefined ? '' : Math.round(st.unit * 100) / 100);
+/* Delivered or Ordered: the + sheet and the order sheet switch into each other */
+const buyStatusHtml = ordered => `<div class="field buy-status"><span>Status</span><div class="toggle"><button class="${ordered ? '' : 'on'}" data-act="buy-status" data-v="delivered" aria-pressed="${!ordered}">Delivered</button><button class="${ordered ? 'on' : ''}" data-act="buy-status" data-v="ordered" aria-pressed="${ordered}">Ordered</button></div></div>`;
+const isBuyIn = st => st && st.kind === 'in' && st.type === 'Purchase';
+
 /** Bottles out of the cellar. With several locations the location has to be chosen first. */
 function openRemoveSheet(id, i) {
   const w = wineById(id);
@@ -58,12 +81,13 @@ function openEditEntry(id, record) {
   RS = {
     kind: r.dir, mode: record ? 'record' : 'edit', id: r.id, wineId: r.wineId, loc: r.loc, qty: r.qty,
     type: r.type, occasion: r.occasion, food: r.food, note: r.note, date: r.date || todayISO(),
-    price: priceInput(r.price, r.priceCur), priceInit: priceInput(r.price, r.priceCur), origPrice: r.price, origCur: r.priceCur,
+    price: priceInput(r.price, r.priceCur), priceInit: priceInput(r.price, r.priceCur), origPrice: r.price, origCur: r.priceCur, qtyInit: r.qty,
     pp: newPicker('people', r.people, { withHearts: r.dir === 'out', hearts }),
     rp: newPicker('retailers', r.retailer, { single: true }), website: site, websiteInit: site
   };
   if (r.dir === 'out' && !REMOVAL_TYPES.includes(RS.type)) RS.type = 'Other';
   if (r.dir === 'in' && !ADD_TYPES.some(t => t[0] === RS.type)) RS.type = 'Added';
+  if (isBuyIn(RS)) { RS.unit = r.price === null || r.price === '' ? null : unitOf(r.price, r.priceCur); RS.price = totalOf(RS.unit, RS.qty); RS.priceInit = RS.price; }
   renderSheet();
 }
 
@@ -124,10 +148,11 @@ function renderSheet() {
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" class="shelf-val">${esc(shelfText(RS.loc, RS.shelf))}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
         ${posFieldHtml('rs')}
       </div>${posPanelHtml('rs')}<div id="rs-zone">${zoneLineHtml(RS.loc, RS.shelf, w, 'rs-zone')}</div><p class="muted tiny" style="margin:-6px 0 0" id="rs-hint">${placeHint()}</p>` : '';
-    body = `${typeGrid}${locs}${place}${qty}${RS.mode === 'add' ? `<div id="space-note">${spaceNoteHtml(RS.loc, RS.qty, w)}</div>` : ''}${date}
+    const status = RS.mode === 'add' && RS.type === 'Purchase' && !RS.orderId ? buyStatusHtml(false) : '';
+    body = `${typeGrid}${status}${locs}${place}${qty}${RS.mode === 'add' ? `<div id="space-note">${spaceNoteHtml(RS.loc, RS.qty, w)}</div>` : ''}${date}
       ${RS.type === 'Purchase' ? picker('Retailer') : RS.type === 'Received' ? picker('From') : ''}
       ${showSite ? `<label class="field">Website of ${esc(RS.rp.people[0].name)}<input name="website" data-input="rs" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(RS.website)}"></label>` : ''}
-      ${RS.type === 'Purchase' ? priceField('Purchase price per bottle') : RS.type === 'Received' ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>` : ''}
+      ${RS.type === 'Purchase' ? totalFieldHtml(RS, 'rs') : RS.type === 'Received' ? `<div class="field">Purchase price<div class="static">${money(0)}, gift</div></div>` : ''}
       ${note}
       ${RS.mode === 'record' && !RS.id ? '<p class="muted tiny" style="margin:0">Only adds the purchase to the journal. Change the number of bottles in Storage.</p>' : ''}`;
   }
@@ -239,7 +264,9 @@ function entryFields(st) {
   const withPrice = st.type === 'Sale' || st.type === 'Purchase';
   let price = '', priceCur = '';
   if (withPrice && str(st.price).trim()) {
-    if (st.priceInit !== undefined && str(st.price).trim() === st.priceInit && st.origPrice !== null) { price = st.origPrice; priceCur = st.origCur; }
+    const same = st.priceInit !== undefined && str(st.price).trim() === st.priceInit && st.origPrice !== null && (!isBuyIn(st) || st.qty === st.qtyInit);
+    if (same) { price = st.origPrice; priceCur = st.origCur; }
+    else if (isBuyIn(st)) { const p = parseMoney(st.price); price = p === null ? null : Math.round(p / Math.max(1, st.qty) * 100) / 100; priceCur = cur(); }
     else { price = parseMoney(st.price); priceCur = cur(); }
   }
   const people = out || st.type === 'Received' ? st.pp : null;

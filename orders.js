@@ -33,39 +33,39 @@ function openOrderSheet(src, existing) {
   const base = o || src;
   RS = {
     kind: 'order', mode: o ? 'edit' : 'new', id: o ? o.id : newId('o'), src: Object.assign({}, base),
-    qty: (o ? o.qty : src.qty) || 6, pmode: 'bottle',
-    price: o ? (o.price === null ? '' : priceInput(o.price, o.priceCur)) : (src.price ? priceInput(src.price, src.priceCur || cur()) : ''),
+    qty: (o ? o.qty : src.qty) || 6,
+    unit: o ? (o.price === null ? null : unitOf(o.price, o.priceCur)) : src.unit !== undefined ? src.unit : (src.price ? unitOf(src.price, src.priceCur || cur()) : null),
     rp: newPicker('retailers', (o ? o.retailer : src.retailer) || '', { single: true }),
     ordered: o ? o.ordered || todayISO() : todayISO(),
     expected: o ? o.expected : '', sub: o ? o.sub : false, subYear: o && o.sub && o.expected ? o.expected.slice(0, 4) : String(new Date().getFullYear() + 1),
     note: o ? o.note : '', wishId: src && src.wishId || '', delivered: false,
     website: src && src.website ? src.website : ''
   };
+  RS.price = totalOf(RS.unit, RS.qty);
+  if (src && src.note) RS.note = src.note;
   renderSheet();
 }
 
 function orderSheetHtml() {
   const st = RS, s = st.src;
   const title = [s.producer, s.name, s.vintage].filter(Boolean).join(' ') || (s.wineId && wineById(s.wineId) ? fullName(wineById(s.wineId)) : 'Wine');
-  const p = parseMoney(st.price);
-  const per = p !== null && st.pmode === 'total' && st.qty ? p / st.qty : null;
   const tg = (act, v, on, label) => `<button class="${on ? 'on' : ''}" data-act="${act}" data-v="${v}" aria-pressed="${on}">${label}</button>`;
-  return `<div class="sheet-backdrop" data-act="ord-close"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ordered"><div class="grab"></div>
-    <div class="between"><div style="min-width:0"><h2 style="font-size:18px;font-weight:600">${st.mode === 'edit' ? 'Edit order' : 'Ordered'}</h2><p class="small muted ellipsis" style="margin:2px 0 0">${esc(title)}</p></div><button class="icon-btn" data-act="ord-close" aria-label="Close">${ICON.x}</button></div>
+  const head = st.mode === 'edit' ? 'Edit order' : st.delivered ? 'Bottles added' : 'Ordered';
+  return `<div class="sheet-backdrop" data-act="ord-close"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${head}"><div class="grab"></div>
+    <div class="between"><div style="min-width:0"><h2 style="font-size:18px;font-weight:600">${head}</h2><p class="small muted ellipsis" style="margin:2px 0 0">${esc(title)}</p></div><button class="icon-btn" data-act="ord-close" aria-label="Close">${ICON.x}</button></div>
+    ${st.mode === 'new' ? buyStatusHtml(!st.delivered) : ''}
     <div class="between"><span>Bottles</span><div class="stepper"><button data-act="ord-qty" data-d="-1" aria-label="Fewer">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="ord-qty" data-input="ord-qty" aria-label="Number of bottles" value="${st.qty}"><button data-act="ord-qty" data-d="1" aria-label="More">${ICON.plus}</button></div></div>
-    <div class="field"><span>Price${curLabel()}</span><div class="toggle">${tg('ord-pmode', 'bottle', st.pmode === 'bottle', 'Per bottle')}${tg('ord-pmode', 'total', st.pmode === 'total', 'Total')}</div>
-      <input name="price" data-input="ord" inputmode="decimal" placeholder="${st.pmode === 'total' ? 'For example 270.00' : 'For example 45.00'}" value="${esc(st.price)}">
-      <span class="muted tiny" id="ord-per">${per !== null ? `That is ${esc(money(per))} per bottle.` : ''}</span></div>
+    ${totalFieldHtml(st, 'ord')}
     <div class="field"><span>Retailer</span><div id="people-chips" class="chips">${peopleChipsHtml()}</div>
       <input id="people-input" data-input="people" aria-label="Retailer" placeholder="Type the name of a shop or winery"${pickInputAttrs()} autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
       <div id="people-sugg">${peopleSuggHtml()}</div></div>
     ${ordNewRetailer() ? `<label class="field">Website of ${esc(ordNewRetailer())}<input name="website" data-input="ord" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(st.website)}"></label>` : ''}
-    <label class="field">Ordered on<input type="date" name="ordered" data-input="ord" value="${esc(st.ordered)}"></label>
+    ${st.delivered ? '' : `<label class="field">Ordered on<input type="date" name="ordered" data-input="ord" value="${esc(st.ordered)}"></label>
     <div class="field"><span>Delivery</span><div class="toggle">${tg('ord-sub', '0', !st.sub, 'Expected on')}${tg('ord-sub', '1', st.sub, 'Subscription')}</div>
       ${st.sub ? `<input name="subYear" data-input="ord" inputmode="numeric" maxlength="4" placeholder="Year of delivery" aria-label="Year of delivery" value="${esc(st.subYear)}"><span class="muted tiny">En primeur and other subscriptions, delivered in a later year.</span>`
-        : `<input type="date" name="expected" data-input="ord" aria-label="Expected delivery" value="${esc(st.expected)}"><span class="muted tiny">Leave it empty if you do not know yet.</span>`}</div>
+        : `<input type="date" name="expected" data-input="ord" aria-label="Expected delivery" value="${esc(st.expected)}"><span class="muted tiny">Leave it empty if you do not know yet.</span>`}</div>`}
     <label class="field">Note<textarea name="note" data-input="ord" rows="2" placeholder="Order number, case, anything to remember">${esc(st.note)}</textarea></label>
-    ${st.mode === 'new' ? `<label class="switch"><input type="checkbox" data-change="ord-delivered"${st.delivered ? ' checked' : ''}>Already delivered, store the bottles now</label>` : ''}
+    ${st.delivered ? '<p class="muted tiny" style="margin:-6px 0 0">Next you add the wine to your cellar and choose where the bottles go.</p>' : ''}
     <div class="grid2"><button class="btn" data-act="ord-close">Cancel</button><button class="btn primary" data-act="ord-save">${st.delivered ? 'Save and store' : 'Save'}</button></div>
     ${st.mode === 'edit' ? '<button class="btn danger block" data-act="ord-del">Delete order</button>' : ''}
   </div>`;
@@ -84,7 +84,7 @@ async function saveOrderSheet() {
   const s = st.src;
   const o = {
     id: st.id, wineId: str(s.wineId), producer: str(s.producer), name: str(s.name), vintage: str(s.vintage), type: str(s.type), region: str(s.region), grapes: str(s.grapes), size: Number(s.size) || 75,
-    qty, price: p === null ? '' : Math.round((st.pmode === 'total' ? p / qty : p) * 100) / 100, priceCur: cur(),
+    qty, price: p === null ? '' : Math.round(p / qty * 100) / 100, priceCur: cur(),
     retailer: P.people.length ? P.people[0].name : '', ordered: st.ordered || todayISO(),
     expected: st.sub ? `${st.subYear}-12-31` : st.expected || '', sub: !!st.sub, note: str(st.note).trim(),
     details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500)
@@ -145,8 +145,7 @@ function orderFromWine(id) {
   const w = wineById(id);
   if (!w) return;
   const last = inEntries(w).filter(e => e.type === 'Purchase').sort((a, b) => b.date.localeCompare(a.date))[0];
-  openOrderSheet({ wineId: w.id, producer: w.producer, name: w.name, vintage: w.vintage, type: w.type, region: w.region, grapes: w.grapes, size: w.size,
-    qty: last ? last.qty : 6, price: last && last.price !== null ? last.price : null, priceCur: cur(), retailer: last ? last.retailer : '' });
+  openOrderSheet(Object.assign(wineSrc(w), { qty: last ? last.qty : 6, price: last && last.price !== null ? last.price : null, priceCur: last ? last.priceCur || cur() : cur(), retailer: last ? last.retailer : '' }));
 }
 
 /* ---------------------------------------------------------------- arrival: only the storage place is left */
@@ -157,7 +156,8 @@ function orderArrive(id) {
   const w = o.wineId && wineById(o.wineId);
   if (w) {
     openAddSheet(w.id);
-    Object.assign(RS, { type: 'Purchase', qty: o.qty, price: o.price === null ? '' : priceInput(o.price, o.priceCur), note: orderNote(o), rp: newPicker('retailers', o.retailer, { single: true }), orderId: o.id, date: todayISO() });
+    const unit = o.price === null ? null : unitOf(o.price, o.priceCur);
+    Object.assign(RS, { type: 'Purchase', qty: o.qty, unit, price: totalOf(unit, o.qty), note: orderNote(o), rp: newPicker('retailers', o.retailer, { single: true }), orderId: o.id, date: todayISO() });
     renderSheet();
     return;
   }
@@ -242,6 +242,7 @@ function wishSectionHtml() {
 }
 /* the header icons in Insights lead to these sections */
 function goSection(id) {
+  if (typeof PREV !== 'undefined' && PREV.open) closePreview();
   if (route().p === 'insights') { const el = $('#' + id); if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -10); } return; }
   U.jumpTo = id;
   go('#/insights');
@@ -257,23 +258,56 @@ const OR_ACTS = {
   'ord-close': () => closeSheet(),
   'ord-save': () => saveOrderSheet(),
   'ord-del': () => { const id = RS && RS.id; if (!id || !confirm('Delete this order?')) return; closeSheet(); deleteOrder(id); },
-  'ord-qty': el => { RS.qty = clamp((Number(RS.qty) || 1) + Number(el.dataset.d), 1, 999); renderSheet(); },
-  'ord-pmode': el => { RS.pmode = el.dataset.v === 'total' ? 'total' : 'bottle'; renderSheet(); },
+  'ord-qty': el => { RS.qty = clamp((Number(RS.qty) || 1) + Number(el.dataset.d), 1, 999); $('#ord-qty').value = RS.qty; totalSetQty(RS); },
+  'buy-status': el => buyStatus(el.dataset.v === 'ordered'),
   'ord-sub': el => { RS.sub = el.dataset.v === '1'; renderSheet(); },
   'go-orders': () => goSection('orders'),
   'ord-notyet': () => { D = null; U.jumpTo = 'orders'; go('#/insights', true); },
   'go-wishlist': () => goSection('wishlist'),
   'ord-more': el => { const o = S.orders.find(x => x.id === el.dataset.id); if (!o) return; const base = sgBase(o); if (o.details && !previewOf(base)) prevRemember(base, o.details); openPreview(base, o.why ? esc(o.why) : '', null); }
 };
-const OR_CHANGES = { 'ord-delivered': el => { if (RS) { RS.delivered = el.checked; renderSheet(); } } };
+const OR_CHANGES = {};
 const OR_INPUTS = {
   ord: el => {
     if (!RS) return;
     RS[el.name] = el.value;
-    if (el.name === 'price') { const p = parseMoney(RS.price), t = $('#ord-per'); if (t) t.textContent = p !== null && RS.pmode === 'total' && RS.qty ? `That is ${money(p / RS.qty)} per bottle.` : ''; }
+    if (el.name === 'price') totalTyped(RS);
   },
-  'ord-qty': el => { if (RS) RS.qty = clamp(Math.round(Number(el.value.replace(/\D/g, '')) || 1), 1, 999); }
+  'ord-qty': el => { if (!RS) return; RS.qty = clamp(Math.round(Number(el.value.replace(/\D/g, '')) || 1), 1, 999); totalSetQty(RS); }
 };
+
+/* Delivered or Ordered. A wine you have switches between the + sheet and the order sheet,
+   a new wine is stored through the add form after saving. */
+function buyStatus(ordered) {
+  const st = RS;
+  if (!st) return;
+  const P = st.rp;
+  if (P && P.typing.trim() && !P.people.length && PK() === P) addPerson(P.typing);
+  const ret = P && P.people.length ? P.people[0].name : '';
+  const known = ret && S.retailers.find(r => lc(r.name) === lc(ret));
+  if (st.kind === 'order') {
+    if (st.delivered === !ordered) return;
+    const w = st.src.wineId && wineById(st.src.wineId);
+    if (!ordered && w) {
+      const site = known ? str(known.website) : '';
+      openAddSheet(w.id);
+      Object.assign(RS, { type: 'Purchase', qty: st.qty, unit: st.unit, price: st.price, note: st.note, rp: newPicker('retailers', ret, { single: true }),
+        website: known ? site : st.website, websiteInit: site });
+      renderSheet();
+      return;
+    }
+    st.delivered = !ordered;
+    renderSheet();
+    return;
+  }
+  if (st.kind === 'in' && ordered) {
+    const w = wineById(st.wineId);
+    if (!w) return;
+    openOrderSheet(Object.assign(wineSrc(w), { qty: st.qty, unit: st.unit === undefined ? (parseMoney(st.price) === null ? null : parseMoney(st.price) / st.qty) : st.unit,
+      retailer: ret, note: st.note, website: known ? '' : st.website }));
+  }
+}
+const wineSrc = w => ({ wineId: w.id, producer: w.producer, name: w.name, vintage: w.vintage, type: w.type, region: w.region, grapes: w.grapes, size: w.size });
 
 /* ---------------------------------------------------------------- a suggested wine, the same everywhere
    ref: cons:i (consultant), wl:i (wine list), check:i (Will I like it?), wish:id (wishlist) */
@@ -335,6 +369,7 @@ const SG_ACTS = {
     if (!g) return;
     const x = wishOf(g.base);
     if (x) {
+      if (!await ask({ title: 'Remove from your wishlist?', text: orderTitle(x), yes: 'Remove', no: 'Keep', danger: true })) return;
       if (PREV.open && g.k === 'wish') closePreview();
       await wishDelete(x.id);
       toast('Removed from your wishlist', 2500);

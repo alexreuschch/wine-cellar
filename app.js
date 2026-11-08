@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.7.1';
+const APP_VERSION = '3.7.2';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -593,9 +593,33 @@ function nav(active) {
 function toast(msg, ms = 3400) {
   const t = $('#toast');
   t.textContent = msg;
+  t.classList.remove('act');
   t.classList.add('show');
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.remove('show'), ms);
+}
+/* a toast with one button, for example Show after saving to the wishlist */
+function toastAct(msg, label, fn, ms = 5000) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(msg)}</span><button type="button">${esc(label)}</button>`;
+  t.querySelector('button').onclick = () => { t.classList.remove('show', 'act'); fn(); };
+  t.classList.add('show', 'act');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove('show', 'act'), ms);
+}
+
+/* a short question before something that is easy to do by mistake: resolves true for yes */
+function ask(o) {
+  let root = $('#ask-root');
+  if (!root) { root = document.createElement('div'); root.id = 'ask-root'; document.body.appendChild(root); }
+  return new Promise(done => {
+    const end = v => { root.innerHTML = ''; done(v); };
+    root.innerHTML = `<div class="sheet-backdrop ask-bd"></div><div class="sheet ask-sheet" role="alertdialog" aria-modal="true" aria-labelledby="ask-title">
+      <h2 id="ask-title" style="font-size:18px;font-weight:600">${esc(o.title)}</h2>${o.text ? `<p class="small muted" style="margin:0">${esc(o.text)}</p>` : ''}
+      <div class="grid2"><button class="btn" data-ask="0">${esc(o.no || 'Cancel')}</button><button class="btn ${o.danger ? 'danger' : 'primary'}" data-ask="1">${esc(o.yes || 'OK')}</button></div></div>`;
+    root.querySelector('.ask-bd').onclick = () => end(false);
+    root.querySelectorAll('[data-ask]').forEach(b => { b.onclick = e => { e.stopPropagation(); end(b.dataset.ask === '1'); }; });
+  });
 }
 
 function busy(on, label = 'Saving…') {

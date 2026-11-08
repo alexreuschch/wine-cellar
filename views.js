@@ -480,8 +480,7 @@ function stockHtml(w) {
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
     ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}
-    ${ordersFor(w.id).map(o => `<button class="ord-line" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.box}<span><b>${o.qty} on order</b>${o.retailer ? ` from ${esc(o.retailer)}` : ''} · ${esc(orderWhen(o).text)}</span></button>`).join('')}
-    <button class="link-btn" style="align-self:flex-start;margin-top:-4px" data-act="ord-wine" data-id="${esc(w.id)}">${ICON.cart}I ordered it</button></section>`;
+    ${ordersFor(w.id).map(o => `<button class="ord-line" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.box}<span><b>${o.qty} on order</b>${o.retailer ? ` from ${esc(o.retailer)}` : ''} · ${esc(orderWhen(o).text)}</span></button>`).join('')}</section>`;
 }
 
 /* where and when you tasted it out, with your rating going to the wine; for a discovery also how to bring it into the cellar */

@@ -269,7 +269,7 @@ const ACTS = {
     if (h) h.textContent = placeHint();
     const z = $('#rs-zone'); if (z) z.innerHTML = zoneLineHtml(RS.loc, RS.shelf, wineById(RS.wineId), 'rs-zone');
   },
-  'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').value = RS.qty; refreshSpaceNotes(); },
+  'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').value = RS.qty; refreshSpaceNotes(); if (isBuyIn(RS)) totalSetQty(RS); },
   'rs-skip': () => saveSheet(false),
   'rs-save': () => saveSheet(true),
   'rs-delete': () => startDelete(),
@@ -424,6 +424,7 @@ const INPUTS = {
   rs: el => {
     if (!RS) return;
     RS[el.name] = el.value;
+    if (el.name === 'price' && isBuyIn(RS)) totalTyped(RS);
     const h = el.name === 'pos' && $('#rs-hint');
     if (h) h.textContent = placeHint();
   },
@@ -586,6 +587,7 @@ function setQty(el, final) {
   if (k === 'rs' && RS) {
     v = clamp(v === null ? 1 : v, 1, qtyMax());
     RS.qty = v;
+    if (isBuyIn(RS)) totalSetQty(RS);
   } else if (k === 'st' && D) {
     v = clamp(v === null ? 0 : v, 0, 9999);
     D.stock[Number(el.dataset.i)].n = v;

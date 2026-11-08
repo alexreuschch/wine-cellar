@@ -415,7 +415,7 @@ async function listSave(p) {
   sommRefresh(false);
   try {
     await api('saveWish', { wish: Object.assign({}, x, { offer: '', details: x.details ? JSON.stringify(x.details) : '' }) });
-    toast('Saved to your wishlist');
+    wishSavedToast();
   } catch (e) {
     S.wishlist = S.wishlist.filter(w => w.id !== x.id);
     persist();
@@ -755,6 +755,7 @@ function viewDiscover() {
     <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Consultant</h1></header>
     <a class="cons-check" href="#/sommelier/check">${ICON.search}<span><b>Know which wine you want?</b> Check it in Will I like it?: type or say its name.</span>${ICON.chevron}</a>
+    ${S.wishlist.length ? `<button class="cons-check" data-act="go-wishlist">${ICON.bookmark}<span><b>Your wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</b> in Insights</span>${ICON.chevron}</button>` : ''}
     ${ttOfferHtml()}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The consultant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <section class="ins-sec" style="border-top:0;padding-top:0"><div class="sec-head"><h2>Your profile</h2></div>
@@ -817,6 +818,7 @@ async function consOffer(p, key, wishId) {
   refreshView();
 }
 
+const wishSavedToast = () => toastAct('Saved to your wishlist in Insights.', 'Show', () => goSection('wishlist'));
 async function consSave(p) {
   const x = normWish(Object.assign({}, p, { id: newId('x'), offer: CONS.offers[wishKey(p)] || null, createdAt: new Date().toISOString(), details: previewOf(p) }));
   S.wishlist.push(x);
@@ -824,7 +826,7 @@ async function consSave(p) {
   refreshView();
   try {
     await api('saveWish', { wish: Object.assign({}, x, { offer: x.offer ? JSON.stringify(x.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) });
-    toast('Saved to your wishlist');
+    wishSavedToast();
   } catch (e) {
     S.wishlist = S.wishlist.filter(w => w.id !== x.id);
     persist();
@@ -1013,7 +1015,7 @@ async function checkSave(i) {
     price: o ? o.v : '', priceCur: o ? o.cur : cur(), label: 'Will I like it?', why: str(a.answer), createdAt: new Date().toISOString(), fit: a.fit, details: previewOf(x0) });
   S.wishlist.push(x);
   persist();
-  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) }); toast('Saved to your wishlist'); }
+  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) }); wishSavedToast(); }
   catch (e) { S.wishlist = S.wishlist.filter(w => w.id !== x.id); persist(); toast('Not saved: ' + e.message); }
 }
 
