@@ -722,7 +722,9 @@ function producerMineHtml(mine) {
   const avgPrice = priced.length ? priced.reduce((a, r) => a + (conv(r.price, r.priceCur) || 0) * (r.qty || 1), 0) / priced.reduce((a, r) => a + (r.qty || 1), 0) : null;
   const recs = [...new Set(buys.flatMap(r => namesOf(r.people)))];
   const dash = '<span class="muted">–</span>';
-  const links = (k, list) => list.map(v => `<a class="pm-link" href="#/journal" data-act="info-j" data-k="${k}" data-v="${esc(v)}">${esc(v)}</a>`).join(', ');
+  // chips like the terms in a background: the number is what the journal shows when you tap it
+  const hits = (k, v) => moves.filter(r => (k === 'retailer' ? lc(r.retailer) === lc(v) : namesOf(r.people).some(x => lc(x) === lc(v)))).length;
+  const links = (k, list) => `<span class="gi-chips pm-chips">${list.map(v => `<button class="gi-chip link" data-act="info-j" data-k="${k}" data-v="${esc(v)}">${esc(v)}<em>${hits(k, v)}</em></button>`).join('')}</span>`;
   const row = (k, v) => `<div class="pm-row"><span>${k}</span><b>${v || dash}</b></div>`;
   const byRating = list => list.slice().sort((a, b) => (b.myRating === null ? -1 : b.myRating) - (a.myRating === null ? -1 : a.myRating) || str(b.vintage).localeCompare(str(a.vintage)));
   const bar = x => `<a class="pm-bar" href="#/wine/${encodeURIComponent(x.id)}" data-act="info-wine"><span class="ellipsis">${esc(x.name || x.producer)} ${esc(x.vintage || '')}</span>${x.myRating !== null ? `${segsHtml(x.myRating, 6)}<b>${x.myRating}%</b>` : '<small class="muted pm-nr">Not rated yet</small>'}</a>`;
