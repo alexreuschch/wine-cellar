@@ -97,7 +97,7 @@ function viewInsights() {
   const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><button class="icon-btn magic-btn rh-ic" data-act="go-orders" aria-label="Ordered${no ? `, ${no} orders` : ''}">${ICON.box}${no ? `<span class="rh-n${late ? ' late' : ''}">${no}</span>` : ''}</button><button class="icon-btn magic-btn rh-ic" data-act="go-wishlist" aria-label="Wishlist${nw ? `, ${nw} wines` : ''}">${ICON.bookmark}${nw ? `<span class="rh-n">${nw}</span>` : ''}</button><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
-  if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;
+  if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div>${ordersSectionHtml()}${wishSectionHtml()}</main>${nav('insights')}`;
   const bottles = w => w.count;
   const year = now.getFullYear();
   const out = [];
@@ -196,8 +196,8 @@ function viewInsights() {
     <p class="small muted" style="margin:12px 0 0">Bottles in stock at the end of each month</p>${columns(bottlesByMonth(), 'var(--gold)')}`));
   out.push(`<section class="ins-sec discover-card"><div class="sec-head"><h2>New wines for your cellar</h2></div>
     <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
-    <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a>
-    ${S.wishlist.length ? `<a class="small" href="#/discover" style="text-align:center">Wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</a>` : ''}</section>`);
+    <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a></section>`);
+  out.push(ordersSectionHtml(), wishSectionHtml());
   return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${out.join('')}</main>${nav('insights')}`;
 }
 
@@ -481,7 +481,7 @@ function stockHtml(w) {
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
     ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}
     ${ordersFor(w.id).map(o => `<button class="ord-line" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.box}<span><b>${o.qty} on order</b>${o.retailer ? ` from ${esc(o.retailer)}` : ''} · ${esc(orderWhen(o).text)}</span></button>`).join('')}
-    <button class="link-btn" style="align-self:flex-start;margin-top:-4px" data-act="ord-wine" data-id="${esc(w.id)}">${ICON.cart}Order more</button></section>`;
+    <button class="link-btn" style="align-self:flex-start;margin-top:-4px" data-act="ord-wine" data-id="${esc(w.id)}">${ICON.cart}I ordered it</button></section>`;
 }
 
 /* where and when you tasted it out, with your rating going to the wine; for a discovery also how to bring it into the cellar */
@@ -516,8 +516,8 @@ function offerHtml(w) {
     body = `<p class="muted small" style="margin:0">${busyNow ? 'Searching online shops…' : `The online shop with the lowest price for this wine, for buying in ${area}, to buy more bottles.`}</p>`;
   } else {
     body = `<div class="between" style="gap:12px">${offerShopHtml(o, w)}
-      <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>
-      ${offerShipHtml(o, lastBuyQty(w))}
+      <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener" data-shop="${esc(o.shop)}" data-sref="wine:${esc(w.id)}">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>
+      ${offerShipHtml(o, lastBuyQty(w))}${shopBackHtml('wine:' + w.id)}
       <p class="muted tiny" style="margin:0">Found by AI on the web. Check price and vintage in the shop before you buy.</p>
       ${offerOtherCountry(o) ? `<p class="muted tiny" style="margin:0">Found for ${esc(offerForName(o))}. Tap Update best offer to search for ${esc(area)}.</p>` : ''}`;
   }

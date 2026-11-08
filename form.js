@@ -216,6 +216,7 @@ function formBody() {
     <button class="btn accent block" data-act="ai-refresh">${ICON.spark}Update wine info with AI</button>
     <p class="muted tiny" style="margin:-10px 0 0">Fills in details, drinking window, taste profile and background from what you entered, for example the vintage. Fields you changed here stay as they are. About 3 cents.</p>`;
   return `
+    ${orderBannerHtml()}
     ${D.preview ? `<img class="preview" src="${esc(D.preview)}" alt="Label">` : ''}
     <button class="btn ghost" data-act="new-photo">${D.preview ? 'Replace label photo' : 'Add label photo'}</button>
     ${banner}
@@ -766,7 +767,7 @@ async function saveWineForm() {
       price: price === null ? '' : price, priceCur: price === null ? '' : cur(),
       retailer: acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '',
       people: acq.type === 'Received' ? acq.pp.people.map(p => p.name).join(', ') : '',
-      wineName: fullName(w)
+      wineName: fullName(w), note: D.orderNote || ''
     });
   }
   if (base) entries.push(...journalForCorrection(base, w.count - base.count, stock, fullName(w)));

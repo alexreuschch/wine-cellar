@@ -11,7 +11,8 @@ function normOrder(x) {
     region: str(x.region), grapes: str(x.grapes), size: Number(x.size) || 75, qty: Math.max(1, Number(x.qty) || 1),
     price: x.price === '' || x.price === null || x.price === undefined || isNaN(Number(x.price)) ? null : Number(x.price), priceCur: str(x.priceCur) || cur(),
     retailer: str(x.retailer), ordered: d(x.ordered), expected: d(x.expected), sub: x.sub === true || str(x.sub).toLowerCase() === 'true',
-    note: str(x.note), details, createdAt: str(x.createdAt)
+    note: str(x.note), details, createdAt: str(x.createdAt),
+    fit: x.fit === '' || x.fit === null || x.fit === undefined || isNaN(Number(x.fit)) ? null : Math.round(Number(x.fit)), why: str(x.why)
   };
 }
 const orderTitle = o => { const w = o.wineId && wineById(o.wineId); return w ? fullName(w) : [o.producer, o.name, o.vintage].filter(Boolean).join(' '); };
@@ -37,7 +38,8 @@ function openOrderSheet(src, existing) {
     rp: newPicker('retailers', (o ? o.retailer : src.retailer) || '', { single: true }),
     ordered: o ? o.ordered || todayISO() : todayISO(),
     expected: o ? o.expected : '', sub: o ? o.sub : false, subYear: o && o.sub && o.expected ? o.expected.slice(0, 4) : String(new Date().getFullYear() + 1),
-    note: o ? o.note : '', wishId: src && src.wishId || ''
+    note: o ? o.note : '', wishId: src && src.wishId || '', delivered: false,
+    website: src && src.website ? src.website : ''
   };
   renderSheet();
 }
@@ -57,16 +59,20 @@ function orderSheetHtml() {
     <div class="field"><span>Retailer</span><div id="people-chips" class="chips">${peopleChipsHtml()}</div>
       <input id="people-input" data-input="people" aria-label="Retailer" placeholder="Type the name of a shop or winery"${pickInputAttrs()} autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(PK() ? PK().typing : '')}">
       <div id="people-sugg">${peopleSuggHtml()}</div></div>
+    ${ordNewRetailer() ? `<label class="field">Website of ${esc(ordNewRetailer())}<input name="website" data-input="ord" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(st.website)}"></label>` : ''}
     <label class="field">Ordered on<input type="date" name="ordered" data-input="ord" value="${esc(st.ordered)}"></label>
     <div class="field"><span>Delivery</span><div class="toggle">${tg('ord-sub', '0', !st.sub, 'Expected on')}${tg('ord-sub', '1', st.sub, 'Subscription')}</div>
       ${st.sub ? `<input name="subYear" data-input="ord" inputmode="numeric" maxlength="4" placeholder="Year of delivery" aria-label="Year of delivery" value="${esc(st.subYear)}"><span class="muted tiny">En primeur and other subscriptions, delivered in a later year.</span>`
         : `<input type="date" name="expected" data-input="ord" aria-label="Expected delivery" value="${esc(st.expected)}"><span class="muted tiny">Leave it empty if you do not know yet.</span>`}</div>
     <label class="field">Note<textarea name="note" data-input="ord" rows="2" placeholder="Order number, case, anything to remember">${esc(st.note)}</textarea></label>
-    <div class="grid2"><button class="btn" data-act="ord-close">Cancel</button><button class="btn primary" data-act="ord-save">Save</button></div>
+    ${st.mode === 'new' ? `<label class="switch"><input type="checkbox" data-change="ord-delivered"${st.delivered ? ' checked' : ''}>Already delivered, store the bottles now</label>` : ''}
+    <div class="grid2"><button class="btn" data-act="ord-close">Cancel</button><button class="btn primary" data-act="ord-save">${st.delivered ? 'Save and store' : 'Save'}</button></div>
     ${st.mode === 'edit' ? '<button class="btn danger block" data-act="ord-del">Delete order</button>' : ''}
   </div>`;
 }
 
+/* a retailer that is not in your list yet gets its website, from the link of the offer */
+const ordNewRetailer = () => { const P = RS && RS.rp; const n = P && P.people.length ? P.people[0].name : ''; return n && !S.retailers.some(r => lc(r.name) === lc(n)) ? n : ''; };
 async function saveOrderSheet() {
   const st = RS;
   const qty = Math.max(1, Math.round(Number(st.qty) || 0));
@@ -81,23 +87,25 @@ async function saveOrderSheet() {
     qty, price: p === null ? '' : Math.round((st.pmode === 'total' ? p / qty : p) * 100) / 100, priceCur: cur(),
     retailer: P.people.length ? P.people[0].name : '', ordered: st.ordered || todayISO(),
     expected: st.sub ? `${st.subYear}-12-31` : st.expected || '', sub: !!st.sub, note: str(st.note).trim(),
-    details: s.details || null
+    details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500)
   };
-  const wishId = st.wishId;
+  const wishId = st.wishId, delivered = st.delivered, site = str(st.website).trim(), newRet = o.retailer && !S.retailers.some(r => lc(r.name) === lc(o.retailer));
   closeSheet();
   const prev = S.orders.slice();
   const local = normOrder(o);
   S.orders = S.orders.filter(x => x.id !== o.id).concat([local]);
-  if (o.retailer && !S.retailers.some(r => lc(r.name) === lc(o.retailer))) S.retailers.push({ name: o.retailer, website: '' });
+  if (newRet) S.retailers.push({ name: o.retailer, website: site });
   persist();
   refreshView();
-  toast(wishId ? 'Ordered. Moved from the wishlist to Ordered in Insights.' : 'Saved under Ordered in Insights.', 3500);
+  if (!delivered) toast(wishId ? 'Moved from the wishlist to Ordered in Insights.' : 'Saved under Ordered in Insights.', 3500);
   try {
-    const saved = normOrder(await api('saveOrder', { order: o }));
+    const saved = normOrder(await api('saveOrder', { order: Object.assign({}, o, { details: o.details ? JSON.stringify(o.details) : '' }) }));
     S.orders = S.orders.filter(x => x.id !== saved.id).concat([saved]);
     persist();
     refreshView();
+    if (newRet && site) saveRetailerSite(o.retailer, site);
     if (wishId) wishDelete(wishId);
+    if (delivered) orderArrive(saved.id);
   } catch (e) { S.orders = prev; persist(); refreshView(); toast('Not saved: ' + e.message); }
 }
 
@@ -149,13 +157,15 @@ function orderArrive(id) {
   const w = o.wineId && wineById(o.wineId);
   if (w) {
     openAddSheet(w.id);
-    Object.assign(RS, { type: 'Purchase', qty: o.qty, price: o.price === null ? '' : priceInput(o.price, o.priceCur), note: o.note, rp: newPicker('retailers', o.retailer, { single: true }), orderId: o.id, date: todayISO() });
+    Object.assign(RS, { type: 'Purchase', qty: o.qty, price: o.price === null ? '' : priceInput(o.price, o.priceCur), note: orderNote(o), rp: newPicker('retailers', o.retailer, { single: true }), orderId: o.id, date: todayISO() });
     renderSheet();
     return;
   }
   D = newDraft('add', null);
   D.step = 'form';
   D.fromOrder = o.id;
+  D.orderFrom = o.retailer;
+  D.orderNote = orderNote(o);
   const set = (k, v) => { if (str(v)) { D.fields[k] = str(v); D.touched.add(k); } };
   set('producer', o.producer); set('name', o.name); set('vintage', o.vintage); set('region', o.region); set('grapes', o.grapes);
   if (TYPES.includes(o.type)) { D.fields.type = o.type; D.touched.add('type'); }
@@ -175,7 +185,13 @@ function orderArrive(id) {
   }
   go('#/add');
   if (!pv) setTimeout(() => { if (D && D.fromOrder === o.id) runAnalysis(); }, 50);
-  toast('Take a photo of the label if you like, choose where the bottles go, then save.', 5000);
+}
+/* one line in the journal: when it was ordered, the note of the order */
+const orderNote = o => [o.ordered ? `Ordered ${fmtDate(o.ordered)}` : '', o.note].filter(Boolean).join(' · ');
+/* the bar on top of the form when an order is stored */
+function orderBannerHtml() {
+  if (!D || !D.fromOrder) return '';
+  return `<div class="ord-banner">${ICON.box}<span><b>Delivery of your order${D.orderFrom ? ` from ${esc(D.orderFrom)}` : ''}</b><br>Take a photo of the label if you like, choose where the bottles go, then save.</span><button class="btn" data-act="ord-notyet">Not delivered yet</button></div>`;
 }
 /* after the bottles are stored: a partial delivery keeps the rest on the list */
 async function orderArrived(id, n) {
@@ -196,27 +212,39 @@ function orderCardHtml(o) {
   const title = w ? `<a href="#/wine/${encodeURIComponent(w.id)}">${esc(orderTitle(o))}</a>` : esc(orderTitle(o));
   const price = o.price !== null ? `${o.qty} × ${esc(priceText(o.price, o.priceCur))}` : `${o.qty} ${o.qty === 1 ? 'bottle' : 'bottles'}`;
   const sub = [o.region, o.type].filter(Boolean).join(' · ');
-  return `<div class="ord-card">
+  return `<div class="cons-card ord-card">
     <div class="between" style="gap:8px"><span class="ord-when ${when.cls}">${esc(when.text)}</span><span class="small">${price}</span></div>
     <div><p class="cons-title">${title}</p>${sub ? `<p class="small muted" style="margin:2px 0 0">${countryOf(o) ? flagOf(o) : ''}${esc(sub)}</p>` : ''}</div>
     <p class="small" style="margin:0">${o.retailer ? `From <b>${esc(o.retailer)}</b> · ` : ''}ordered ${esc(fmtDate(o.ordered || o.createdAt))}${w ? ` · ${w.count} in stock` : ' · new to your cellar'}</p>
     ${o.note ? `<p class="small muted" style="margin:0">${esc(o.note)}</p>` : ''}
-    <div class="grid2"><button class="btn" data-act="ord-edit" data-id="${esc(o.id)}">Edit</button><button class="btn primary" data-act="ord-arrive" data-id="${esc(o.id)}">${ICON.check}Arrived</button></div>
+    ${w ? '' : fitBarHtml(o.fit)}
+    <div class="cons-actions">${w ? '' : `<button class="link-btn" data-act="ord-more" data-id="${esc(o.id)}">${ICON.magic}More about this wine</button>`}<button class="link-btn" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.edit}Edit</button></div>
+    <button class="btn outline-gold block" data-act="ord-arrive" data-id="${esc(o.id)}">${ICON.box}Mark as delivered</button>
   </div>`;
 }
 
-function viewOrders() {
+/* in Insights, above the wishlist */
+function ordersSectionHtml() {
   const list = S.orders.slice().sort(orderSort);
   const bottles = list.reduce((a, o) => a + o.qty, 0);
   const total = list.reduce((a, o) => a + (o.price !== null ? (conv(o.price, o.priceCur) || 0) * o.qty : 0), 0);
   const old = S.version && S.version < 45;
-  return `<main class="screen has-nav">
-    <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
-    <header><h1 class="title">Ordered</h1><p class="muted small" style="margin:4px 0 0">Not yet delivered${list.length ? ` · ${list.length} ${list.length === 1 ? 'order' : 'orders'}, ${bottles} ${bottles === 1 ? 'bottle' : 'bottles'}${total ? `, ${esc(money(total))}` : ''}` : ''}</p></header>
-    ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">Orders need the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
-    ${list.length ? list.map(orderCardHtml).join('') : `<div class="empty" style="padding:24px 0"><p class="muted">Nothing on order. Tap <b>Ordered</b> on a wishlist wine, a suggestion of the consultant, a Will I like it? answer, or <b>Order more</b> on a wine page.</p></div>`}
-    ${list.length ? '<p class="muted tiny" style="margin:0">When bottles arrive, tap Arrived and choose where they go. Retailer, price and the details of the wine are filled in. If only part arrives, the rest stays here.</p>' : ''}
-  </main>${nav('insights')}`;
+  return `<section class="ins-sec list-sec" id="orders"><div class="sec-head"><h2 class="list-sec-h">${ICON.box}Ordered, not yet delivered</h2>${list.length ? `<span class="muted small">${list.length}</span>` : ''}</div>
+    ${old ? '<p class="small" style="margin:0;color:var(--danger)">Orders need the new Code.gs.</p>' : ''}
+    ${list.length ? `<p class="small muted" style="margin:-4px 0 0">${bottles} ${bottles === 1 ? 'bottle' : 'bottles'}${total ? `, ${esc(money(total))}` : ''}</p><div class="cons-list">${list.map(orderCardHtml).join('')}</div>`
+      : '<p class="small muted" style="margin:0">Nothing on its way. Tap <b>I ordered it</b> on a wine you bought online, at a winery or by phone.</p>'}
+  </section>`;
+}
+function wishSectionHtml() {
+  return `<section class="ins-sec list-sec" id="wishlist"><div class="sec-head"><h2 class="list-sec-h">${ICON.bookmark}Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
+    ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save wines here from the consultant, a wine list or Will I like it?.</p>'}
+  </section>`;
+}
+/* the header icons in Insights lead to these sections */
+function goSection(id) {
+  if (route().p === 'insights') { const el = $('#' + id); if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -10); } return; }
+  U.jumpTo = id;
+  go('#/insights');
 }
 
 const OR_ACTS = {
@@ -232,8 +260,12 @@ const OR_ACTS = {
   'ord-qty': el => { RS.qty = clamp((Number(RS.qty) || 1) + Number(el.dataset.d), 1, 999); renderSheet(); },
   'ord-pmode': el => { RS.pmode = el.dataset.v === 'total' ? 'total' : 'bottle'; renderSheet(); },
   'ord-sub': el => { RS.sub = el.dataset.v === '1'; renderSheet(); },
-  'go-orders': () => go('#/orders')
+  'go-orders': () => goSection('orders'),
+  'ord-notyet': () => { D = null; U.jumpTo = 'orders'; go('#/insights', true); },
+  'go-wishlist': () => goSection('wishlist'),
+  'ord-more': el => { const o = S.orders.find(x => x.id === el.dataset.id); if (!o) return; const base = sgBase(o); if (o.details && !previewOf(base)) prevRemember(base, o.details); openPreview(base, o.why ? esc(o.why) : '', null); }
 };
+const OR_CHANGES = { 'ord-delivered': el => { if (RS) { RS.delivered = el.checked; renderSheet(); } } };
 const OR_INPUTS = {
   ord: el => {
     if (!RS) return;
@@ -242,3 +274,106 @@ const OR_INPUTS = {
   },
   'ord-qty': el => { if (RS) RS.qty = clamp(Math.round(Number(el.value.replace(/\D/g, '')) || 1), 1, 999); }
 };
+
+/* ---------------------------------------------------------------- a suggested wine, the same everywhere
+   ref: cons:i (consultant), wl:i (wine list), check:i (Will I like it?), wish:id (wishlist) */
+
+const sgBase = p => ({ producer: str(p.producer), name: str(p.name), vintage: p.vintage ? String(p.vintage) : '', type: str(p.type), region: str(p.region), grapes: str(p.grapes) });
+const wishOf = base => S.wishlist.find(x => wishKey(x) === wishKey(base));
+const hostOf = url => { try { return new URL(url).hostname; } catch (e) { return ''; } };
+function sgGet(ref) {
+  const [k, v] = str(ref).split(':');
+  if (k === 'cons') {
+    const p = CONS.result && CONS.result.picks[Number(v)];
+    if (!p) return null;
+    return { k, ref, base: sgBase(p), fit: p.fit, why: p.why, offer: CONS.offers[wishKey(p)] || null, price: p.price, priceCur: p.priceCur, qty: p.qty, save: () => consSave(p), preview: () => consPreview(Number(v)) };
+  }
+  if (k === 'wl') {
+    const res = WL.result, p = res && res.picks[Number(v)];
+    if (!p) return null;
+    return { k, ref, base: Object.assign(sgBase(p), p.window || {}), fit: p.fit, why: p.why, offer: p.offer || null, price: p.shopPrice, priceCur: res.currency || cur(), qty: 6, save: () => listSave(p), preview: () => listPreview(Number(v)), taste: () => listTaste(Number(v)) };
+  }
+  if (k === 'check') {
+    const t = sommThread()[Number(v)], a = t && t.a;
+    if (!a) return null;
+    const x = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: '', type: '', region: a.region || '', grapes: '' };
+    const o = a.offer || a.worldOffer || null;
+    return { k, ref, base: sgBase(x), fit: a.fit, why: a.answer, offer: o, price: o ? o.v : null, priceCur: o ? o.cur : cur(), qty: 6, save: () => checkSave(Number(v)), preview: () => sommPreview(Number(v)), taste: () => sommTaste(Number(v)) };
+  }
+  if (k === 'wish') {
+    const x = S.wishlist.find(w => w.id === v);
+    if (!x) return null;
+    return { k, ref, base: sgBase(x), fit: x.fit, why: x.why, offer: x.offer, price: x.price, priceCur: x.priceCur, qty: x.qty || 6, wishId: x.id, details: x.details, preview: () => wishPreview(x.id) };
+  }
+  return null;
+}
+/* the four things you can do with a suggested wine */
+function sgActionsHtml(ref, opts = {}) {
+  const g = sgGet(ref);
+  if (!g) return '';
+  const wished = !!wishOf(g.base);
+  const b = (act, icon, label, on) => `<button class="link-btn${on ? ' on' : ''}" data-act="${act}" data-ref="${esc(ref)}"${on ? ' aria-pressed="true"' : ''}>${icon}${label}</button>`;
+  return `<div class="cons-actions sg-actions">${opts.more === false ? '' : b('sg-more', ICON.magic, 'More about this wine')}${b('sg-taste', ICON.spark, "I'm tasting this")}${b('sg-wish', wished ? ICON.check : ICON.bookmark, wished ? 'Saved to wishlist' : 'Save to wishlist', wished)}${b('sg-order', ICON.cart, 'I ordered it')}</div>`;
+}
+const fitBarHtml = fit => (fit === null || fit === undefined || fit === '' ? '' : `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${Number(fit)}%</b></div>${segsHtml(Number(fit), 12)}</div>`);
+function sgOrder(g) {
+  const o = g.offer;
+  openOrderSheet({ ...g.base, qty: g.qty || 6, price: o ? o.v : g.price || null, priceCur: o ? o.cur : g.priceCur, retailer: o ? o.shop : '', website: o ? hostOf(o.url) : '',
+    details: previewOf(g.base) || g.details || null, fit: g.fit, why: g.why, wishId: g.wishId || (wishOf(g.base) || {}).id || '' });
+}
+function sgRefresh() { refreshView(); if (PREV.open) renderPreview(); if (route().p === 'sommelier') sommRefresh(false); }
+const SG_ACTS = {
+  'sg-more': el => { const g = sgGet(el.dataset.ref); if (g) g.preview(); },
+  'sg-taste': el => {
+    const g = sgGet(el.dataset.ref);
+    if (!g) return;
+    if (PREV.open) closePreview();
+    if (g.taste) g.taste(); else openDiscovery(g.base, {});
+  },
+  'sg-wish': async el => {
+    const g = sgGet(el.dataset.ref);
+    if (!g) return;
+    const x = wishOf(g.base);
+    if (x) {
+      if (PREV.open && g.k === 'wish') closePreview();
+      await wishDelete(x.id);
+      toast('Removed from your wishlist', 2500);
+    } else await g.save();
+    sgRefresh();
+  },
+  'sg-order': el => { const g = sgGet(el.dataset.ref); if (!g) return; if (PREV.open) closePreview(); sgOrder(g); }
+};
+Object.assign(OR_ACTS, SG_ACTS);
+
+/* ---------------------------------------------------------------- back from a shop: maybe you ordered there
+   Only after at least a minute in the shop, shown quietly under the offer until you leave the screen. */
+
+const SHOPV = 'wc-shopvisit';
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a[data-shop]');
+  if (a) store.set(SHOPV, { ref: a.dataset.sref, shop: a.dataset.shop, t: Date.now(), hash: location.hash });
+}, true);
+function shopBackCheck() {
+  const v = store.get(SHOPV, null);
+  if (!v) return;
+  store.del(SHOPV);
+  const dt = Date.now() - v.t;
+  if (dt < 60000 || dt > 3 * 3600000 || location.hash !== v.hash) return;
+  U.shopBack = v;
+  refreshView();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') shopBackCheck(); });
+setTimeout(shopBackCheck, 1500);
+/* already on its way? then there is nothing to ask */
+function orderedAlready(ref) {
+  const [k, id] = str(ref).split(':');
+  if (k === 'wine') return S.orders.some(o => o.wineId === id);
+  const g = sgGet(ref);
+  return !!g && S.orders.some(o => wishKey(o) === wishKey(g.base));
+}
+function shopBackHtml(ref) {
+  const v = U.shopBack;
+  if (!v || v.ref !== ref || orderedAlready(ref)) return '';
+  const wine = ref.startsWith('wine:');
+  return `<div class="shop-back">${ICON.cart}<span>Ordered at ${esc(v.shop)}?</span><button class="btn" data-act="${wine ? 'ord-wine' : 'sg-order'}" ${wine ? `data-id="${esc(ref.slice(5))}"` : `data-ref="${esc(ref)}"`}>I ordered it</button></div>`;
+}

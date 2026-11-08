@@ -148,7 +148,7 @@ function sommAnswerHtml(t) {
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
   const i = sommThread().indexOf(t);
   const win = check ? checkWindowHtml(t.a) || vintageAskHtml(t, i) : '';
-  const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.magic}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div><button class="link-btn" style="align-self:flex-start" data-act="ord-somm" data-i="${i}">${ICON.cart}Ordered it</button>` : '';
+  const taste = check && t.a.wine && i >= 0 ? sgActionsHtml('check:' + i) : '';
   return `<div class="somm-a">${fit}${win}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
@@ -333,7 +333,7 @@ function listPickHtml(p, i, cur0) {
     ${p.why ? `<p class="small" style="margin:0">${esc(p.why)}</p>` : ''}
     ${p.food ? `<p class="small cons-value" style="margin:0">${ICON.glass}<span>${esc(p.food)}</span></p>` : ''}
     ${p.fit !== null && p.fit !== undefined ? `<div class="wl-fit"><div class="between"><span class="tiny muted">How well it fits your taste</span><b>${p.fit}%</b></div>${segsHtml(p.fit, 12)}</div>` : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="wl-preview" data-i="${i}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="wl-taste" data-i="${i}">${ICON.spark}I'm tasting this</button><button class="link-btn" data-act="wl-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
+    ${sgActionsHtml('wl:' + i)}
   </div>`;
 }
 
@@ -409,12 +409,12 @@ async function listSave(p) {
   const res = WL.result;
   const why = [p.why, p.listPrice ? `On a wine list for ${res.currency || cur()} ${fmtNum(p.listPrice, p.listPrice % 1 ? 2 : 0)}.` : ''].filter(Boolean).join(' ');
   const x = normWish({ id: newId('x'), producer: p.producer, name: p.name, vintage: p.vintage, type: p.type, region: p.region, grapes: p.grapes,
-    price: p.shopPrice, priceCur: res.currency || cur(), label: 'Wine list', why, createdAt: new Date().toISOString() });
+    price: p.shopPrice, priceCur: res.currency || cur(), label: 'Wine list', why, createdAt: new Date().toISOString(), fit: p.fit, details: previewOf(p) });
   S.wishlist.push(x);
   persist();
   sommRefresh(false);
   try {
-    await api('saveWish', { wish: Object.assign({}, x, { offer: '' }) });
+    await api('saveWish', { wish: Object.assign({}, x, { offer: '', details: x.details ? JSON.stringify(x.details) : '' }) });
     toast('Saved to your wishlist');
   } catch (e) {
     S.wishlist = S.wishlist.filter(w => w.id !== x.id);
@@ -621,7 +621,8 @@ function normWish(x) {
   return {
     id: str(x.id), producer: str(x.producer), name: str(x.name), vintage: str(x.vintage), type: str(x.type), region: str(x.region), grapes: str(x.grapes),
     price: numOrNull(x.price), priceCur: str(x.priceCur) || cur(), label: str(x.label), why: str(x.why), value: str(x.value),
-    qty: numOrNull(x.qty), replaces: str(x.replaces), offer: offer && offer.shop ? offer : null, createdAt: str(x.createdAt)
+    qty: numOrNull(x.qty), replaces: str(x.replaces), offer: offer && offer.shop ? offer : null, createdAt: str(x.createdAt),
+    fit: numOrNull(x.fit), details: (() => { try { return x.details ? (typeof x.details === 'string' ? JSON.parse(x.details) : x.details) : null; } catch (e) { return null; } })()
   };
 }
 const wishTitle = x => [x.producer, x.name, x.vintage].filter(Boolean).join(' ');
@@ -704,9 +705,9 @@ function tasteProfile() {
   return { lines, cover, text, budget: p50 !== null ? { min: round5(p25 * 0.8), max: round5(p75 * 1.2) } : { min: '', max: '' } };
 }
 
-function offerLineHtml(o, qty) {
+function offerLineHtml(o, qty, ref) {
   return `<div class="cons-offer-box"><div class="cons-offer">${offerShopHtml(o, null)}
-    <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>${offerShipHtml(o, qty)}</div>`;
+    <a class="btn accent offer-btn" href="${esc(o.url)}" target="_blank" rel="noopener"${ref ? ` data-shop="${esc(o.shop)}" data-sref="${esc(ref)}"` : ''}>${esc(priceText(o.v, o.cur))}${ICON.link}</a></div>${offerShipHtml(o, qty)}${ref ? shopBackHtml(ref) : ''}</div>`;
 }
 
 function pickCardHtml(p, i, saved) {
@@ -722,9 +723,10 @@ function pickCardHtml(p, i, saved) {
     ${p.value ? `<p class="small cons-value" style="margin:0">${ICON.cash}<span>${esc(p.value)}</span></p>` : ''}
     <p class="small" style="margin:0"><b>Buy ${p.qty || 1} ${p.qty === 1 ? 'bottle' : 'bottles'}</b>${rw ? ` · replaces <a href="#/wine/${encodeURIComponent(rw.id)}">${esc(wineTitle(rw))} ${esc(rw.vintage)}</a> (${rw.count} left)` : ' · new addition'}</p>
     ${rw && p.replaceWhy ? `<p class="tiny muted" style="margin:-4px 0 0">${esc(p.replaceWhy)}</p>` : ''}
-    ${o ? offerLineHtml(o, p.qty) : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="cons-preview" data-i="${i}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
-      <button class="link-btn" data-act="cons-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button><button class="link-btn" data-act="ord-pick" data-i="${i}">${ICON.cart}Ordered</button></div>
+    ${fitBarHtml(p.fit)}
+    ${o ? offerLineHtml(o, p.qty, 'cons:' + i) : ''}
+    <button class="link-btn" style="align-self:flex-start" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
+    ${sgActionsHtml('cons:' + i)}
   </div>`;
 }
 
@@ -734,10 +736,10 @@ function wishCardHtml(x) {
     <div class="between" style="gap:8px;align-items:flex-start"><span class="cons-label ${LABEL_CLS[x.label] || 'disc'}">${esc(consLabel(x.label) || 'Wishlist')}</span>${x.price ? `<span class="small muted">≈ ${esc(priceText(x.price, x.priceCur))}</span>` : ''}</div>
     <div><p class="cons-title">${esc(wishTitle(x))}</p><p class="small muted" style="margin:2px 0 0">${countryOf(x) ? flagOf(x) : ''}${esc([x.region, x.type].filter(Boolean).join(' · '))}${x.qty ? ` · buy ${x.qty}` : ''}</p></div>
     ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
-    ${x.offer ? offerLineHtml(x.offer, x.qty || 6) : ''}
-    <div class="cons-actions"><button class="link-btn" data-act="wish-preview" data-id="${esc(x.id)}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
-      <button class="link-btn" data-act="ord-wish" data-id="${esc(x.id)}">${ICON.cart}Ordered</button><button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
-      <button class="icon-btn" data-act="wish-del" data-id="${esc(x.id)}" aria-label="Remove from wishlist">${ICON.trash}</button></div>
+    ${fitBarHtml(x.fit)}
+    ${x.offer ? offerLineHtml(x.offer, x.qty || 6, 'wish:' + x.id) : ''}
+    <button class="link-btn" style="align-self:flex-start" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
+    ${sgActionsHtml('wish:' + x.id)}
   </div>`;
 }
 
@@ -752,6 +754,7 @@ function viewDiscover() {
   return `<main class="screen has-nav discover">
     <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Consultant</h1></header>
+    <a class="cons-check" href="#/sommelier/check">${ICON.search}<span><b>Know which wine you want?</b> Check it in Will I like it?: type or say its name.</span>${ICON.chevron}</a>
     ${ttOfferHtml()}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The consultant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <section class="ins-sec" style="border-top:0;padding-top:0"><div class="sec-head"><h2>Your profile</h2></div>
@@ -770,9 +773,6 @@ function viewDiscover() {
     ${CONS.error ? `<p class="small" style="color:var(--danger);margin:0">${esc(CONS.error)}</p>` : ''}
     ${res ? `<section class="ins-sec"><div class="sec-head"><h2>Recommendations</h2></div>${res.summary ? `<p style="margin:0;line-height:1.5">${esc(res.summary)}</p>` : ''}
       <div class="cons-list">${res.picks.map((p, i) => pickCardHtml(p, i, savedKeys.has(wishKey(p)))).join('')}</div></section>` : ''}
-    <section class="ins-sec" id="wishlist"><div class="sec-head"><h2>Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
-      ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save suggestions here. When you buy one, Add to cellar opens the form with its details.</p>'}
-    </section>
   </main>${nav('insights')}`;
 }
 const infoRowWide = (label, value) => `<div class="info-row wide"><span class="info-label">${esc(label)}</span><span class="info-val">${esc(value)}</span></div>`;
@@ -818,12 +818,12 @@ async function consOffer(p, key, wishId) {
 }
 
 async function consSave(p) {
-  const x = normWish(Object.assign({}, p, { id: newId('x'), offer: CONS.offers[wishKey(p)] || null, createdAt: new Date().toISOString() }));
+  const x = normWish(Object.assign({}, p, { id: newId('x'), offer: CONS.offers[wishKey(p)] || null, createdAt: new Date().toISOString(), details: previewOf(p) }));
   S.wishlist.push(x);
   persist();
   refreshView();
   try {
-    await api('saveWish', { wish: Object.assign({}, x, { offer: x.offer ? JSON.stringify(x.offer) : '' }) });
+    await api('saveWish', { wish: Object.assign({}, x, { offer: x.offer ? JSON.stringify(x.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) });
     toast('Saved to your wishlist');
   } catch (e) {
     S.wishlist = S.wishlist.filter(w => w.id !== x.id);
@@ -944,7 +944,8 @@ function renderPreview() {
         <p class="tiny muted" style="margin:0">Written by AI from its knowledge. Tap region, style or producer for the background.</p>` : winSec;
   const k = PREV.src && PREV.src.kind;
   const wished = S.wishlist.some(x => wishKey(x) === wishKey(PREV.base));
-  const buttons = `<div class="grid2">${k === 'wish' ? `<button class="btn" data-act="prev-cellar">${ICON.plus}Add to cellar</button>` : `<button class="btn" data-act="prev-wish"${wished ? ' disabled' : ''}>${wished ? `${ICON.check}On your wishlist` : `${ICON.plus}Save to wishlist`}</button>`}<button class="btn primary" data-act="prev-taste">${ICON.spark}I'm tasting this</button></div>`;
+  const sref = !PREV.src ? '' : PREV.src.kind === 'list' ? 'wl:' + PREV.src.i : PREV.src.kind === 'wish' ? 'wish:' + PREV.src.id : PREV.src.kind + ':' + PREV.src.i;
+  const buttons = sref ? sgActionsHtml(sref, { more: false }) : '';
   const inner = `<div class="between" style="align-items:flex-start;gap:12px">
       <div class="info-head"><span class="ab-ic">${c ? `<span class="ab-flag">${flagEmoji(c.code)}</span>` : ICON.glass}</span><div><span class="tiny muted" style="text-transform:uppercase;letter-spacing:.06em">${esc([w.type, w.vintage, alcText(w)].filter(Boolean).join(' · ') || 'Wine')}</span><h2>${esc(wineTitle(w))}</h2><p class="small muted" style="margin:2px 0 0">${esc([w.producer !== wineTitle(w) ? w.producer : '', w.region].filter(Boolean).join(' · '))}</p></div></div>
       <button class="icon-btn" data-act="prev-close" aria-label="Close">${ICON.x}</button>
@@ -1009,10 +1010,10 @@ async function checkSave(i) {
   const a = t.a, x0 = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: '', type: '', region: a.region || '', grapes: '' };
   const o = a.offer || a.worldOffer;
   const x = normWish({ id: newId('x'), producer: x0.producer, name: x0.name, vintage: x0.vintage, type: x0.type, region: x0.region, grapes: x0.grapes,
-    price: o ? o.v : '', priceCur: o ? o.cur : cur(), label: 'Will I like it?', why: a.fit ? `Fits your taste ${a.fit}%. ${a.answer || ''}`.trim() : str(a.answer), createdAt: new Date().toISOString() });
+    price: o ? o.v : '', priceCur: o ? o.cur : cur(), label: 'Will I like it?', why: str(a.answer), createdAt: new Date().toISOString(), fit: a.fit, details: previewOf(x0) });
   S.wishlist.push(x);
   persist();
-  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '' }) }); toast('Saved to your wishlist'); }
+  try { await api('saveWish', { wish: Object.assign({}, x, { offer: a.offer ? JSON.stringify(a.offer) : '', details: x.details ? JSON.stringify(x.details) : '' }) }); toast('Saved to your wishlist'); }
   catch (e) { S.wishlist = S.wishlist.filter(w => w.id !== x.id); persist(); toast('Not saved: ' + e.message); }
 }
 

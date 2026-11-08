@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.7.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -852,7 +852,7 @@ function render() {
     case 'insights': html = viewInsights(); break;
     case 'sommelier': html = viewSommelier(); break;
     case 'discover': html = viewDiscover(); break;
-    case 'orders': html = viewOrders(); break;
+    case 'orders': setTimeout(() => { U.jumpTo = 'orders'; go('#/insights', true); }); html = viewInsights(); break;
     case 'journal': html = viewJournal(); break;
     case 'journal-ai': html = viewJournalAI(); break;
     case 'taste': html = viewTaste(); break;

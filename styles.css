@@ -1073,3 +1073,26 @@ main:has(.pl-card.checking) ~ .fab { display: none; }
 .ord-line { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; background: none; color: var(--text-2); font-size: 14px; text-align: left; }
 .ord-line svg { flex: none; margin-top: 2px; color: var(--gold); }
 .rh-n.late { background: var(--danger); color: #1A0C12; }
+
+/* wishlist and orders in Insights stand apart from the charts */
+.list-sec { padding: 16px 14px !important; margin-top: 8px; border: 1px solid #4A2634 !important; border-radius: 18px; background: linear-gradient(180deg, #301722, #22101A); }
+.list-sec-h { display: flex; align-items: center; gap: 8px; }
+.list-sec-h svg { width: 20px; height: 20px; color: var(--gold); }
+.list-sec .cons-card { background: rgba(10, 3, 7, .25); }
+.sg-actions .link-btn.on { color: var(--text); }
+.sg-actions .link-btn.on svg { color: #6FCF97; }
+.btn.outline-gold { background: transparent; border: 1.5px solid var(--gold); color: var(--gold); }
+.btn.outline-gold svg { color: var(--gold); }
+.ord-banner { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--gold); border-radius: 14px; background: rgba(230, 203, 152, .08); font-size: 14px; line-height: 1.4; }
+.ord-banner > svg { flex: none; color: var(--gold); }
+.ord-banner span { flex: 1; min-width: 0; }
+.ord-banner .btn { flex: none; height: 40px; padding: 0 12px; font-size: 14px; }
+.shop-back { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; border: 1px dashed var(--gold); border-radius: 12px; font-size: 14px; color: var(--text-2); }
+.shop-back > svg { flex: none; color: var(--gold); }
+.shop-back span { flex: 1; }
+.shop-back .btn { flex: none; height: 36px; padding: 0 12px; font-size: 14px; }
+.cons-check { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text-2); font-size: 14px; line-height: 1.4; }
+.cons-check:hover { color: var(--text-2); }
+.cons-check > svg:first-child { flex: none; color: var(--gold); }
+.cons-check span { flex: 1; }
+.cons-check b { color: var(--text); font-weight: 600; }

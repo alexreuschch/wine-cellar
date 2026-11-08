@@ -213,7 +213,6 @@ const ACTS = {
   'share-go': el => shareGo(el.dataset.link === '1'),
   'share-send': () => shareWine(SHARE.id, SHARE.offer),
   'share-close': () => shareClose(),
-  'go-wishlist': () => { U.jumpTo = 'wishlist'; go('#/discover'); },
   'open-add-rating': () => { U.addRatingOpen = true; refreshView(); const s = $('#new-score'); if (s) s.focus(); },
   'close-add-rating': () => { U.addRatingOpen = false; refreshView(); },
   'save-rating': async () => {
@@ -293,6 +292,7 @@ const ACTS = {
   'record-add': () => { if (D && D.id) openAddSheet(D.id, null, 'record'); },
 
   'cancel-form': () => {
+    if (D && D.fromOrder) { D = null; U.jumpTo = 'orders'; go('#/insights', true); return; }
     const back = D && D.mode === 'edit' ? '#/wine/' + encodeURIComponent(D.id) : '#/cellar';
     D = null;
     if (navPrev() === back) history.back(); else go(back, true);
@@ -549,7 +549,7 @@ const CHANGES = {
 
 Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS, OR_ACTS);
 Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS, OR_INPUTS);
-Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES);
+Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES, OR_CHANGES);
 
 /* ------------------------------------------------------------ start */
 
@@ -632,6 +632,7 @@ function init() {
   window.addEventListener('hashchange', () => {
     navTrack();
     jumpCheck();
+    U.shopBack = null;
     if (VOICE.on) voiceCancel();
     if (SOMM.listening && route().p !== 'sommelier') sommStopVoice();
     if (TQ.listening && route().p !== 'taste') ttStopVoice();
