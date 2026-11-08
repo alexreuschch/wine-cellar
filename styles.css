@@ -998,7 +998,7 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .pl-tools .chip { height: 34px; padding: 0 12px; font-size: 14px; }
 .pl-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 2px; font-size: 13px; color: var(--text-2); }
 .pl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
-.pl-card { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid #3B1E2A; border-radius: 16px; background: linear-gradient(180deg, #2C1520, #26121A); box-shadow: 0 2px 10px rgba(0, 0, 0, .22); }
+.pl-card { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #3B1E2A; border-radius: 16px; background: linear-gradient(180deg, #2C1520, #26121A); box-shadow: 0 2px 10px rgba(0, 0, 0, .22); }
 .pl-card.checking { border-color: var(--gold); }
 .pl-head { display: flex; align-items: center; gap: 4px; }
 .pl-head .loc-ic svg { width: 24px; height: 24px; }
@@ -1012,8 +1012,8 @@ button.pl-due { text-decoration: underline dotted rgba(255,255,255,.25); text-un
 .pl-due.sm { display: inline; margin: 0; font-size: 13.5px; }
 .pl-only { height: 34px; padding: 0 12px; font-size: 14px; gap: 6px; }
 .pl-only svg { width: 14px; height: 14px; }
-.pl-shelf { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid #3B1E2A; }
-.pl-shelf.zoned { padding-left: 10px; border-left: 3px solid var(--zc); border-top-left-radius: 0; }
+.pl-shelf { display: flex; flex-direction: column; gap: 4px; padding: 10px 10px 8px; border: 1px solid #3A1D29; border-radius: 12px; background: rgba(12, 4, 8, .22); }
+.pl-shelf.zoned { border-left: 3px solid var(--zc); }
 .pl-sh { display: flex; flex-direction: column; gap: 1px; font-size: 14px; font-weight: 600; color: var(--text-2); }
 .pl-zone { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .pl-zone svg { color: var(--zc, var(--gold)); }

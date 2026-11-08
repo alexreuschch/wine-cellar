@@ -274,10 +274,7 @@ Object.assign(PL_ACTS, {
 /* ---------------------------------------------------------------- the places view in the cellar */
 
 let CVIEW = (() => { const v = store.get('wc-cview', 'list'); return v === 'places' ? 'places' : 'list'; })();
-let DOTS = (() => { const v = store.get('wc-dots', 'type'); return v === 'window' ? 'window' : 'type'; })();
-const TYPE_DOT = { Red: '#9B3A47', White: '#D6C68C', 'Rosé': '#D59AA3', Sparkling: '#E0D19E', Dessert: '#C8994C', Fortified: '#844232', Orange: '#C7844A' };
-const stripeColor = w => (DOTS === 'window' ? (STATUS[statusOf(w)] || { c: '#888' }).c : typeTint(w));
-const dotColor = w => (DOTS === 'window' ? (STATUS[statusOf(w)] || STATUS.Ready || { c: '#888' }).c : TYPE_DOT[w.type] || TYPE_DOT.Red);
+const stripeColor = w => typeTint(w);
 /* a muted band per zone, cool for sparkling, warm for red */
 function zoneColor(z) {
   const n = lc(z.name), t = z.temp;
@@ -306,9 +303,8 @@ function placesHtml() {
   const locs = S.locations.filter(l => by[lc(l)]).concat(Object.keys(by).filter(k => !S.locations.some(l => lc(l) === k)).map(k => by[k][0].e.loc));
   const only = U.onlyDue ? `<button class="chip on pl-only" data-act="pl-due-off" aria-label="Show all bottles again">Only bottles to open${ICON.x}</button>` : '';
   if (!locs.length) return `${only ? `<div class="pl-tools">${only}</div>` : ''}<p class="muted small">${U.onlyDue ? 'No bottle needs to be opened soon.' : filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
-  const legend = DOTS === 'window'
-    ? `<div class="pl-legend">${STATUS_ORDER.filter(s => list.some(w => statusOf(w) === s)).map(s => `<span><i style="background:${STATUS[s].c}"></i>${esc(s)}</span>`).join('')}</div>` : '';
-  return `<div class="pl-tools"><div class="chips"><button class="chip${DOTS === 'type' ? ' on' : ''}" data-act="dots" data-v="type">Type</button><button class="chip${DOTS === 'window' ? ' on' : ''}" data-act="dots" data-v="window">Drinking window</button>${only}</div></div>${legend}
+  // the stripe shows the type, the chip under the count the drinking window, so no colour switch is needed
+  return `${only ? `<div class="pl-tools">${only}</div>` : ''}
     ${locs.map(l => placeCardHtml(l, by[lc(l)], filtered)).join('')}`;
 }
 
@@ -414,7 +410,6 @@ function markChecked(loc) {
 
 Object.assign(PL_ACTS, {
   cview: el => { CVIEW = el.dataset.v === 'places' ? 'places' : 'list'; store.set('wc-cview', CVIEW); PCHK.loc = null; render(); },
-  dots: el => { DOTS = el.dataset.v === 'window' ? 'window' : 'type'; store.set('wc-dots', DOTS); const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
   'chk-start': el => {
     if (PCHK.loc && chkChanges() && !confirm('Leave the check of ' + PCHK.loc + ' without saving?')) return;
     Object.assign(PCHK, { loc: el.dataset.v, counts: {}, ok: {} });
@@ -431,6 +426,6 @@ Object.assign(PL_ACTS, {
   },
   'chk-ok': el => { PCHK.ok[el.dataset.k] = !PCHK.ok[el.dataset.k]; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
   'chk-done': () => chkSave(),
-  'pl-due': () => { U.onlyDue = true; DOTS = 'window'; PCHK.loc = null; const l = $('#wine-list'); if (l) { l.innerHTML = cellarList(); const t = $('.pl-tools'); if (t) t.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); } },
+  'pl-due': () => { U.onlyDue = true; PCHK.loc = null; const l = $('#wine-list'); if (l) { l.innerHTML = cellarList(); const t = $('.pl-tools'); if (t) t.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); } },
   'pl-due-off': () => { U.onlyDue = false; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); }
 });
