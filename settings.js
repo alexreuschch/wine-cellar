@@ -65,7 +65,7 @@ function locInfoEditHtml(loc) {
     : `<label class="field">Capacity, about how many 75 cl bottles<input id="ed-cap" data-input="ed-cap" inputmode="numeric" placeholder="For example 100" value="${esc(ed.cap)}"></label>
       <p class="muted tiny" style="margin:-4px 0 0">A rough estimate is enough. A magnum counts as 1.5 bottles, a half bottle as 0.6, sparkling wine a little more.</p>`;
   const order = t === 'case' || t === 'wall' ? '' : `<div class="field"><span>Shelf 0 is</span><div class="toggle">${[[false, 'The top shelf'], [true, 'The bottom shelf']].map(([v, l]) => `<button class="${!!ed.zeroBottom === v ? 'on' : ''}" data-act="loc-zero" data-v="${v ? 1 : 0}" aria-pressed="${!!ed.zeroBottom === v}">${l}</button>`).join('')}</div></div>
-    <p class="muted tiny" style="margin:-4px 0 0">Places lists the shelves from top to bottom, the way you see them.</p>`;
+    <p class="muted tiny" style="margin:-4px 0 0">${S.version && S.version < 44 ? 'Needs the new Code.gs to be kept. ' : ''}Places lists the shelves from top to bottom, the way you see them.</p>`;
   return `${types}${cap}${order}${t === 'case' || t === 'wall' ? '' : zoneEditHtml(loc)}`;
 }
 
@@ -200,7 +200,8 @@ async function saveEdit() {
         persist();
         refreshView();
         const saved = await api('setLocationInfo', Object.assign({ name: to }, info));
-        S.locInfo[lc(to)] = locInfoNorm(saved);
+        // an older script does not send every field back: keep what was chosen
+        S.locInfo[lc(to)] = locInfoNorm(Object.assign({}, info, saved, saved.zeroBottom === undefined ? { zeroBottom: info.zeroBottom } : {}));
       }
       if (shelves) {
         if (Object.keys(shelves).length) S.shelfNames[lc(to)] = shelves; else delete S.shelfNames[lc(to)];

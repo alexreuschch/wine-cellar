@@ -1063,3 +1063,13 @@ main:has(.pl-card.checking) ~ .fab { display: none; }
 
 .pl-pill { display: flex; padding: 2px 0; }
 .pl-pill .pill { margin: 0; }
+
+/* ordered, not yet delivered */
+.ord-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #3B1E2A; border-radius: 16px; background: linear-gradient(180deg, #2C1520, #26121A); box-shadow: 0 2px 10px rgba(0, 0, 0, .22); }
+.ord-when { font-size: 13px; font-weight: 600; color: var(--muted); }
+.ord-when.ok { color: var(--gold); }
+.ord-when.late { color: var(--danger); }
+.ord-when.sub { color: #B9A6E8; }
+.ord-line { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; background: none; color: var(--text-2); font-size: 14px; text-align: left; }
+.ord-line svg { flex: none; margin-top: 2px; color: var(--gold); }
+.rh-n.late { background: var(--danger); color: #1A0C12; }

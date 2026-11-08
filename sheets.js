@@ -78,6 +78,7 @@ function renderSheet() {
   const root = $('#sheet-root');
   if (!RS) { root.innerHTML = ''; return; }
   if (RS.kind === 'taste') { root.innerHTML = tasteSheetHtml(); setupTasteRating(); return; }
+  if (RS.kind === 'order') { root.innerHTML = orderSheetHtml(); return; }
   const w = wineById(RS.wineId);
   const r = RS.id ? S.removals.find(x => x.id === RS.id) : null;
   const name = w ? `${wineTitle(w)} ${w.vintage}`.trim() : ((r && r.wineName) || 'Deleted wine');
@@ -151,6 +152,7 @@ function renderSheet() {
 /* people and retailer picker, shared by the sheet and the add form */
 
 const PK = () => {
+  if (RS && RS.kind === 'order') return RS.rp;
   if (RS) {
     if (RS.kind === 'in') return RS.type === 'Purchase' ? RS.rp : RS.type === 'Received' ? RS.pp : null;
     return RS.pp;
@@ -291,6 +293,7 @@ async function saveSheet(withDetails) {
       S.removals = S.removals.filter(r => r.id !== entry.id && r.id !== saved.id).concat([saved]);
       persist();
       refreshView();
+      if (st.orderId) orderArrived(st.orderId, st.qty);
     } catch (e) {
       w.stock = prevStock;
       w.count = prevStock.reduce((a, x) => a + x.n, 0);

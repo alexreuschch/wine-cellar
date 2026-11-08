@@ -93,8 +93,8 @@ function grapeIsRed(name, wines) {
 const insSection = (title, sub, body) => `<section class="ins-sec"><div class="sec-head"><h2>${title}</h2>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>${body}</section>`;
 
 function viewInsights() {
-  const nw = S.wishlist.length;
-  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><button class="icon-btn magic-btn rh-ic" data-act="go-wishlist" aria-label="Wishlist${nw ? `, ${nw} wines` : ''}">${ICON.bookmark}${nw ? `<span class="rh-n">${nw}</span>` : ''}</button><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
+  const nw = S.wishlist.length, no = S.orders.length, late = S.orders.some(orderOverdue);
+  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><button class="icon-btn magic-btn rh-ic" data-act="go-orders" aria-label="Ordered${no ? `, ${no} orders` : ''}">${ICON.box}${no ? `<span class="rh-n${late ? ' late' : ''}">${no}</span>` : ''}</button><button class="icon-btn magic-btn rh-ic" data-act="go-wishlist" aria-label="Wishlist${nw ? `, ${nw} wines` : ''}">${ICON.bookmark}${nw ? `<span class="rh-n">${nw}</span>` : ''}</button><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
   if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;
@@ -479,7 +479,9 @@ function stockHtml(w) {
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Take a bottle from ${esc(placeLabel(e))}">${ICON.minus}</button><span>${e.n}</span><button data-act="plus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Add bottles to ${esc(placeLabel(e))}">${ICON.plus}</button></div></div>`).join('');
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
-    ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}</section>`;
+    ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}
+    ${ordersFor(w.id).map(o => `<button class="ord-line" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.box}<span><b>${o.qty} on order</b>${o.retailer ? ` from ${esc(o.retailer)}` : ''} · ${esc(orderWhen(o).text)}</span></button>`).join('')}
+    <button class="link-btn" style="align-self:flex-start;margin-top:-4px" data-act="ord-wine" data-id="${esc(w.id)}">${ICON.cart}Order more</button></section>`;
 }
 
 /* where and when you tasted it out, with your rating going to the wine; for a discovery also how to bring it into the cellar */

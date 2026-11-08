@@ -11,8 +11,8 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 44;
-var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
+var API_VERSION = 45;
+var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
   'id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'taste', 'tasteTags', 'pairings',
@@ -38,6 +38,8 @@ var PEOPLE_COLS = ['name', 'aliases', 'note'];
 var OFFER_COLS = ['key', 'offer', 'date'];
 var INFO_COLS = ['key', 'kind', 'name', 'data', 'date'];
 var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
+// wines ordered but not delivered yet; wineId when it is a wine already in the cellar; price per bottle
+var ORDER_COLS = ['id', 'wineId', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'size', 'qty', 'price', 'priceCur', 'retailer', 'ordered', 'expected', 'sub', 'note', 'details', 'createdAt'];
 var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt'];
 // all countries with their currency [name, currency], and the EU members
 var GEO_COUNTRIES = {"AD":["Andorra","EUR"],"AE":["United Arab Emirates","AED"],"AF":["Afghanistan","AFN"],"AG":["Antigua & Barbuda","XCD"],"AI":["Anguilla","XCD"],"AL":["Albania","ALL"],"AM":["Armenia","AMD"],"AO":["Angola","AOA"],"AR":["Argentina","ARS"],"AS":["American Samoa","USD"],"AT":["Austria","EUR"],"AU":["Australia","AUD"],"AW":["Aruba","AWG"],"AX":["Åland Islands","EUR"],"AZ":["Azerbaijan","AZN"],"BA":["Bosnia and Herzegovina","BAM"],"BB":["Barbados","BBD"],"BD":["Bangladesh","BDT"],"BE":["Belgium","EUR"],"BF":["Burkina Faso","XOF"],"BG":["Bulgaria","BGN"],"BH":["Bahrain","BHD"],"BI":["Burundi","BIF"],"BJ":["Benin","XOF"],"BL":["St. Barthélemy","EUR"],"BM":["Bermuda","BMD"],"BN":["Brunei","BND"],"BO":["Bolivia","BOB"],"BQ":["Caribbean Netherlands","USD"],"BR":["Brazil","BRL"],"BS":["Bahamas","BSD"],"BT":["Bhutan","INR"],"BW":["Botswana","BWP"],"BY":["Belarus","BYN"],"BZ":["Belize","BZD"],"CA":["Canada","CAD"],"CC":["Cocos (Keeling) Islands","AUD"],"CD":["DR Congo","CDF"],"CF":["Central African Republic","XAF"],"CG":["Congo","XAF"],"CH":["Switzerland","CHF"],"CI":["Côte d'Ivoire","XOF"],"CK":["Cook Islands","NZD"],"CL":["Chile","CLP"],"CM":["Cameroon","XAF"],"CN":["China","CNY"],"CO":["Colombia","COP"],"CR":["Costa Rica","CRC"],"CU":["Cuba","CUP"],"CV":["Cape Verde","CVE"],"CW":["Curaçao","XCG"],"CX":["Christmas Island","AUD"],"CY":["Cyprus","EUR"],"CZ":["Czechia","CZK"],"DE":["Germany","EUR"],"DJ":["Djibouti","DJF"],"DK":["Denmark","DKK"],"DM":["Dominica","XCD"],"DO":["Dominican Republic","DOP"],"DZ":["Algeria","DZD"],"EC":["Ecuador","USD"],"EE":["Estonia","EUR"],"EG":["Egypt","EGP"],"EH":["Western Sahara","MAD"],"ER":["Eritrea","ERN"],"ES":["Spain","EUR"],"ET":["Ethiopia","ETB"],"FI":["Finland","EUR"],"FJ":["Fiji","FJD"],"FK":["Falkland Islands","FKP"],"FM":["Micronesia","USD"],"FO":["Faroe Islands","DKK"],"FR":["France","EUR"],"GA":["Gabon","XAF"],"GB":["United Kingdom","GBP"],"GD":["Grenada","XCD"],"GE":["Georgia","GEL"],"GF":["French Guiana","EUR"],"GG":["Guernsey","GBP"],"GH":["Ghana","GHS"],"GI":["Gibraltar","GIP"],"GL":["Greenland","DKK"],"GM":["Gambia","GMD"],"GN":["Guinea","GNF"],"GP":["Guadeloupe","EUR"],"GQ":["Equatorial Guinea","XAF"],"GR":["Greece","EUR"],"GT":["Guatemala","GTQ"],"GU":["Guam","USD"],"GW":["Guinea-Bissau","XOF"],"GY":["Guyana","GYD"],"HK":["Hong Kong","HKD"],"HN":["Honduras","HNL"],"HR":["Croatia","EUR"],"HT":["Haiti","HTG"],"HU":["Hungary","HUF"],"ID":["Indonesia","IDR"],"IE":["Ireland","EUR"],"IL":["Israel","ILS"],"IM":["Isle of Man","GBP"],"IN":["India","INR"],"IQ":["Iraq","IQD"],"IR":["Iran","IRR"],"IS":["Iceland","ISK"],"IT":["Italy","EUR"],"JE":["Jersey","GBP"],"JM":["Jamaica","JMD"],"JO":["Jordan","JOD"],"JP":["Japan","JPY"],"KE":["Kenya","KES"],"KG":["Kyrgyzstan","KGS"],"KH":["Cambodia","KHR"],"KI":["Kiribati","AUD"],"KM":["Comoros","KMF"],"KN":["St. Kitts & Nevis","XCD"],"KP":["North Korea","KPW"],"KR":["South Korea","KRW"],"KW":["Kuwait","KWD"],"KY":["Cayman Islands","KYD"],"KZ":["Kazakhstan","KZT"],"LA":["Laos","LAK"],"LB":["Lebanon","LBP"],"LC":["St. Lucia","XCD"],"LI":["Liechtenstein","CHF"],"LK":["Sri Lanka","LKR"],"LR":["Liberia","LRD"],"LS":["Lesotho","ZAR"],"LT":["Lithuania","EUR"],"LU":["Luxembourg","EUR"],"LV":["Latvia","EUR"],"LY":["Libya","LYD"],"MA":["Morocco","MAD"],"MC":["Monaco","EUR"],"MD":["Moldova","MDL"],"ME":["Montenegro","EUR"],"MF":["St. Martin","EUR"],"MG":["Madagascar","MGA"],"MH":["Marshall Islands","USD"],"MK":["North Macedonia","MKD"],"ML":["Mali","XOF"],"MM":["Myanmar","MMK"],"MN":["Mongolia","MNT"],"MO":["Macao","MOP"],"MP":["Northern Mariana Islands","USD"],"MQ":["Martinique","EUR"],"MR":["Mauritania","MRU"],"MS":["Montserrat","XCD"],"MT":["Malta","EUR"],"MU":["Mauritius","MUR"],"MV":["Maldives","MVR"],"MW":["Malawi","MWK"],"MX":["Mexico","MXN"],"MY":["Malaysia","MYR"],"MZ":["Mozambique","MZN"],"NA":["Namibia","ZAR"],"NC":["New Caledonia","XPF"],"NE":["Niger","XOF"],"NF":["Norfolk Island","AUD"],"NG":["Nigeria","NGN"],"NI":["Nicaragua","NIO"],"NL":["Netherlands","EUR"],"NO":["Norway","NOK"],"NP":["Nepal","NPR"],"NR":["Nauru","AUD"],"NU":["Niue","NZD"],"NZ":["New Zealand","NZD"],"OM":["Oman","OMR"],"PA":["Panama","PAB"],"PE":["Peru","PEN"],"PF":["French Polynesia","XPF"],"PG":["Papua New Guinea","PGK"],"PH":["Philippines","PHP"],"PK":["Pakistan","PKR"],"PL":["Poland","PLN"],"PM":["St. Pierre & Miquelon","EUR"],"PN":["Pitcairn Islands","NZD"],"PR":["Puerto Rico","USD"],"PS":["Palestine","ILS"],"PT":["Portugal","EUR"],"PW":["Palau","USD"],"PY":["Paraguay","PYG"],"QA":["Qatar","QAR"],"RE":["Réunion","EUR"],"RO":["Romania","RON"],"RS":["Serbia","RSD"],"RU":["Russia","RUB"],"RW":["Rwanda","RWF"],"SA":["Saudi Arabia","SAR"],"SB":["Solomon Islands","SBD"],"SC":["Seychelles","SCR"],"SD":["Sudan","SDG"],"SE":["Sweden","SEK"],"SG":["Singapore","SGD"],"SH":["St. Helena","SHP"],"SI":["Slovenia","EUR"],"SJ":["Svalbard & Jan Mayen","NOK"],"SK":["Slovakia","EUR"],"SL":["Sierra Leone","SLE"],"SM":["San Marino","EUR"],"SN":["Senegal","XOF"],"SO":["Somalia","SOS"],"SR":["Suriname","SRD"],"SS":["South Sudan","SSP"],"ST":["São Tomé & Príncipe","STN"],"SV":["El Salvador","USD"],"SX":["Sint Maarten","XCG"],"SY":["Syria","SYP"],"SZ":["Eswatini","SZL"],"TC":["Turks & Caicos Islands","USD"],"TD":["Chad","XAF"],"TG":["Togo","XOF"],"TH":["Thailand","THB"],"TJ":["Tajikistan","TJS"],"TK":["Tokelau","NZD"],"TL":["Timor-Leste","USD"],"TM":["Turkmenistan","TMT"],"TN":["Tunisia","TND"],"TO":["Tonga","TOP"],"TR":["Türkiye","TRY"],"TT":["Trinidad & Tobago","TTD"],"TV":["Tuvalu","AUD"],"TW":["Taiwan","TWD"],"TZ":["Tanzania","TZS"],"UA":["Ukraine","UAH"],"UG":["Uganda","UGX"],"US":["United States","USD"],"UY":["Uruguay","UYU"],"UZ":["Uzbekistan","UZS"],"VA":["Vatican City","EUR"],"VC":["St. Vincent & Grenadines","XCD"],"VE":["Venezuela","VES"],"VG":["British Virgin Islands","USD"],"VI":["U.S. Virgin Islands","USD"],"VN":["Vietnam","VND"],"VU":["Vanuatu","VUV"],"WF":["Wallis & Futuna","XPF"],"WS":["Samoa","WST"],"XK":["Kosovo","EUR"],"YE":["Yemen","YER"],"YT":["Mayotte","EUR"],"ZA":["South Africa","ZAR"],"ZM":["Zambia","ZMW"],"ZW":["Zimbabwe","USD"]};
@@ -49,7 +51,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '21';
+var SCHEMA_VERSION = '22';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -82,6 +84,8 @@ var ACTIONS = {
   offerFor: actionOfferFor_,
   saveWish: actionSaveWish_,
   deleteWish: actionDeleteWish_,
+  saveOrder: actionSaveOrder_,
+  deleteOrder: actionDeleteOrder_,
   snapshot: actionSnapshot_,
   addLocation: actionAddLocation_,
   deleteLocation: actionDeleteLocation_,
@@ -158,6 +162,7 @@ function ensureSchema_() {
     ensureSheet_(ss, SHEETS.retailers, RETAILER_COLS);
     ensureSheet_(ss, SHEETS.people, PEOPLE_COLS);
     ensureSheet_(ss, SHEETS.wishlist, WISH_COLS);
+    ensureSheet_(ss, SHEETS.orders, ORDER_COLS);
     var oc = ensureSheet_(ss, SHEETS.offers, OFFER_COLS);
     if (!oc.isSheetHidden()) oc.hideSheet();
     var hc = ensureSheet_(ss, SHEETS.history, HISTORY_COLS);
@@ -631,6 +636,7 @@ function actionLoad_() {
     people: peopleList_(),
     peopleInfo: peopleInfo_(),
     wishlist: readAll_(SHEETS.wishlist).filter(function (r) { return r.id; }),
+    orders: readAll_(SHEETS.orders).filter(function (r) { return r.id; }),
     history: readAll_(SHEETS.history).filter(function (r) { return r.month; }),
     usage: usageSummary_(),
     settings: settings_(),
@@ -1891,7 +1897,7 @@ function cellarContext_() {
       return [r.date, r.wineName || names[r.wineId] || r.wineId, r.dir === 'taste' ? 'tasted elsewhere' + (r.venue ? ' (' + r.venue + ')' : '') : r.type, r.occasion, r.people ? 'with ' + r.people : '', r.food ? 'food: ' + r.food : '', r.note ? 'note: ' + r.note : '', r.hearts ? 'favorite of ' + r.hearts : ''].filter(String).join(' | ');
     });
   return { wines: wines, text: 'Today is ' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd') + '. The owner uses ' + settings_().currency + '.\n' + ratingScaleText_(all) + '\n\nCELLAR (wines in stock):\n' + (lines.join('\n') || 'The cellar is empty.') +
-    '\n\nJOURNAL (recent bottles opened, given, sold or tasted elsewhere):\n' + (journal.join('\n') || 'No entries yet.') + tasteTestText_(all) };
+    '\n\nJOURNAL (recent bottles opened, given, sold or tasted elsewhere):\n' + (journal.join('\n') || 'No entries yet.') + ordersText_() + tasteTestText_(all) };
 }
 
 /** The usual restaurant markup over shop prices, as [low, high], or null. */
@@ -2242,6 +2248,46 @@ function actionSaveWish_(req) {
     writeRow_(t, idx, obj);
     return obj;
   });
+}
+
+/** A wine ordered and not delivered yet. Dates stay text, the details are kept for the day it arrives. */
+function actionSaveOrder_(req) {
+  var o = req.order || {};
+  if (!o.id) throw new Error('Missing id');
+  if (!(Number(o.qty) > 0)) throw new Error('Enter how many bottles you ordered.');
+  return withLock_(function () {
+    var t = ltable_(SHEETS.orders);
+    var idx = findIndex_(t, o.id);
+    var obj = idx >= 0 ? toObj_(t.headers, t.rows[idx]) : {};
+    ORDER_COLS.forEach(function (c) { if (o[c] !== undefined) obj[c] = typeof o[c] === 'object' && o[c] !== null ? JSON.stringify(o[c]) : o[c]; });
+    ['ordered', 'expected'].forEach(function (c) { if (obj[c]) obj[c] = "'" + String(obj[c]).replace(/^'/, '').slice(0, 10); });
+    obj.qty = Math.max(1, Math.round(Number(obj.qty)));
+    if (!obj.createdAt) obj.createdAt = new Date().toISOString();
+    writeRow_(t, idx, obj);
+    ['ordered', 'expected'].forEach(function (c) { obj[c] = String(obj[c] || '').replace(/^'/, ''); });
+    return obj;
+  });
+}
+
+function actionDeleteOrder_(req) {
+  return withLock_(function () {
+    var t = ltable_(SHEETS.orders);
+    var idx = findIndex_(t, req.id);
+    if (idx < 0) return { deleted: false };
+    t.sh.deleteRow(idx + 2);
+    return { deleted: true };
+  });
+}
+
+/** What is ordered and on its way, so the sommelier and the consultant do not suggest it again. */
+function ordersText_() {
+  var rows = [];
+  try { rows = readAll_(SHEETS.orders).filter(function (r) { return r.id; }); } catch (e) { return ''; }
+  if (!rows.length) return '';
+  return '\n\nORDERED, NOT DELIVERED YET:\n' + rows.slice(0, 30).map(function (o) {
+    var when = String(o.sub) === 'true' || o.sub === true ? 'subscription, delivery ' + (String(o.expected || '').slice(0, 4) || 'later') : (o.expected ? 'expected ' + String(o.expected).slice(0, 10) : 'no date');
+    return o.qty + ' × ' + [o.producer, o.name, o.vintage].filter(String).join(' ') + (o.retailer ? ' from ' + o.retailer : '') + ', ' + when;
+  }).join('\n');
 }
 
 function actionDeleteWish_(req) {

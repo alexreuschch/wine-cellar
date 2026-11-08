@@ -274,7 +274,8 @@ Object.assign(PL_ACTS, {
 
 /* ---------------------------------------------------------------- the places view in the cellar */
 
-let CVIEW = (() => { const v = store.get('wc-cview', 'list'); return v === 'places' ? 'places' : 'list'; })();
+// the cellar always opens as the list; Places is chosen when needed
+let CVIEW = 'list';
 const stripeColor = w => typeTint(w);
 /* a muted band per zone, cool for sparkling, warm for red */
 function zoneColor(z) {
@@ -428,7 +429,7 @@ Object.assign(PL_ACTS, {
       const l = $('#wine-list'); if (l) l.innerHTML = cellarList();
       return;
     }
-    CVIEW = v; store.set('wc-cview', CVIEW); PCHK.loc = null; render();
+    CVIEW = v; PCHK.loc = null; render();
     if (v === 'places' && !store.get('wc-pl-hint', false)) { store.set('wc-pl-hint', true); setTimeout(() => toast('Tap a location to fold it. Tap Places again to fold or open all.', 6000), 400); }
   },
   'pl-fold': el => {

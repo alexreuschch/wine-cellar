@@ -784,10 +784,11 @@ async function saveWineForm() {
       if (r.retailer && !S.retailers.some(x => lc(x.name) === lc(r.retailer))) S.retailers.push({ name: r.retailer, website: '' });
     });
     persist();
-    const fromWish = D.fromWish;
+    const fromWish = D.fromWish, fromOrder = D.fromOrder;
     D = null;
     busy(false);
     if (fromWish) wishDelete(fromWish);
+    if (fromOrder) orderArrived(fromOrder, saved.count);
     const to = '#/wine/' + encodeURIComponent(saved.id);
     if (base && navPrev() === to) history.back(); else go(to, true);
     const ret = acq && acq.type === 'Purchase' && acq.rp.people.length ? acq.rp.people[0].name : '';

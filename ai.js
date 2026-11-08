@@ -148,7 +148,7 @@ function sommAnswerHtml(t) {
     ${hasFit ? `${segsHtml(t.a.fit, 12)}<span class="tiny muted">How well it fits your taste</span>` : ''}</div>` : '';
   const i = sommThread().indexOf(t);
   const win = check ? checkWindowHtml(t.a) || vintageAskHtml(t, i) : '';
-  const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.magic}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div>` : '';
+  const taste = check && t.a.wine && i >= 0 ? `<div class="grid2"><button class="btn ghost" data-act="somm-preview" data-i="${i}">${ICON.magic}More about it</button><button class="btn ghost" data-act="somm-taste" data-i="${i}">${ICON.spark}I'm tasting this</button></div><button class="link-btn" style="align-self:flex-start" data-act="ord-somm" data-i="${i}">${ICON.cart}Ordered it</button>` : '';
   return `<div class="somm-a">${fit}${win}${check ? priceCheckHtml(t.a) : ''}${t.a.answer ? `<p>${esc(t.a.answer)}</p>` : ''}${taste}${picks ? `${check ? '<p class="small muted" style="margin:0">Similar wines in your cellar</p>' : ''}<div class="somm-picks">${picks}</div>` : ''}
     ${t.a.buy ? `<div class="somm-buy">${ICON.cart}<span><b>To buy</b><br>${esc(t.a.buy)}</span></div>` : ''}</div>`;
 }
@@ -724,7 +724,7 @@ function pickCardHtml(p, i, saved) {
     ${rw && p.replaceWhy ? `<p class="tiny muted" style="margin:-4px 0 0">${esc(p.replaceWhy)}</p>` : ''}
     ${o ? offerLineHtml(o, p.qty) : ''}
     <div class="cons-actions"><button class="link-btn" data-act="cons-preview" data-i="${i}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="cons-offer" data-i="${i}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : o ? 'Update best offer' : 'Find best offer'}</button>
-      <button class="link-btn" data-act="cons-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button></div>
+      <button class="link-btn" data-act="cons-save" data-i="${i}"${saved ? ' disabled' : ''}>${saved ? `${ICON.check}Saved` : `${ICON.plus}Save to wishlist`}</button><button class="link-btn" data-act="ord-pick" data-i="${i}">${ICON.cart}Ordered</button></div>
   </div>`;
 }
 
@@ -736,7 +736,7 @@ function wishCardHtml(x) {
     ${x.why ? `<p class="small" style="margin:0">${esc(x.why)}</p>` : ''}
     ${x.offer ? offerLineHtml(x.offer, x.qty || 6) : ''}
     <div class="cons-actions"><button class="link-btn" data-act="wish-preview" data-id="${esc(x.id)}">${ICON.magic}More about this wine</button><button class="link-btn" data-act="wish-offer" data-id="${esc(x.id)}"${busyO ? ' disabled' : ''}>${ICON.refresh}${busyO ? 'Searching…' : x.offer ? 'Update best offer' : 'Find best offer'}</button>
-      <button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
+      <button class="link-btn" data-act="ord-wish" data-id="${esc(x.id)}">${ICON.cart}Ordered</button><button class="link-btn" data-act="wish-add" data-id="${esc(x.id)}">${ICON.plus}Add to cellar</button>
       <button class="icon-btn" data-act="wish-del" data-id="${esc(x.id)}" aria-label="Remove from wishlist">${ICON.trash}</button></div>
   </div>`;
 }

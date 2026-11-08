@@ -547,8 +547,8 @@ const CHANGES = {
   }
 };
 
-Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS);
-Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS);
+Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS, OR_ACTS);
+Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS, OR_INPUTS);
 Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES);
 
 /* ------------------------------------------------------------ start */
