@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.6.4';
+const APP_VERSION = '3.6.5';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -442,7 +442,7 @@ function spaceOf(w) {
 }
 const locInfoOf = loc => S.locInfo[lc(str(loc))] || { capacity: null, kind: 'cellar', type: '', zones: [], owc: false, checked: '' };
 /* what the script sends about a location, made safe to use */
-const locInfoNorm = l => ({ capacity: Number(l.capacity) > 0 ? Math.round(Number(l.capacity)) : null, kind: l.kind === 'short' || l.type === 'short' ? 'short' : 'cellar', type: str(l.type), zones: Array.isArray(l.zones) ? l.zones : [], owc: !!l.owc, checked: str(l.checked) });
+const locInfoNorm = l => ({ capacity: Number(l.capacity) > 0 ? Math.round(Number(l.capacity)) : null, kind: l.kind === 'short' || l.type === 'short' ? 'short' : 'cellar', type: str(l.type), zones: Array.isArray(l.zones) ? l.zones : [], owc: !!l.owc, checked: str(l.checked), zeroBottom: !!l.zeroBottom });
 /* the space a location has and uses, in standard bottles */
 function locSpace(loc) {
   let used = 0, bottles = 0;

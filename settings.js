@@ -52,7 +52,7 @@ function locInfoEditHtml(loc) {
   const ed = U.edit;
   if (ed.ltype === undefined) {
     const i = locInfoOf(loc);
-    Object.assign(ed, { cap: i.capacity ? String(i.capacity) : '', ltype: i.type || (i.kind === 'short' ? 'short' : ''), zones: (i.zones || []).map(z => Object.assign({}, z)), owc: !!i.owc });
+    Object.assign(ed, { cap: i.capacity ? String(i.capacity) : '', ltype: i.type || (i.kind === 'short' ? 'short' : ''), zones: (i.zones || []).map(z => Object.assign({}, z)), owc: !!i.owc, zeroBottom: !!i.zeroBottom });
     ed.zoneOn = ed.zones.length > 0;
   }
   const t = ed.ltype;
@@ -64,7 +64,9 @@ function locInfoEditHtml(loc) {
       <p class="muted tiny" style="margin:-6px 0 0">Wines kept in their original case show it on their page. Collectors pay more for them.</p>`
     : `<label class="field">Capacity, about how many 75 cl bottles<input id="ed-cap" data-input="ed-cap" inputmode="numeric" placeholder="For example 100" value="${esc(ed.cap)}"></label>
       <p class="muted tiny" style="margin:-4px 0 0">A rough estimate is enough. A magnum counts as 1.5 bottles, a half bottle as 0.6, sparkling wine a little more.</p>`;
-  return `${types}${cap}${t === 'case' || t === 'wall' ? '' : zoneEditHtml(loc)}`;
+  const order = t === 'case' || t === 'wall' ? '' : `<div class="field"><span>Shelf 0 is</span><div class="toggle">${[[false, 'The top shelf'], [true, 'The bottom shelf']].map(([v, l]) => `<button class="${!!ed.zeroBottom === v ? 'on' : ''}" data-act="loc-zero" data-v="${v ? 1 : 0}" aria-pressed="${!!ed.zeroBottom === v}">${l}</button>`).join('')}</div></div>
+    <p class="muted tiny" style="margin:-4px 0 0">Places lists the shelves from top to bottom, the way you see them.</p>`;
+  return `${types}${cap}${order}${t === 'case' || t === 'wall' ? '' : zoneEditHtml(loc)}`;
 }
 
 /* shelf names, edited together with the location */
@@ -178,8 +180,8 @@ async function saveEdit() {
     const now = locInfoOf(ed.name), cap = Math.round(Number(String(ed.cap).replace(/[^\d.]/g, ''))) || null;
     const kind = ed.ltype === 'short' ? 'short' : 'cellar';
     const zones = ed.zoneOn && ed.ltype !== 'case' && ed.ltype !== 'wall' && ed.ltype !== 'short' ? zonesClean(ed.zones) : [];
-    const next = { capacity: kind === 'cellar' ? cap : now.capacity, kind, type: ed.ltype, zones, owc: ed.ltype === 'case' && !!ed.owc };
-    if (next.capacity !== now.capacity || kind !== now.kind || next.type !== str(now.type) || JSON.stringify(zones) !== JSON.stringify(now.zones || []) || next.owc !== !!now.owc) info = next;
+    const next = { capacity: kind === 'cellar' ? cap : now.capacity, kind, type: ed.ltype, zones, owc: ed.ltype === 'case' && !!ed.owc, zeroBottom: !!ed.zeroBottom };
+    if (next.capacity !== now.capacity || kind !== now.kind || next.type !== str(now.type) || JSON.stringify(zones) !== JSON.stringify(now.zones || []) || next.owc !== !!now.owc || next.zeroBottom !== !!now.zeroBottom) info = next;
   }
   if (sameName && !shelves && !info && (site === undefined || site === str((S.retailers.find(r => r.name === ed.name) || {}).website))) { U.edit = null; refreshView(); return; }
   U.edit = null;

@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 43;
+var API_VERSION = 44;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -29,7 +29,7 @@ var WINE_COLS = [
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
   'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer', 'venue', 'shopRef'];
 // venue of a discovery: "restaurant", "shop" or "other"; shopRef: the shop price it was compared with, as JSON {v, cur}
-var LOCATION_COLS = ['name', 'shelves', 'capacity', 'kind', 'type', 'zones', 'owc', 'checked'];
+var LOCATION_COLS = ['name', 'shelves', 'capacity', 'kind', 'type', 'zones', 'owc', 'checked', 'zeroBottom'];
 // type: wine fridge, rack, cellar room, cupboard, wall rack or case; zones: climate zones by shelf; owc: an original wooden case; checked: date of the last check
 // capacity: about how many standard bottles fit; kind: "cellar" for storage, "short" for a short stay such as the kitchen
 var RETAILER_COLS = ['name', 'website'];
@@ -49,7 +49,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '20';
+var SCHEMA_VERSION = '21';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -844,7 +844,7 @@ function deleteRowsWhere_(name, col, value) {
 var LOC_TYPES = ['fridge', 'rack', 'room', 'cupboard', 'wall', 'case', 'short'];
 function locationOut_(r) {
   return { name: String(r.name), shelves: parseShelves_(r.shelves), capacity: Number(r.capacity) > 0 ? Math.round(Number(r.capacity)) : null, kind: r.kind === 'short' ? 'short' : 'cellar',
-    type: LOC_TYPES.indexOf(String(r.type)) >= 0 ? String(r.type) : (r.kind === 'short' ? 'short' : ''), zones: parseZones_(r.zones), owc: r.owc === true || String(r.owc).toUpperCase() === 'TRUE', checked: r.checked ? String(r.checked).slice(0, 10) : '' };
+    type: LOC_TYPES.indexOf(String(r.type)) >= 0 ? String(r.type) : (r.kind === 'short' ? 'short' : ''), zones: parseZones_(r.zones), owc: r.owc === true || String(r.owc).toUpperCase() === 'TRUE', checked: r.checked ? String(r.checked).slice(0, 10) : '', zeroBottom: r.zeroBottom === true || String(r.zeroBottom).toUpperCase() === 'TRUE' };
 }
 /** Climate zones of a location: up to three, each with a name, a temperature and the shelves it covers. */
 function parseZones_(v) {
@@ -894,6 +894,7 @@ function actionSetLocationInfo_(req) {
       if (req.zones !== undefined) o.zones = JSON.stringify(parseZones_(req.zones));
       if (req.owc !== undefined) o.owc = req.owc === true;
       if (req.checked !== undefined) o.checked = String(req.checked || '').slice(0, 10);
+      if (req.zeroBottom !== undefined) o.zeroBottom = req.zeroBottom === true;
       out = locationOut_(o);
       return true;
     });

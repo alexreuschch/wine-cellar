@@ -1000,7 +1000,10 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .pl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .pl-card { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #3B1E2A; border-radius: 16px; background: linear-gradient(180deg, #2C1520, #26121A); box-shadow: 0 2px 10px rgba(0, 0, 0, .22); }
 .pl-card.checking { border-color: var(--gold); }
-.pl-head { display: flex; align-items: center; gap: 4px; }
+.pl-head { display: flex; align-items: center; gap: 4px; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: left; }
+.pl-chev { flex: none; width: 22px; display: grid; place-items: center; color: var(--muted); }
+.pl-chev svg { transform: rotate(90deg); transition: transform .2s; }
+.pl-chev.open svg { transform: rotate(-90deg); }
 .pl-head .loc-ic svg { width: 24px; height: 24px; }
 .pl-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .pl-name b { font-family: var(--serif); font-weight: 400; font-size: 19px; line-height: 1.2; }
@@ -1057,3 +1060,6 @@ main:has(.pl-card.checking) ~ .fab { display: none; }
 .cview button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
 .cview button.on { background: var(--line); color: var(--text); }
 .cview svg { width: 18px; height: 18px; }
+
+.pl-pill { display: flex; padding: 2px 0; }
+.pl-pill .pill { margin: 0; }

@@ -208,6 +208,7 @@ function zoneEditHtml(loc) {
 }
 Object.assign(PL_ACTS, {
   'loc-type': el => { if (!U.edit) return; keepName(); U.edit.ltype = el.dataset.v; if (el.dataset.v === 'case' && !['6', '12'].includes(U.edit.cap) && !U.edit.cap) U.edit.cap = '6'; refreshView(); },
+  'loc-zero': el => { if (!U.edit) return; keepName(); U.edit.zeroBottom = el.dataset.v === '1'; refreshView(); },
   'loc-cap': el => { if (!U.edit) return; keepName(); U.edit.cap = el.dataset.v; refreshView(); },
   'zone-add': () => {
     const ed = U.edit; if (!ed) return; keepName();
@@ -285,6 +286,10 @@ function zoneColor(z) {
 }
 const cviewToggleHtml = () => `<div class="cview" role="group" aria-label="View"><button class="${CVIEW === 'list' ? 'on' : ''}" data-act="cview" data-v="list" aria-pressed="${CVIEW === 'list'}" aria-label="List">${ICON.list}</button><button class="${CVIEW === 'places' ? 'on' : ''}" data-act="cview" data-v="places" aria-pressed="${CVIEW === 'places'}" aria-label="Places">${LOC_ICON.rack}</button></div>`;
 
+/* folded locations, remembered on this phone; a search, the filter or a check opens them */
+const FOLD = new Set((() => { const v = store.get('wc-pl-fold', []); return Array.isArray(v) ? v : []; })());
+const isFolded = (loc, filtered, checking) => FOLD.has(lc(loc)) && !filtered && !U.onlyDue && !checking;
+
 /* the check: place by place, every wine there with its count */
 const PCHK = { loc: null, counts: {}, ok: {} };
 const chkKey = (w, i) => `${w.id}|${i}`;
@@ -313,10 +318,11 @@ function placeCardHtml(loc, items, filtered) {
   const checking = !!PCHK.loc && lc(PCHK.loc) === lc(loc);
   const sh = {};
   items.forEach(x => { const s = shelfVal(x.e.shelf); const k = s === null ? 'none' : String(s); (sh[k] = sh[k] || []).push(x); });
-  const keys = Object.keys(sh).filter(k => k !== 'none').map(Number).sort((a, b) => a - b).map(String);
+  const keys = Object.keys(sh).filter(k => k !== 'none').map(Number).sort((a, b) => (info.zeroBottom ? b - a : a - b)).map(String);
   if (sh.none) keys.push('none');
   const sub = [ty && lc(LOC_TYPE_NAME[ty]) !== lc(loc) ? (ty === 'case' && info.owc ? 'Original wooden case' : LOC_TYPE_NAME[ty]) : '', info.checked ? `Checked on ${fmtDate(info.checked)}` : ''].filter(Boolean).join(' · ');
-  const head = `<div class="pl-head"><span class="loc-ic">${locIcon(loc)}</span><span class="pl-name"><b>${esc(loc)}</b>${sub ? `<span class="tiny muted">${esc(sub)}</span>` : ''}</span><span class="pl-count"><b>${sp.cap ? `${sp.bottles}/${sp.cap}` : sp.bottles}</b><small>${sp.bottles === 1 && !sp.cap ? 'bottle' : 'bottles'}</small></span></div>`;
+  const fold = isFolded(loc, filtered, checking);
+  const head = `<button class="pl-head" data-act="pl-fold" data-v="${esc(loc)}" aria-expanded="${!fold}" aria-label="${fold ? 'Open' : 'Fold'} ${esc(loc)}"><span class="loc-ic">${locIcon(loc)}</span><span class="pl-name"><b>${esc(loc)}</b>${sub ? `<span class="tiny muted">${esc(sub)}</span>` : ''}</span><span class="pl-count"><b>${sp.cap ? `${sp.bottles}/${sp.cap}` : sp.bottles}</b><small>${sp.bottles === 1 && !sp.cap ? 'bottle' : 'bottles'}</small></span><span class="pl-chev${fold ? '' : ' open'}">${ICON.chevron}</span></button>`;
   const fill = sp.cap && info.kind !== 'short' ? `<div class="fill-bar ${fillCls(sp.pct)}"><i style="width:${Math.max(2, sp.pct)}%"></i></div>` : '';
   const dueLine = checking ? '' : dueHtml(items, false);
   const body = keys.map(k => shelfBlockHtml(loc, k, sh[k], checking, keys.length === 1)).join('');
@@ -325,6 +331,7 @@ function placeCardHtml(loc, items, filtered) {
     ? `<p class="small" style="margin:0">Count what lies here. Tap ✓ when a number is right, or change it with minus and plus. Wines that are not here: set them to 0.</p>
       <div class="grid2"><button class="btn" data-act="chk-cancel">Cancel</button><button class="btn primary" data-act="chk-done">${n ? `Done, ${n} ${n === 1 ? 'change' : 'changes'}` : 'Done, all right'}</button></div>`
     : filtered || U.onlyDue ? '' : `<button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button>`;
+  if (fold) return `<section class="pl-card folded" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}</section>`;
   return `<section class="pl-card${checking ? ' checking' : ''}" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}${checking ? foot.split('<div class="grid2">')[0] : ''}${body}${checking ? '<div class="grid2">' + foot.split('<div class="grid2">')[1] : foot}</section>`;
 }
 
@@ -363,7 +370,7 @@ function shelfBlockHtml(loc, k, xs, checking, only) {
     }
     const id = esc(x.w.id), place = esc(placeLabel(x.e));
     return `<div class="pl-wine" style="--tc:${stripeColor(x.w)}"><a class="pl-link" href="#/wine/${encodeURIComponent(x.w.id)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="pl-meta">${esc(meta)}</span></span></a>
-      <div class="pl-end"><div class="stepper sm"><button data-act="minus" data-id="${id}" data-i="${x.i}" aria-label="Take a bottle from ${place}">${ICON.minus}</button><span>${x.e.n}</span><button data-act="plus" data-id="${id}" data-i="${x.i}" aria-label="Add bottles to ${place}">${ICON.plus}</button></div>${pill(x.w)}</div></div>`;
+      <div class="pl-end"><div class="stepper sm"><button data-act="minus" data-id="${id}" data-i="${x.i}" aria-label="Take a bottle from ${place}">${ICON.minus}</button><span>${x.e.n}</span><button data-act="plus" data-id="${id}" data-i="${x.i}" aria-label="Add bottles to ${place}">${ICON.plus}</button></div><a class="pl-pill" href="#/wine/${encodeURIComponent(x.w.id)}" aria-label="Open ${esc(wineTitle(x.w))}">${pill(x.w)}</a></div></div>`;
   }).join('');
   const zc = z ? ` style="--zc:${zoneColor(z)}"` : '';
   return `<div class="pl-shelf"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span>${due ? ` <span class="muted">·</span> ${due}` : ''}</span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
@@ -409,7 +416,27 @@ function markChecked(loc) {
 }
 
 Object.assign(PL_ACTS, {
-  cview: el => { CVIEW = el.dataset.v === 'places' ? 'places' : 'list'; store.set('wc-cview', CVIEW); PCHK.loc = null; render(); },
+  cview: el => {
+    const v = el.dataset.v === 'places' ? 'places' : 'list';
+    // a second tap on Places folds all locations, the next one opens them all
+    if (v === 'places' && CVIEW === 'places') {
+      const all = S.locations.filter(l => locSpace(l).bottles > 0);
+      const allFolded = all.length && all.every(l => FOLD.has(lc(l)));
+      FOLD.clear();
+      if (!allFolded) all.forEach(l => FOLD.add(lc(l)));
+      store.set('wc-pl-fold', [...FOLD]);
+      const l = $('#wine-list'); if (l) l.innerHTML = cellarList();
+      return;
+    }
+    CVIEW = v; store.set('wc-cview', CVIEW); PCHK.loc = null; render();
+    if (v === 'places' && !store.get('wc-pl-hint', false)) { store.set('wc-pl-hint', true); setTimeout(() => toast('Tap a location to fold it. Tap Places again to fold or open all.', 6000), 400); }
+  },
+  'pl-fold': el => {
+    const k = lc(el.dataset.v);
+    if (FOLD.has(k)) FOLD.delete(k); else FOLD.add(k);
+    store.set('wc-pl-fold', [...FOLD]);
+    const l = $('#wine-list'); if (l) l.innerHTML = cellarList();
+  },
   'chk-start': el => {
     if (PCHK.loc && chkChanges() && !confirm('Leave the check of ' + PCHK.loc + ' without saving?')) return;
     Object.assign(PCHK, { loc: el.dataset.v, counts: {}, ok: {} });
