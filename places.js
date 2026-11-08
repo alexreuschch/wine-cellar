@@ -278,10 +278,10 @@ const stripeColor = w => typeTint(w);
 /* a muted band per zone, cool for sparkling, warm for red */
 function zoneColor(z) {
   const n = lc(z.name), t = z.temp;
-  if (/sparkl|champ/.test(n) || (t !== null && t <= 8)) return '#7F95AE';
-  if (/white|ros/.test(n) || (t !== null && t <= 12)) return '#8EA88A';
-  if (/red/.test(n) || (t !== null && t >= 15)) return '#A0605F';
-  return '#8C7A62';
+  if (/sparkl|champ/.test(n) || (t !== null && t <= 8)) return '#9FB4CC';
+  if (/white|ros/.test(n) || (t !== null && t <= 12)) return '#A9C3A3';
+  if (/red/.test(n) || (t !== null && t >= 15)) return '#D08E8B';
+  return '#BFA884';
 }
 const cviewToggleHtml = () => `<div class="cview" role="group" aria-label="View"><button class="${CVIEW === 'list' ? 'on' : ''}" data-act="cview" data-v="list" aria-pressed="${CVIEW === 'list'}" aria-label="List">${ICON.list}</button><button class="${CVIEW === 'places' ? 'on' : ''}" data-act="cview" data-v="places" aria-pressed="${CVIEW === 'places'}" aria-label="Places">${LOC_ICON.rack}</button></div>`;
 
@@ -366,7 +366,7 @@ function shelfBlockHtml(loc, k, xs, checking, only) {
       <div class="pl-end"><div class="stepper sm"><button data-act="minus" data-id="${id}" data-i="${x.i}" aria-label="Take a bottle from ${place}">${ICON.minus}</button><span>${x.e.n}</span><button data-act="plus" data-id="${id}" data-i="${x.i}" aria-label="Add bottles to ${place}">${ICON.plus}</button></div>${pill(x.w)}</div></div>`;
   }).join('');
   const zc = z ? ` style="--zc:${zoneColor(z)}"` : '';
-  return `<div class="pl-shelf${z ? ' zoned' : ''}"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span>${due ? ` <span class="muted">·</span> ${due}` : ''}</span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
+  return `<div class="pl-shelf"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span>${due ? ` <span class="muted">·</span> ${due}` : ''}</span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
 }
 
 async function chkSave() {

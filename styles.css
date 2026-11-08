@@ -1013,10 +1013,9 @@ button.pl-due { text-decoration: underline dotted rgba(255,255,255,.25); text-un
 .pl-only { height: 34px; padding: 0 12px; font-size: 14px; gap: 6px; }
 .pl-only svg { width: 14px; height: 14px; }
 .pl-shelf { display: flex; flex-direction: column; gap: 4px; padding: 10px 10px 8px; border: 1px solid #3A1D29; border-radius: 12px; background: rgba(12, 4, 8, .22); }
-.pl-shelf.zoned { border-left: 3px solid var(--zc); }
 .pl-sh { display: flex; flex-direction: column; gap: 1px; font-size: 14px; font-weight: 600; color: var(--text-2); }
-.pl-zone { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 400; color: var(--muted); }
-.pl-zone svg { color: var(--zc, var(--gold)); }
+.pl-zone { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: var(--zc); }
+.pl-zone svg { color: inherit; }
 .pl-dots { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .pl-dots .dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .35), inset 0 1px 2px rgba(255, 255, 255, .25); }
 .pl-wine { position: relative; display: flex; align-items: center; gap: 8px; padding: 5px 0 5px 11px; }
