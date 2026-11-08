@@ -21,7 +21,7 @@ const offChip = (act, label) => `<button class="chip on" data-act="${act}" aria-
 
 /* ------------------------------------------------------------ shared filter (cellar, journal, top rated) */
 
-const F_WINE = { label: 'Wine', plural: 'wine types', of: w => [w.type], order: TYPES };
+const F_WINE = { label: 'Wine', sec: 'Type', plural: 'wine types', of: w => [w.type], order: TYPES };
 const F_GRAPE = { label: 'Grape', plural: 'grapes', of: grapeNames };
 /* country and region of a wine, from its region field "Côte de Nuits, Burgundy, France": the region is the part right before the country.
    Each shows the flag of the country. The choices follow each other: with France set, Region only offers French regions, and the other way round. */
@@ -39,7 +39,7 @@ const F_COUNTRY = { label: 'Country', plural: 'countries', of: w => { const n = 
 const F_REGION = { label: 'Region', plural: 'regions', of: w => { const r = regionOf(w); return r ? [r] : []; },
   lead: name => { const w = S.wines.find(x => lc(regionOf(x)) === lc(name) && countryOf(x)); return w ? flagOf(w) : ''; } };
 /* the phase in the drinking window, as on the Window screen */
-const F_WINDOW = { label: 'Window', plural: 'phases', of: w => [statusOf(w)], order: STATUS_ORDER, dot: n => (STATUS[n] ? STATUS[n].c : '') };
+const F_WINDOW = { label: 'Window', sec: 'Drinking window', plural: 'phases', of: w => [statusOf(w)], order: STATUS_ORDER, dot: n => (STATUS[n] ? STATUS[n].c : '') };
 const F_RATING = { label: 'Rating', kind: 'rating', of: () => [] };
 /* journal month as 'Nov 2026', and back to '2026-11' for sorting */
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -76,8 +76,8 @@ function tasteFits(w, chosen, skipRow) {
   chosen.forEach(v => { const r = tasteRowOf(v); if (r !== skipRow) (rows[r] = rows[r] || []).push(v); });
   return Object.keys(rows).every(r => rows[r].some(v => have.includes(v)));
 }
-const F_TASTE = { label: 'Taste', plural: 'tastes', kind: 'taste', of: tasteVals };
-const F_PRICE = { label: 'Street', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
+const F_TASTE = { label: 'Taste', sec: '', plural: 'tastes', kind: 'taste', of: tasteVals };
+const F_PRICE = { label: 'Street', sec: 'Street price', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
 const CTX = {
   cellar: {
     noun: 'wines',
@@ -97,6 +97,7 @@ const CTX = {
       price: F_PRICE,
       rating: F_RATING
     },
+    groups: [['wine', 'Wine', ['wine', 'grape']], ['origin', 'Origin', ['country', 'region']], ['taste', 'Taste', ['taste', 'food']], ['cellar', 'Cellar', ['window', 'location']], ['value', 'Value', ['rating', 'price']]],
     items: () => cellarPool(),
     text: w => matches(w, U.search),
     extra: () => { const done = finishedWines().length; return done ? switchHtml('show-finished', U.showFinished, `Include finished wines (${done})`) : ''; },
@@ -126,6 +127,7 @@ const CTX = {
       taste: F_TASTE,
       price: F_PRICE
     },
+    groups: [['wine', 'Wine', ['wine', 'grape']], ['origin', 'Origin', ['country', 'region']], ['taste', 'Taste', ['taste']], ['window', 'Window', ['window']], ['price', 'Price', ['price']]],
     items: () => topPool(),
     text: () => true,
     extra: () => switchHtml('top-fav', !!U.f.top.fav, `Only my favorites<span class="heart-on">${HEART_SM}</span>`) + (finishedWines().length ? switchHtml('top-finished', U.topFinished, `Include finished wines (${finishedWines().length})`) : '') + (discWines().length ? switchHtml('top-disc', U.topDisc, `Include discoveries (${discWines().length})`) : ''),
@@ -241,21 +243,42 @@ function filterArea(ctx) {
     return active.length || badges ? `<div class="chips">${active.map(activeChip).join('')}${badges}${clear}</div>` : '';
   }
   // hidden facets are only set from Insights: no tab, but a chip to remove them
-  const tabs = Object.keys(c.facets).filter(k => !c.facets[k].hidden).filter(k => (isRange(c.facets[k]) ? rangeMax(ctx, k) > 0 : isRating(c.facets[k]) ? ratingSystems(ctx).length > 0 : allVals[k].length));
+  const has = k => { const def = c.facets[k]; return !!def && !def.hidden && (isRange(def) ? rangeMax(ctx, k) > 0 : isRating(def) ? ratingSystems(ctx).length > 0 : allVals[k].length > 0); };
+  const tabs = groupsOf(ctx).map(([g, label, ks]) => [g, label, ks.filter(has)]).filter(t => t[2].length);
   const extra = c.extra();
   if (!tabs.length) return `<div class="card filter-panel"><p class="muted small" style="margin:0">Nothing to filter by yet.</p>${extra}</div>`;
-  if (!tabs.includes(st.tab)) st.tab = tabs[0];
-  const k = st.tab;
-  const nSel = t => facetN(ctx, t);
-  const cols = tabs.length <= 2 ? tabs.length : tabs.length === 4 ? 2 : 3;
-  const tabBar = `<div class="ftabs" role="tablist" style="grid-template-columns:repeat(${cols}, minmax(0, 1fr))">${tabs.map(t => `<button role="tab" aria-selected="${t === k}" class="ftab${t === k ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t}">${c.facets[t].label}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
-  const search = allVals[k] && allVals[k].length > 12 && c.facets[k].kind !== 'taste'
-    ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" data-ctx="${ctx}" aria-label="Search ${c.facets[k].plural}" placeholder="Search ${c.facets[k].plural}" value="${esc(st.q[k] || '')}"></label>` : '';
-  return `<div class="card filter-panel">${tabBar}${search}<div id="facet-chips-${ctx}">${facetChipsHtml(ctx)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}</div>`;
+  if (!tabs.some(t => t[0] === st.tab)) st.tab = tabs[0][0];
+  const cur = tabs.find(t => t[0] === st.tab);
+  const nSel = t => t[2].reduce((a, k) => a + facetN(ctx, k), 0);
+  const tabBar = `<div class="ftabs" role="tablist" style="grid-template-columns:repeat(${tabs.length}, minmax(0, 1fr))">${tabs.map(t => `<button role="tab" aria-selected="${t === cur}" class="ftab${t === cur ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t[0]}">${t[1]}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
+  return `<div class="card filter-panel">${tabBar}<div id="facet-chips-${ctx}" class="fsecs">${tabSecsHtml(ctx, cur[2], allVals)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}</div>`;
 }
 
-function facetChipsHtml(ctx) {
-  const c = CTX[ctx], st = fst(ctx), k = st.tab, def = c.facets[k];
+/* the filter tabs: groups of facets, one tab each; without groups every facet is its own tab */
+const groupsOf = ctx => CTX[ctx].groups || Object.keys(CTX[ctx].facets).filter(k => !CTX[ctx].facets[k].hidden).map(k => [k, CTX[ctx].facets[k].label, [k]]);
+/* the facets of the open tab, each with a small title when there are several */
+function tabSecsHtml(ctx, ks, allVals) {
+  const c = CTX[ctx], st = fst(ctx);
+  if (!ks) {
+    const all = {};
+    Object.keys(c.facets).forEach(k => { const d = c.facets[k]; if (!isRange(d) && !isRating(d)) all[k] = facetValues(c.items(), d); });
+    const tab = groupsOf(ctx).find(t => t[0] === st.tab);
+    return tab ? tabSecsHtml(ctx, tab[2].filter(k => { const d = c.facets[k]; return isRange(d) ? rangeMax(ctx, k) > 0 : isRating(d) ? ratingSystems(ctx).length > 0 : all[k].length > 0; }), all) : '';
+  }
+  const many = ks.length > 1;
+  const secs = ks.map(k => {
+    const def = c.facets[k];
+    const search = allVals[k] && allVals[k].length > 12 && def.kind !== 'taste'
+      ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" data-ctx="${ctx}" data-k="${k}" aria-label="Search ${def.plural}" placeholder="Search ${def.plural}" value="${esc(st.q[k] || '')}"></label>` : '';
+    const title = many && def.sec !== '' ? `<span class="fsec-h">${esc(def.sec || def.label)}</span>` : '';
+    return `<div class="fsec">${title}${search}<div id="facet-chips-${ctx}-${k}">${facetChipsHtml(ctx, k)}</div></div>`;
+  }).join('');
+  const plain = ks.some(k => { const d = c.facets[k]; return !isRange(d) && !isRating(d); });
+  return `${secs}${plain ? `<p class="muted tiny" style="margin:0">Numbers count the ${c.noun} that match together with your other filters.</p>` : ''}`;
+}
+
+function facetChipsHtml(ctx, k) {
+  const c = CTX[ctx], st = fst(ctx), def = c.facets[k];
   if (!def) return '';
   if (isRange(def)) return rangeHtml(ctx, k);
   if (isRating(def)) return ratingHtml(ctx);
@@ -268,8 +291,8 @@ function facetChipsHtml(ctx) {
   let rest = vals.filter(x => !chosen.includes(x.key));
   let more = '', boxed = false;
   if (q) rest = byName(rest.filter(x => lc(x.name).includes(q)));
-  else if (st.all[k] && rest.length > 12) { rest = def.order ? rest : byName(rest); boxed = true; }
-  else if (rest.length > 12) { more = `<button class="chip" data-act="f-more" data-ctx="${ctx}" data-k="${k}">Show all ${rest.length}</button>`; rest = rest.slice(0, 12); }
+  else if (st.all[k] && rest.length > 8) { rest = def.order ? rest : byName(rest); boxed = true; }
+  else if (rest.length > 8) { more = `<button class="chip" data-act="f-more" data-ctx="${ctx}" data-k="${k}">Show all ${rest.length}</button>`; rest = rest.slice(0, 8); }
   const dot = x => (def.dot && def.dot(x.name) ? `<span class="dot" style="--c:${def.dot(x.name)}"></span>` : '');
   const lead = x => (def.lead ? def.lead(x.name) : '');
   const chip = (x, on) => `<button class="chip${on ? ' on' : ''}" data-act="f-chip" data-ctx="${ctx}" data-k="${k}" data-v="${esc(x.key)}">${dot(x)}${lead(x)}${esc(x.name)}${on ? ICON.x : ` <span class="n">${x.n}</span>`}</button>`;
@@ -278,8 +301,8 @@ function facetChipsHtml(ctx) {
   if (rest.length) parts.push(`<div class="chips${boxed ? ' scroll-box' : ''}">${rest.map(x => chip(x, false)).join('')}${more}</div>`);
   else if (q) parts.push('<p class="muted small" style="margin:0">No match.</p>');
   if (boxed) parts.push(`<div><button class="chip" data-act="f-less" data-ctx="${ctx}" data-k="${k}">Show fewer</button></div>`);
-  const how = (def.order || def.sort) && !q ? (def.sortHint || '') : (q || boxed ? 'A to Z. ' : 'Most common first. ');
-  parts.push(`<p class="muted tiny" style="margin:0">${how}Numbers count the ${c.noun} that match together with your other filters.</p>`);
+  const how = (def.order || def.sort) && !q ? (def.sortHint || '') : q || boxed ? 'A to Z.' : rest.length + selected.length > 4 ? 'Most common first.' : '';
+  if (how) parts.push(`<p class="muted tiny" style="margin:0">${how}</p>`);
   return `<div style="display:flex;flex-direction:column;gap:8px">${parts.join('')}</div>`;
 }
 
@@ -300,7 +323,7 @@ function tasteChipsHtml(ctx, k) {
   const aromas = Object.keys(AROMAS).map(g => { const [name, col, ic] = AROMAS[g]; return chip(lc(`Aroma: ${name}`), name, `<span class="taste-ic" style="--ac:${col}">${ic}</span>`, 'aroma'); }).join('');
   const none = pool.filter(it => !tasteVals(it).length).length;
   return `<div class="taste-filter">${rows}${aromas ? `<div class="taste-row aromas"><span class="taste-lbl">Main aromas</span><div class="chips">${aromas}</div></div>` : ''}
-    <p class="muted tiny" style="margin:0">Within a row any choice fits, across rows all have to fit. Numbers count the ${c.noun} that match together with your other filters.${none ? ` ${none} ${none === 1 ? 'wine has' : 'wines have'} no taste profile yet${chosen.length ? ' and ' + (none === 1 ? 'is' : 'are') + ' left out' : ''}. Complete them in Settings, Wine info.` : ''}</p></div>`;
+    <p class="muted tiny" style="margin:0">Within a row any choice fits, across rows all have to fit.${none ? ` ${none} ${none === 1 ? 'wine has' : 'wines have'} no taste profile yet${chosen.length ? ' and ' + (none === 1 ? 'is' : 'are') + ' left out' : ''}. Complete them in Settings, Wine info.` : ''}</p></div>`;
 }
 
 /* street price range: a bar with two handles */

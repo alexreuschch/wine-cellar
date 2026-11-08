@@ -1116,14 +1116,20 @@ button.cons-check { width: 100%; text-align: left; font: inherit; cursor: pointe
 .vq-bar i { display: block; height: 8px; border-radius: 2px; }
 .vq-bar.sm { grid-template-columns: repeat(5, 9px); gap: 2px; }
 .vq-bar.sm i { height: 6px; }
-.vq-list { display: flex; flex-direction: column; }
-.vq-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.vq-sec { display: flex; flex-direction: column; gap: 6px; }
+.vq-sec p { font-size: 13px; line-height: 1.45; }
+.vq-list { display: flex; flex-direction: column; margin-top: 4px; }
+.vq-row { display: grid; grid-template-columns: 38px auto minmax(0, 1fr); align-items: start; column-gap: 10px; padding: 8px 6px; margin: 0 -6px; border-top: 1px solid var(--line); border-radius: 8px; }
 .vq-row:first-child { border-top: 0; }
-.vq-y { width: 40px; flex: none; font-variant-numeric: tabular-nums; }
-.vq-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.vq-top { display: flex; align-items: center; gap: 8px; }
+.vq-row .vq-bar { margin-top: 6px; }
+.vq-row.on { background: color-mix(in srgb, var(--gold) 12%, transparent); border-top-color: transparent; }
+.vq-row.on + .vq-row { border-top-color: transparent; }
+.vq-y { font-size: 14px; font-variant-numeric: tabular-nums; }
+.vq-mid { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .vq-w { font-size: 13px; }
-.chip.vq-mine { flex: none; height: 30px; font-size: 12px; padding: 0 10px; }
+.vq-mine { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--gold); cursor: pointer; }
+.vq-all { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.vq-all svg { width: 14px; height: 14px; }
 .vq-line { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
 .vq-line b { font-size: 13px; }
 .vc-list { padding: 4px 14px; gap: 0; }
@@ -1142,3 +1148,12 @@ button.cons-check { width: 100%; text-align: left; font: inherit; cursor: pointe
 .ab-fact .vq-line .vq-bar { display: inline-grid; }
 .ab-fact .vq-line b { display: inline; font-size: 13px; color: var(--text); }
 .vc-q { flex-direction: column; align-items: flex-start; gap: 3px; }
+.fsecs { display: flex; flex-direction: column; gap: 14px; }
+.fsec { display: flex; flex-direction: column; gap: 8px; }
+.fsec-h { font-size: 12px; color: var(--text-2); letter-spacing: .02em; }
+
+button.ab-fact { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; align-items: center; }
+button.ab-fact > div { flex: 1; min-width: 0; }
+button.ab-fact > svg:last-child { width: 16px; height: 16px; color: var(--muted); margin: 0; }
+.vc-chart { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.vc-chart svg { width: 16px; height: 16px; }

@@ -161,6 +161,8 @@ const ACTS = {
   'info-open': el => openInfo(el.dataset.k, el.dataset.v, el.dataset.c),
   'info-close': () => closeInfo(),
   'info-term': el => { const x = { k: el.dataset.k, t: el.dataset.t, region: el.dataset.r || '' }; closeInfo(); if (x.k === 'grape') insightsGo('grape', x.t); else insightsGo('term', x); },
+  'vint-open': el => openVintage(el.dataset.r, el.dataset.y),
+  'vint-all': () => { INFO.vAll = !INFO.vAll; if (!INFO.vAll) INFO.vFocus = null; renderInfo(); },
   'vint-mine': el => { const r = str(INFO.name).split(',')[0].trim(), y = el.dataset.y; closeInfo(); insightsGo('regvint', `${r}|${y}`); },
   'info-mine': () => { const m = infoMine(); closeInfo(); if (m.go) insightsGo(m.go[0], m.go[1]); },
   'complete-all': () => completeAll(),
@@ -419,9 +421,9 @@ const INPUTS = {
     const l = $('#wine-list'), f = $('#facet-chips-cellar'), d = $('#drink-soon');
     if (l) l.innerHTML = cellarList();
     if (d) d.innerHTML = drinkSoonHtml();
-    if (f) f.innerHTML = facetChipsHtml('cellar');
+    if (f) f.innerHTML = tabSecsHtml('cellar');
   },
-  facetq: el => { const ctx = el.dataset.ctx, st = U.f[ctx]; st.q[st.tab] = el.value; const f = $('#facet-chips-' + ctx); if (f) f.innerHTML = facetChipsHtml(ctx); },
+  facetq: el => { const ctx = el.dataset.ctx, k = el.dataset.k, st = U.f[ctx]; st.q[k] = el.value; const f = $(`#facet-chips-${ctx}-${k}`); if (f) f.innerHTML = facetChipsHtml(ctx, k); },
   rs: el => {
     if (!RS) return;
     RS[el.name] = el.value;
@@ -464,7 +466,7 @@ const INPUTS = {
     U.jSearch = el.value;
     const l = $('#journal-list'), f = $('#facet-chips-journal');
     if (l) l.innerHTML = journalList();
-    if (f) f.innerHTML = facetChipsHtml('journal');
+    if (f) f.innerHTML = tabSecsHtml('journal');
   },
   field: el => { if (D) { D.fields[el.name] = el.value; D.touched.add(el.name); if (['producer', 'name', 'vintage'].includes(el.name)) renderDup(); } if (el.classList.contains('autosize')) autosize(el); },
   rscore: el => { if (D) D.ratings[Number(el.dataset.i)].score = el.value; }
