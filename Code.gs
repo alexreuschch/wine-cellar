@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 46;
+var API_VERSION = 47;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1666,17 +1666,21 @@ var INFO_ASK = {
   region: 'the wine region "%s". Sections: "The region" (location, size, history), "Climate and soils", "Wines and grapes" (main grapes and styles), "Where the best wines come from" (sub-regions, appellations, classification). Facts: Country, Climate, Vineyard area, Best known for.',
   grape: 'the grape variety "%s". Sections: "Character" (aromas, structure, how it tastes), "Styles" (how it is made and blended, where it gives its best wines). Facts: Color, Origin, Typical aromas, Body, Ageing potential.',
   style: 'the wine style "%s". Sections: "What it is", "Typical character", "How to serve it" (temperature, glass, decanting), "How long to keep it". Facts: Serving temperature, Glass, Decanting, Ageing potential.',
-  producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area.'
+  producer: 'the wine producer "%s". Sections: "History" (founding, family or owners), "Vineyards and philosophy" (size, location, farming, winemaking), "Best known wines". Facts: Based in, Founded, Owner, Vineyard area.',
+  vintages: 'the vintages of the wine region "%s"'
 };
 
 /** One key per region, grape, style or producer: "Ribera del Duero, Spain" and "Ribera del Duero" are the same region. */
 function infoKey_(kind, name, context) {
   var first = function (v) { return String(v || '').split(',')[0].trim().toLowerCase().replace(/\s+/g, ' '); };
-  var n = kind === 'region' ? first(name) : String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  var n = kind === 'region' || kind === 'vintages' ? first(name) : String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
   return kind + '|' + n + (kind === 'producer' && context ? '|' + first(context) : '');
 }
 /** A grape background from before the charts; it is written again once. */
-function infoOld_(kind, info) { var v = (info && info.v) || 0; return kind === 'grape' || kind === 'region' ? v < 3 : kind === 'producer' && v < 2; }
+function infoOld_(kind, info) {
+  if (kind === 'vintages') return !info || Number(info.made) < new Date().getFullYear();   // a new vintage every year
+  var v = (info && info.v) || 0; return kind === 'grape' || kind === 'region' ? v < 3 : kind === 'producer' && v < 2;
+}
 
 /** What each kind returns besides the text, for the charts, the map and the links. */
 var INFO_MORE = {
@@ -1692,6 +1696,7 @@ var INFO_MORE = {
 };
 
 function infoRequest_(kind, name, context) {
+  if (kind === 'vintages') return vintagesRequest_(name, context);
   var prompt = 'You are an experienced sommelier and wine writer. Write a short, factual guide in English about ' + INFO_ASK[kind].replace('%s', name) +
     (context ? ' Context: ' + context + '.' : '') +
     ' Each section is two to four sentences. Facts are short values of a few words. Only write what you know with reasonable confidence; leave out a fact you do not know. Do not use dashes as punctuation.' +
@@ -1701,7 +1706,39 @@ function infoRequest_(kind, name, context) {
     ' If you do not know it at all, return {"title": null}.';
   return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 4000, messages: [{ role: 'user', content: prompt }] };
 }
+/** The vintage chart of a region: the last 15 years, each from 1 (poor) to 5 (outstanding) with a few words.
+ *  The context names older years of wines in the cellar, they are rated as well. */
+function vintagesRequest_(name, context) {
+  var y = new Date().getFullYear();
+  var years = String(context || '').match(/\b(19[5-9]\d|20\d\d)\b/g) || [];
+  var prompt = 'You are an experienced wine critic. Rate the vintages of the wine region "' + name + '" from ' + (y - 15) + ' to ' + (y - 1) +
+    (years.length ? ', and also ' + years.slice(0, 12).join(', ') : '') +
+    ', the way vintage charts and critics generally judge them for the good wines of this region.' +
+    ' For each year give "q" from 1 to 5 (1 poor, 2 fair, 3 good, 4 very good, 5 outstanding) and "t", a short phrase of four to eight words in your own words on the weather and the wines, for example "Warm year, ripe and generous wines".' +
+    ' Leave out a year you do not know with reasonable confidence. Add ' + y + ' only if its harvest is in and first judgments exist. Do not use dashes as punctuation.' +
+    ' Return ONLY a JSON object, no other text: {"title": "the region as it is usually written", "note": "one sentence on how much the vintage matters in this region", "vintages": [{"y": 2020, "q": 4, "t": "text"}]}.' +
+    ' If you do not know the region at all, return {"title": null}.';
+  return { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2500, messages: [{ role: 'user', content: prompt }] };
+}
+function vintagesFrom_(res) {
+  var d;
+  if (!res || res.stop_reason === 'max_tokens') return null;
+  try { d = parseJson_(textOf_(res), 'No vintages found'); } catch (e) { return null; }
+  if (!d || !d.title || !Array.isArray(d.vintages)) return null;
+  var now = new Date().getFullYear(), seen = {};
+  var list = d.vintages.map(function (x) {
+    var y = Math.round(Number(x && x.y)), q = Math.round(Number(x && x.q));
+    return { y: y, q: q, t: String(x && x.t || '').trim().slice(0, 80) };
+  }).filter(function (x) {
+    if (!(x.y >= 1950 && x.y <= now) || !(x.q >= 1 && x.q <= 5) || seen[x.y]) return false;
+    seen[x.y] = true; return true;
+  }).sort(function (a, b) { return b.y - a.y; });
+  if (!list.length) return null;
+  return { kind: 'vintages', v: 1, made: now, title: String(d.title).trim().slice(0, 120), note: String(d.note || '').trim().slice(0, 300), vintages: list };
+}
+
 function infoFrom_(kind, res) {
+  if (kind === 'vintages') return vintagesFrom_(res);
   var d;
   if (!res || res.stop_reason === 'max_tokens') return null;          // cut off: a part of the JSON is no background
   try { d = parseJson_(textOf_(res), 'No background found'); } catch (e) { return null; }

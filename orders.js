@@ -37,7 +37,7 @@ function openOrderSheet(src, existing) {
     unit: o ? (o.price === null ? null : unitOf(o.price, o.priceCur)) : src.unit !== undefined ? src.unit : (src.price ? unitOf(src.price, src.priceCur || cur()) : null),
     rp: newPicker('retailers', (o ? o.retailer : src.retailer) || '', { single: true }),
     ordered: o ? o.ordered || todayISO() : todayISO(),
-    expected: o ? o.expected : '', sub: o ? o.sub : false, subYear: o && o.sub && o.expected ? o.expected.slice(0, 4) : String(new Date().getFullYear() + 1),
+    expected: o ? o.expected : '',
     note: o ? o.note : '', wishId: src && src.wishId || '', delivered: false,
     website: src && src.website ? src.website : ''
   };
@@ -49,7 +49,6 @@ function openOrderSheet(src, existing) {
 function orderSheetHtml() {
   const st = RS, s = st.src;
   const title = [s.producer, s.name, s.vintage].filter(Boolean).join(' ') || (s.wineId && wineById(s.wineId) ? fullName(wineById(s.wineId)) : 'Wine');
-  const tg = (act, v, on, label) => `<button class="${on ? 'on' : ''}" data-act="${act}" data-v="${v}" aria-pressed="${on}">${label}</button>`;
   const head = st.mode === 'edit' ? 'Edit order' : st.delivered ? 'Bottles added' : 'Ordered';
   return `<div class="sheet-backdrop" data-act="ord-close"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${head}"><div class="grab"></div>
     <div class="between"><div style="min-width:0"><h2 style="font-size:18px;font-weight:600">${head}</h2><p class="small muted ellipsis" style="margin:2px 0 0">${esc(title)}</p></div><button class="icon-btn" data-act="ord-close" aria-label="Close">${ICON.x}</button></div>
@@ -61,9 +60,7 @@ function orderSheetHtml() {
       <div id="people-sugg">${peopleSuggHtml()}</div></div>
     ${ordNewRetailer() ? `<label class="field">Website of ${esc(ordNewRetailer())}<input name="website" data-input="ord" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(st.website)}"></label>` : ''}
     ${st.delivered ? '' : `<label class="field">Ordered on<input type="date" name="ordered" data-input="ord" value="${esc(st.ordered)}"></label>
-    <div class="field"><span>Delivery</span><div class="toggle">${tg('ord-sub', '0', !st.sub, 'Expected on')}${tg('ord-sub', '1', st.sub, 'Subscription')}</div>
-      ${st.sub ? `<input name="subYear" data-input="ord" inputmode="numeric" maxlength="4" placeholder="Year of delivery" aria-label="Year of delivery" value="${esc(st.subYear)}"><span class="muted tiny">En primeur and other subscriptions, delivered in a later year.</span>`
-        : `<input type="date" name="expected" data-input="ord" aria-label="Expected delivery" value="${esc(st.expected)}"><span class="muted tiny">Leave it empty if you do not know yet.</span>`}</div>`}
+    <label class="field">Expected delivery<input type="date" name="expected" data-input="ord" value="${esc(st.expected)}"><span class="muted tiny">Leave it empty if you do not know yet.</span></label>`}
     <label class="field">Note<textarea name="note" data-input="ord" rows="2" placeholder="Order number, case, anything to remember">${esc(st.note)}</textarea></label>
     ${st.delivered ? '<p class="muted tiny" style="margin:-6px 0 0">Next you add the wine to your cellar and choose where the bottles go.</p>' : ''}
     <div class="grid2"><button class="btn" data-act="ord-close">Cancel</button><button class="btn primary" data-act="ord-save">${st.delivered ? 'Save and store' : 'Save'}</button></div>
@@ -78,7 +75,6 @@ async function saveOrderSheet() {
   const qty = Math.max(1, Math.round(Number(st.qty) || 0));
   const p = parseMoney(st.price);
   if (str(st.price).trim() && p === null) { toast('Prices need a number, for example 45.50.'); return; }
-  if (st.sub && !/^\d{4}$/.test(str(st.subYear))) { toast('Enter the year of delivery, for example 2027.'); return; }
   const P = st.rp;
   if (P.typing.trim() && !P.people.length) addPerson(P.typing);
   const s = st.src;
@@ -86,7 +82,7 @@ async function saveOrderSheet() {
     id: st.id, wineId: str(s.wineId), producer: str(s.producer), name: str(s.name), vintage: str(s.vintage), type: str(s.type), region: str(s.region), grapes: str(s.grapes), size: Number(s.size) || 75,
     qty, price: p === null ? '' : Math.round(p / qty * 100) / 100, priceCur: cur(),
     retailer: P.people.length ? P.people[0].name : '', ordered: st.ordered || todayISO(),
-    expected: st.sub ? `${st.subYear}-12-31` : st.expected || '', sub: !!st.sub, note: str(st.note).trim(),
+    expected: st.expected || '', sub: false, note: str(st.note).trim(),
     details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500)
   };
   const wishId = st.wishId, delivered = st.delivered, site = str(st.website).trim(), newRet = o.retailer && !S.retailers.some(r => lc(r.name) === lc(o.retailer));
@@ -260,7 +256,6 @@ const OR_ACTS = {
   'ord-del': () => { const id = RS && RS.id; if (!id || !confirm('Delete this order?')) return; closeSheet(); deleteOrder(id); },
   'ord-qty': el => { RS.qty = clamp((Number(RS.qty) || 1) + Number(el.dataset.d), 1, 999); $('#ord-qty').value = RS.qty; totalSetQty(RS); },
   'buy-status': el => buyStatus(el.dataset.v === 'ordered'),
-  'ord-sub': el => { RS.sub = el.dataset.v === '1'; renderSheet(); },
   'go-orders': () => goSection('orders'),
   'ord-notyet': () => { D = null; U.jumpTo = 'orders'; go('#/insights', true); },
   'go-wishlist': () => goSection('wishlist'),

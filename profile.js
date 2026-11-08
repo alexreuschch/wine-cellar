@@ -163,7 +163,7 @@ function aboutHtml(w) {
   if (p && p.style) rows.push(abRow(AB_ICON.style, p.style, p.styleDesc, likeHint('style', w, x => (x.profile && x.profile.style ? lc(x.profile.style) : '')), ['style', p.style, w.region]));
   if (w.producer) rows.push(abRow(AB_ICON.producer, w.producer, p ? p.producerLine : '', likeHint('producer', w, x => lc(x.producer)), ['producer', w.producer, w.region]));
   if (!rows.length) return '';
-  const more = p && (p.about || p.classification || p.ageing || p.closure || p.vineyard || p.vintageNote);
+  const more = p && (p.about || p.classification || p.ageing || p.closure || p.vineyard || p.vintageNote || vintOf(w.region, w.vintage));
   const open = U.aboutOpen === w.id;
   return `<section style="gap:12px"><h2>About this wine</h2>
     <div class="ab-list">${rows.join('')}
@@ -180,7 +180,7 @@ function moreHtml(w) {
     fact('ageing', 'Ageing', p.ageing),
     fact('closure', 'Closure', p.closure),
     fact('vineyard', 'Vineyard and soil', p.vineyard, true),
-    fact('vintage', w.vintage ? `Vintage ${w.vintage}${w.region ? ` in ${str(w.region).split(',')[0]}` : ''}` : 'Vintage', p.vintageNote, true)
+    vintFactHtml(w, p)
   ].filter(Boolean);
   // two narrow facts side by side; a single narrow one at the end takes the full width
   const narrow = facts.filter(f => !f.includes('ab-fact wide'));
@@ -340,7 +340,7 @@ async function completeAll() {
       if ((d.failed || []).length) PROF.lastError = d.failed[0].error || '';
       say(`${PROF.done} of ${PROF.total} wines done…`);
     }
-    await fillInfos(S.wines, (n, t) => say(`Background on regions, grapes, styles and producers: ${n} of ${t}…`));
+    await fillInfos(S.wines, (n, t) => say(`Background on regions, vintages, grapes, styles and producers: ${n} of ${t}…`));
     INFO_KEYS = null;
     loadInfoKeys();
     toast(PROF.failed ? `Done. ${PROF.failed} ${PROF.failed === 1 ? 'wine' : 'wines'} could not be completed: ${aiErr(PROF.lastError || 'no answer')} Tap the button again for the rest.` : 'Wine info completed.');
@@ -353,7 +353,7 @@ function wineInfoBoxHtml() {
   loadInfoKeys();
   const all = S.wines.length, inc = incompleteWines(), bg = missingInfos();
   const rows = MISSING_PARTS.map(([k, label, test]) => [label, S.wines.filter(test).length]).filter(r => r[1]);
-  const list = rows.length || bg ? `<div class="usage-tab wi-tab">${rows.map(([l, n]) => `<div class="wi-row"><span>${esc(l)}</span><b>${n}</b></div>`).join('')}${bg ? `<div class="wi-row"><span>Background on regions, grapes, styles and producers</span><b>${bg}</b></div>` : ''}</div>` : '';
+  const list = rows.length || bg ? `<div class="usage-tab wi-tab">${rows.map(([l, n]) => `<div class="wi-row"><span>${esc(l)}</span><b>${n}</b></div>`).join('')}${bg ? `<div class="wi-row"><span>Background on regions, vintages, grapes, styles and producers</span><b>${bg}</b></div>` : ''}</div>` : '';
   const todo = inc.length || bg;
   return `<section class="box"><span class="box-title">Wine info</span>
     <p class="small" style="margin:0">${inc.length ? `${inc.length} of ${all} wines are missing AI details:` : `All ${all} wines have their AI details${bg ? ', only some backgrounds are missing:' : '.'}`}</p>
@@ -424,7 +424,7 @@ function profileFromDraft() {
 const INFO = { kind: null, name: '', context: '', data: null, busy: false, error: '' };
 const INFO_ICON = { region: () => AB_ICON.vineyard, grape: () => AB_ICON.grape, style: () => AB_ICON.style, producer: () => AB_ICON.producer };
 const infoFirst = v => lc(str(v).split(',')[0].trim()).replace(/\s+/g, ' ');
-const infoKey = (kind, name, context) => `${kind}|${kind === 'region' ? infoFirst(name) : lc(str(name).trim()).replace(/\s+/g, ' ')}${kind === 'producer' && context ? `|${infoFirst(context)}` : ''}`;
+const infoKey = (kind, name, context) => `${kind}|${kind === 'region' || kind === 'vintages' ? infoFirst(name) : lc(str(name).trim()).replace(/\s+/g, ' ')}${kind === 'producer' && context ? `|${infoFirst(context)}` : ''}`;
 /* backgrounds are kept on the phone; what does not fit there any more is still kept for this session */
 const INFO_MEM = {};
 function infoStored() { try { return JSON.parse(localStorage.getItem('wc-info') || '{}'); } catch (e) { return {}; } }
@@ -432,7 +432,7 @@ function infoCache() { return Object.assign(infoStored(), INFO_MEM); }
 const countryName = c => { if (COUNTRY_NAMES[c]) return COUNTRY_NAMES[c]; try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch (e) { return c; } };
 /* a grape background from before the charts is written again once */
 const INFO_NEW = { grape: [3, 24], region: [3, 26], producer: [2, 25] };
-const infoOld = (kind, d) => !!INFO_NEW[kind] && ((d && d.v) || 0) < INFO_NEW[kind][0] && !(S.version && S.version < INFO_NEW[kind][1]);
+const infoOld = (kind, d) => (kind === 'vintages' ? !d || Number(d.made) < new Date().getFullYear() : !!INFO_NEW[kind] && ((d && d.v) || 0) < INFO_NEW[kind][0] && !(S.version && S.version < INFO_NEW[kind][1]));
 function infoRemember(key, data) {
   INFO_MEM[key] = data;
   const c = infoStored(); c[key] = data;
@@ -647,7 +647,7 @@ function infoTopHtml(d) {
     const grapes = (d.grapes && d.grapes.length ? d.grapes : str(gF && gF.value).split(/,|\band\b/).map(x => x.trim()).filter(Boolean)).slice(0, 8);
     const facts = d.facts.filter(f => f !== gF).map(f => /^country$/i.test(f.label) && c ? Object.assign({}, f, { html: `<i class="gi-fflag">${flagEmoji(c.code)}</i> ${esc(f.value)}` }) : f);
     const mine = cellarGrapes();
-    return `${d.map ? mapHtml(d.map, str(d.title || INFO.name).split(',')[0]) : ''}${tilesHtml(facts)}${grapes.length ? boxHtml('Main grapes', `<div class="gi-chips">${grapes.map(g => termChip(esc(g), { t: g, k: 'grape' }, mine)).join('')}</div>`) : ''}`;
+    return `${d.map ? mapHtml(d.map, str(d.title || INFO.name).split(',')[0]) : ''}${vintChartHtml(INFO.name)}${tilesHtml(facts)}${grapes.length ? boxHtml('Main grapes', `<div class="gi-chips">${grapes.map(g => termChip(esc(g), { t: g, k: 'grape' }, mine)).join('')}</div>`) : ''}`;
   }
   if (k === 'style') {
     const sF = factOf(d, /serv/i), aF = factOf(d, /ageing|aging|keep/i);
@@ -722,6 +722,7 @@ function infoItems(w) {
   grapeShares(Object.assign({}, w, { count: 1 })).forEach(g => out.push({ kind: 'grape', name: g.name }));
   if (w.profile && w.profile.style) out.push({ kind: 'style', name: w.profile.style, context: w.region });
   if (w.producer) out.push({ kind: 'producer', name: w.producer, context: w.region });
+  if (w.region && w.vintage && vintOk()) out.push({ kind: 'vintages', name: w.region, context: vintContext(w.region) });
   return out;
 }
 /* returns how many were written and how many could not be written now (those are written when opened) */
@@ -743,4 +744,85 @@ async function fillInfos(wines, progress) {
     part.forEach(x => { const d = infos[x.key]; if (d && !infoOld(x.kind, d)) out.done++; else out.failed++; });
   }
   return out;
+}
+
+/* ---------------------------------------------------------------- vintage chart of a region and your vintages of a wine
+   The AI rates the last 15 vintages of a region once a year, from 1 (poor) to 5 (outstanding), with a few words each. */
+
+const VQ_WORDS = ['Poor', 'Fair', 'Good', 'Very good', 'Outstanding'];
+const vqColor = q => SEG_COLORS[Math.min(19, q * 4 - 1)];
+const vqBarHtml = (q, small) => `<span class="vq-bar${small ? ' sm' : ''}" role="img" aria-label="${VQ_WORDS[q - 1]}">${[1, 2, 3, 4, 5].map(i => `<i style="background:${i <= q ? vqColor(q) : '#45232F'}"></i>`).join('')}</span>`;
+const vintOk = () => !(S.version && S.version < 47);
+const VINT_BUSY = new Set(), VINT_FAIL = new Set();
+const vintSameRegion = (w, region) => lc(w.region) === lc(region) || regionKey(w) === infoFirst(region);
+/* older vintages in the cellar than the 15 years of the chart are rated as well */
+function vintContext(region) {
+  const old = new Date().getFullYear() - 15;
+  return [...new Set(S.wines.filter(w => !isDisc(w) && vintSameRegion(w, region) && Number(w.vintage) && Number(w.vintage) < old).map(w => String(w.vintage)))].sort().join(', ');
+}
+function vintData(region) { return region ? infoCache()[infoKey('vintages', region)] || null : null; }
+function vintOf(region, year) {
+  const d = vintData(region);
+  return d && year ? (d.vintages || []).find(v => String(v.y) === String(year)) || null : null;
+}
+async function vintLoad(region) {
+  if (!region || !vintOk()) return;
+  const key = infoKey('vintages', region), hit = vintData(region);
+  if ((hit && !infoOld('vintages', hit)) || VINT_BUSY.has(key) || VINT_FAIL.has(key)) return;
+  VINT_BUSY.add(key);
+  try {
+    const d = await api('info', { kind: 'vintages', name: region, context: vintContext(region) });
+    if (d.info) infoRemember(key, d.info); else VINT_FAIL.add(key);
+  } catch (e) { VINT_FAIL.add(key); }
+  VINT_BUSY.delete(key);
+  if (INFO.kind === 'region') renderInfo();
+  if (route().p === 'wine') refreshView();
+}
+const vintLater = region => setTimeout(() => vintLoad(region));
+
+/* in the region background: every vintage with its bar, a few words and your wines of that year */
+function vintChartHtml(region) {
+  if (!vintOk() || !region) return '';
+  const key = infoKey('vintages', region), d = vintData(region);
+  if (!d || infoOld('vintages', d)) vintLater(region);
+  if (!d) return VINT_FAIL.has(key) ? '' : boxHtml('Vintages', '<p class="small muted" style="margin:0">Rating the vintages of this region…</p>', 'vq-box');
+  const mine = {};
+  S.wines.filter(w => !isDisc(w) && w.count > 0 && vintSameRegion(w, region) && w.vintage).forEach(w => { mine[w.vintage] = (mine[w.vintage] || 0) + 1; });
+  const rows = (d.vintages || []).map(v => `<div class="vq-row"><b class="vq-y">${v.y}</b><div class="vq-mid"><div class="vq-top">${vqBarHtml(v.q)}<span class="vq-w">${VQ_WORDS[v.q - 1]}</span></div>${v.t ? `<span class="tiny muted">${esc(v.t)}</span>` : ''}</div>${mine[v.y] ? `<button class="chip vq-mine" data-act="vint-mine" data-y="${v.y}">${mine[v.y]} in your cellar</button>` : ''}</div>`).join('');
+  return boxHtml('Vintages', `${d.note ? `<p class="small muted" style="margin:0">${esc(d.note)}</p>` : ''}<div class="vq-list">${rows}</div><p class="tiny muted" style="margin:0">Rated by AI from vintage charts and critics, for the good wines of the region. Single wines can differ.</p>`, 'vq-box');
+}
+
+/* More about this wine: how the year was in the region */
+function vintFactHtml(w, p) {
+  const vq = vintOf(w.region, w.vintage);
+  if (w.region && w.vintage) vintLater(w.region);
+  const text = p.vintageNote || (vq ? vq.t : '');
+  if (!text && !vq) return '';
+  const label = w.vintage ? `Vintage ${w.vintage}${w.region ? ` in ${str(w.region).split(',')[0]}` : ''}` : 'Vintage';
+  return `<div class="ab-fact wide">${AB_ICON.vintage}<div><span>${esc(label)}</span>${vq ? `<span class="vq-line">${vqBarHtml(vq.q, true)}<b>${VQ_WORDS[vq.q - 1]}</b></span>` : ''}<b>${esc(text)}</b></div></div>`;
+}
+
+/* the same wine in several vintages: quality of the year, drinking phase, stock and your rating, and which to open first */
+function vintCompareHtml(w) {
+  if (isDisc(w) || !w.vintage) return '';
+  const sibs = S.wines.filter(x => !isDisc(x) && x.vintage && lc(x.producer) === lc(w.producer) && lc(x.name) === lc(w.name))
+    .sort((a, b) => Number(b.vintage) - Number(a.vintage));
+  if (new Set(sibs.map(x => String(x.vintage))).size < 2) return '';
+  const region = w.region || (sibs.find(x => x.region) || {}).region;
+  if (region) vintLater(region);
+  const open = sibs.filter(x => x.count > 0 && windowParts(x)).sort(urgencyCmp);
+  const first = open.length > 1 ? open[0] : null;
+  const line = first ? statusLine(first) : '';
+  const rows = sibs.map(x => {
+    const vq = vintOf(x.region || region, x.vintage), s = x.count > 0 ? statusOf(x) : '';
+    return `<a class="vc-row${x.id === w.id ? ' cur' : ''}" href="#/wine/${encodeURIComponent(x.id)}"${x.id === w.id ? ' aria-current="page"' : ''}>
+      <b class="vc-y">${esc(x.vintage)}</b>
+      <span class="vc-q">${vq ? `${vqBarHtml(vq.q, true)}<small>${VQ_WORDS[vq.q - 1]}</small>` : '<small class="muted">Not rated</small>'}</span>
+      <span class="vc-s">${s ? `<span class="dot" style="--c:${STATUS[s].c}"></span><small>${esc(s)}</small>` : '<small class="muted">Finished</small>'}</span>
+      <span class="vc-n"><small>${x.count} btl</small>${x.myRating !== null ? `<small class="muted">${x.myRating}%</small>` : ''}</span></a>`;
+  }).join('');
+  return `<section><div class="sec-head"><h2>Your vintages of this wine</h2><span class="small muted">${sibs.length}</span></div>
+    ${first ? `<p class="vc-rec">${ICON.glass}<span>Open <b>${esc(first.vintage)}</b> first: ${esc(line.charAt(0).toLowerCase() + line.slice(1))}.</span></p>` : ''}
+    <div class="card vc-list">${rows}</div>
+    <p class="muted tiny" style="margin:0">Quality of the year in the region, rated by AI. Tap a vintage to open it.</p></section>`;
 }

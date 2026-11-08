@@ -247,6 +247,7 @@ function insightsGo(k, v) {
   else if (k === 'grape') U.f.cellar.sel.grape = [lc(v)];
   else if (k === 'food') U.f.cellar.sel.food = [lc(v)];
   else if (k === 'vintage') U.f.cellar.sel.vintage = v.split('|').map(lc);
+  else if (k === 'regvint') { const [r, y] = v.split('|'); U.search = r; U.f.cellar.sel.vintage = [lc(y)]; }
   else if (k === 'drinkby') U.f.cellar.sel.drinkby = [v];
   else if (k === 'price') { const [lo, hi] = v.split('|'); U.f.cellar.range = { price: [Number(lo), hi ? Number(hi) - 0.01 : rangeMax('cellar', 'price')] }; }
   else U.search = v;
@@ -590,6 +591,7 @@ function viewWine(id) {
       ${p ? `${timelineHtml(w, true)}${timelineScaleHtml(w)}<p class="muted tiny" style="margin:0">${windowText(w)}</p>`
         : `<p class="muted small" style="margin:0">No drinking window set yet. <a href="${editHref}">Add one</a></p>`}
     </section>
+    ${vintCompareHtml(w)}
     <section>
       <div class="rating-head"><h2>My rating</h2>${w.myRating === null ? `<a class="small" href="${editHref}">Rate in Edit</a>` : `<span class="rating-val">${w.myRating}%</span>`}</div>
       ${w.myRating === null ? '' : segsHtml(w.myRating, 22, 'lg')}

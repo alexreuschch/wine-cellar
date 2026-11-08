@@ -50,6 +50,33 @@ const drinkByOf = w => { const p = windowParts(w); return p ? [String(Math.max(n
 const byYearDesc = (a, b) => (a.name === 'NV') - (b.name === 'NV') || Number(b.name) - Number(a.name);
 const F_VINTAGE = { hidden: true, label: 'Vintage', plural: 'vintages', prefix: 'Vintage ', of: w => [vintageOf(w)], sort: byYearDesc, sortHint: 'Newest first. ' };
 const F_DRINKBY = { hidden: true, label: 'Drink by', plural: 'years', prefix: 'Drink by ', sortHint: 'The year the drinking window ends, wines past it count for this year. ', of: drinkByOf, sort: (a, b) => Number(a.name) - Number(b.name) };
+/* taste: body, acidity, tannin and sweetness in three steps each, plus the main aromas.
+   Within a row any choice fits, between rows all have to fit. Wines without a taste profile have no values. */
+const TASTE_ROWS = [
+  ['body', 'Body', ['Light', 'Medium', 'Full']],
+  ['acid', 'Acidity', ['Soft', 'Medium', 'Fresh']],
+  ['tannin', 'Tannin', ['Soft', 'Medium', 'Firm']],
+  ['sweet', 'Sweetness', ['Dry', 'Off-dry', 'Sweet']]
+];
+const tasteStep = v => (!v ? null : v <= 2 ? 0 : v === 3 ? 1 : 2);
+function tasteVals(w) {
+  const p = w.profile;
+  if (!p) return [];
+  const out = [];
+  TASTE_ROWS.forEach(([k, label, words]) => { const i = tasteStep(p[k]); if (i !== null) out.push(`${label}: ${words[i]}`); });
+  (p.aromas || []).forEach(a => { if (AROMAS[a.g]) out.push(`Aroma: ${AROMAS[a.g][0]}`); });
+  return out;
+}
+const tasteRowOf = key => lc(String(key).split(':')[0]);
+/* every row with a choice must match; rows without a choice are ignored */
+function tasteFits(w, chosen, skipRow) {
+  if (!chosen.length) return true;
+  const have = tasteVals(w).map(lc);
+  const rows = {};
+  chosen.forEach(v => { const r = tasteRowOf(v); if (r !== skipRow) (rows[r] = rows[r] || []).push(v); });
+  return Object.keys(rows).every(r => rows[r].some(v => have.includes(v)));
+}
+const F_TASTE = { label: 'Taste', plural: 'tastes', kind: 'taste', of: tasteVals };
 const F_PRICE = { label: 'Street', chip: 'Street', plural: 'street prices', kind: 'range', of: () => [], val: w => streetOf(w) };
 const CTX = {
   cellar: {
@@ -62,6 +89,7 @@ const CTX = {
       window: F_WINDOW,
       location: { label: 'Location', plural: 'locations', of: w => w.stock.map(e => e.loc).filter(Boolean) },
       food: { label: 'Food', plural: 'kinds of food', of: foodNames },
+      taste: F_TASTE,
       vintage: F_VINTAGE,
       drinkby: F_DRINKBY,
       // a sub-region, village or style tapped in a background: exactly the wines counted on its chip
@@ -95,6 +123,7 @@ const CTX = {
       country: F_COUNTRY,
       region: F_REGION,
       window: F_WINDOW,
+      taste: F_TASTE,
       price: F_PRICE
     },
     items: () => topPool(),
@@ -143,6 +172,7 @@ function passes(ctx, item, except) {
       const v = def.val(item);
       return v !== null && v >= r[0] && v <= r[1] + 0.005;
     }
+    if (def.kind === 'taste') return tasteFits(item, sel(ctx, k));
     return !sel(ctx, k).length || def.of(item).some(v => sel(ctx, k).includes(lc(v)));
   });
 }
@@ -219,7 +249,7 @@ function filterArea(ctx) {
   const nSel = t => facetN(ctx, t);
   const cols = tabs.length <= 2 ? tabs.length : tabs.length === 4 ? 2 : 3;
   const tabBar = `<div class="ftabs" role="tablist" style="grid-template-columns:repeat(${cols}, minmax(0, 1fr))">${tabs.map(t => `<button role="tab" aria-selected="${t === k}" class="ftab${t === k ? ' on' : ''}" data-act="f-tab" data-ctx="${ctx}" data-v="${t}">${c.facets[t].label}${nSel(t) ? `<span class="count">${nSel(t)}</span>` : ''}</button>`).join('')}</div>`;
-  const search = allVals[k] && allVals[k].length > 12
+  const search = allVals[k] && allVals[k].length > 12 && c.facets[k].kind !== 'taste'
     ? `<label class="search compact">${ICON.search}<input type="search" data-input="facetq" data-ctx="${ctx}" aria-label="Search ${c.facets[k].plural}" placeholder="Search ${c.facets[k].plural}" value="${esc(st.q[k] || '')}"></label>` : '';
   return `<div class="card filter-panel">${tabBar}${search}<div id="facet-chips-${ctx}">${facetChipsHtml(ctx)}</div>${extra}${clear ? `<div>${clear}</div>` : ''}</div>`;
 }
@@ -229,6 +259,7 @@ function facetChipsHtml(ctx) {
   if (!def) return '';
   if (isRange(def)) return rangeHtml(ctx, k);
   if (isRating(def)) return ratingHtml(ctx);
+  if (def.kind === 'taste') return tasteChipsHtml(ctx, k);
   const vals = facetValues(c.items().filter(it => c.text(it) && passes(ctx, it, k)), def);
   const all = facetValues(c.items(), def);
   const chosen = sel(ctx, k);
@@ -250,6 +281,26 @@ function facetChipsHtml(ctx) {
   const how = (def.order || def.sort) && !q ? (def.sortHint || '') : (q || boxed ? 'A to Z. ' : 'Most common first. ');
   parts.push(`<p class="muted tiny" style="margin:0">${how}Numbers count the ${c.noun} that match together with your other filters.</p>`);
   return `<div style="display:flex;flex-direction:column;gap:8px">${parts.join('')}</div>`;
+}
+
+/* the taste tab: one row of three steps per axis, then the main aromas with their symbols */
+function tasteChipsHtml(ctx, k) {
+  const c = CTX[ctx], chosen = sel(ctx, k);
+  const pool = c.items().filter(it => c.text(it) && passes(ctx, it, k));
+  const count = (key, row) => pool.filter(it => tasteFits(it, chosen, row) && tasteVals(it).some(v => lc(v) === key)).length;
+  const chip = (key, label, lead, row) => {
+    const on = chosen.includes(key), n = count(key, row);
+    if (!on && !n) return '';
+    return `<button class="chip${on ? ' on' : ''}" data-act="f-chip" data-ctx="${ctx}" data-k="${k}" data-v="${esc(key)}">${lead}${esc(label)}${on ? ICON.x : ` <span class="n">${n}</span>`}</button>`;
+  };
+  const rows = TASTE_ROWS.map(([, label, words]) => {
+    const chips = words.map(wd => chip(lc(`${label}: ${wd}`), wd, '', lc(label))).join('');
+    return chips ? `<div class="taste-row"><span class="taste-lbl">${label}</span><div class="chips">${chips}</div></div>` : '';
+  }).join('');
+  const aromas = Object.keys(AROMAS).map(g => { const [name, col, ic] = AROMAS[g]; return chip(lc(`Aroma: ${name}`), name, `<span class="taste-ic" style="--ac:${col}">${ic}</span>`, 'aroma'); }).join('');
+  const none = pool.filter(it => !tasteVals(it).length).length;
+  return `<div class="taste-filter">${rows}${aromas ? `<div class="taste-row aromas"><span class="taste-lbl">Main aromas</span><div class="chips">${aromas}</div></div>` : ''}
+    <p class="muted tiny" style="margin:0">Within a row any choice fits, across rows all have to fit. Numbers count the ${c.noun} that match together with your other filters.${none ? ` ${none} ${none === 1 ? 'wine has' : 'wines have'} no taste profile yet${chosen.length ? ' and ' + (none === 1 ? 'is' : 'are') + ' left out' : ''}. Complete them in Settings, Wine info.` : ''}</p></div>`;
 }
 
 /* street price range: a bar with two handles */
