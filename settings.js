@@ -304,8 +304,9 @@ function viewSettings(first) {
   const inStock = S.wines.filter(w => w.count > 0);
   const priced = inStock.filter(w => w.street).length;
   return `<main class="screen${first ? '' : ' has-nav'}" style="gap:16px">
-    ${first ? `<div class="brand-hero"><img src="icon-192.png" alt="" width="88" height="88"><b>Vintary</b><span>Your Personal Wine Companion</span><em>Wine, made personal.</em></div>` : `<a class="back" href="#/cellar">${ICON.back}Cellar</a>`}
+    ${first ? `<div class="brand-hero"><img src="icon-192.png" alt="" width="88" height="88"><b>Vintary</b><span>Your Personal Wine Companion</span><em>Wine, made personal.</em></div>` : `${backLinkHtml('#/home', 'Home')}`}
     <h1 class="title">${first ? 'Connect your cellar' : 'Settings'}</h1>
+    ${first ? '' : guideSettingsHtml()}
     ${first ? '' : `<section class="box"><span class="box-title">General</span>
       <div class="field">Currency<button class="pick-btn" data-act="pick-open" data-k="currency"><span class="ellipsis">${esc(cur())} · ${esc(GEO_CURRENCIES[cur()] || cur())}</span>${ICON.chevron}</button></div>
       <p class="muted tiny" style="margin:0">${fxNote()} Switch it, for example, to show your cellar to a friend from abroad.</p>

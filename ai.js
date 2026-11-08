@@ -259,7 +259,7 @@ function sommThreadHtml() {
   return (SOMM.tips ? sommGuideHtml() : '') + th.map(t => `<div class="somm-q">${t.photo ? `<img class="somm-q-photo" src="${esc(t.photo)}" alt="Label photo">` : ''}${t.q ? esc(t.q) : ''}</div>${sommAnswerHtml(t)}`).join('');
 }
 
-const sommTopHtml = () => `<a class="back" href="#/cellar">${ICON.back}Cellar</a>${SOMM.mode === 'list' ? (WL.pages.length || WL.result ? `<button class="btn ghost" style="height:40px" data-act="wl-clear">New wine list</button>` : '') : sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
+const sommTopHtml = () => `${backLinkHtml('#/home', 'Home')}${SOMM.mode === 'list' ? (WL.pages.length || WL.result ? `<button class="btn ghost" style="height:40px" data-act="wl-clear">New wine list</button>` : '') : sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
 const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? checkPlaceholder() : 'What do you feel like?');
 function checkPlaceholder() {
   if (sommThread().length) return 'Ask a follow-up, for example is the 2019 better?';
@@ -279,6 +279,7 @@ function viewSommelier() {
     <div class="detail-top" id="somm-top">${sommTopHtml()}</div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
     <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>
+    ${tipHtml('som-' + SOMM.mode)}
     <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
     ${check ? `<section class="cf-step cf-where"><h3><span class="cf-n">1</span>Where are you?</h3>${whereRowHtml()}</section>` : ''}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
@@ -781,6 +782,7 @@ function viewDiscover() {
   return `<main class="screen has-nav discover">
     <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Consultant</h1></header>
+    ${tipHtml('consultant')}
     <a class="cons-check" href="#/sommelier/check">${ICON.search}<span><b>Know which wine you want?</b> Check it in Will I like it?: type or say its name.</span>${ICON.chevron}</a>
     ${S.wishlist.length ? `<button class="cons-check" data-act="go-wishlist">${ICON.bookmark}<span><b>Your wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</b> in Insights</span>${ICON.chevron}</button>` : ''}
     ${ttOfferHtml()}
@@ -1148,6 +1150,7 @@ function viewJournalAI() {
     <div class="detail-top" id="ja-top">${jaTopHtml()}</div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Journal Assistant</h1></header>
     <p class="small muted" style="margin:-4px 0 0">Your journal, people and purchases, answered by AI.</p>
+    ${tipHtml('journal-ai')}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The journal assistant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
     <div id="ja-thread" class="somm-thread">${jaThreadHtml()}</div>
   </main>

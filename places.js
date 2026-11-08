@@ -322,7 +322,7 @@ function placesHtml() {
   const only = U.onlyDue ? `<button class="chip on pl-only" data-act="pl-due-off" aria-label="Show all bottles again">Only bottles to open${ICON.x}</button>` : '';
   if (!locs.length) return `${only ? `<div class="pl-tools">${only}</div>` : ''}<p class="muted small">${U.onlyDue ? 'No bottle needs to be opened soon.' : filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
   // the stripe shows the type, the chip under the count the drinking window, so no colour switch is needed
-  return `${only ? `<div class="pl-tools">${only}</div>` : ''}
+  return `${only ? `<div class="pl-tools">${only}</div>` : ''}${tipHtml('places')}
     ${locs.map(l => placeCardHtml(l, by[lc(l)], filtered)).join('')}`;
 }
 

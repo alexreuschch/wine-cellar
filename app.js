@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.12.2';
+const APP_VERSION = '4.0.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -70,6 +70,7 @@ const ICON = {
   filter: svg('<path d="M4 5h16l-6 7v6l-4 2v-8z"/>', 20, 1.9),
   heart: svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', 18, 1.9),
   bottle: svg('<path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z"/>', 14, 1.8),
+  home: svg('<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V19h12V9.5"/><path d="M10 19v-5h4v5"/>', 22, 1.8),
   chevron: svg('<path d="M9 6l6 6-6 6"/>', 14, 2),
   gift: svg('<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7C10.5 4 7 4 7 6s3 1 5 1zM12 7c1.5-3 5-3 5-1s-3 1-5 1z"/>', 14, 1.8),
   cash: svg('<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/>', 14, 1.8),
@@ -596,7 +597,7 @@ function nav(active) {
   const late = on && S.orders.some(orderOverdue);
   const badge = (n, label) => (n ? `<span class="nav-n" aria-label="${n} ${label}">${n > 99 ? '99+' : n}</span>` : '');
   const item = (href, key, icon, label, extra = '') => `<a href="${href}" class="${active === key ? 'on' : ''}"><span class="nav-ic">${icon}${extra}</span>${label}</a>`;
-  return `<nav class="nav" aria-label="Main">${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/insights', 'insights', ICON.chart, 'Insights', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
+  return `<nav class="nav" aria-label="Main">${item('#/home', 'home', ICON.home, 'Home')}${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/insights', 'insights', ICON.chart, 'Insights', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
 }
 /* the monthly email and the badges, as chosen in Settings */
 const notifyOf = () => Object.assign({ mail: true, to: '', window: true, orders: true, month: true, badges: true }, (S.settings && S.settings.notify) || {});
@@ -867,14 +868,14 @@ function voiceCancel() {
 function route() {
   const h = location.hash.replace(/^#\/?/, '');
   const [p, id] = h.split('/');
-  return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null };
+  return { p: p || 'home', id: id ? decodeURIComponent(id) : null };
 }
 const isFormRoute = () => ['add', 'edit'].includes(route().p);
 const go = (hash, replace) => { if (replace) { NAV.replacing = true; location.replace(hash); } else location.hash = hash; };
 
 /* where you came from: the screens of this session in order, and how far down each was scrolled */
 const NAV = { stack: [location.hash || '#/cellar'], scroll: {}, replacing: false, restore: null };
-const NAV_LABEL = { cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', orders: 'Ordered', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back' };
+const NAV_LABEL = { home: 'Home', cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', orders: 'Ordered', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back' };
 const hashRoute = h => { const [p, id] = String(h || '').replace(/^#\/?/, '').split('/'); return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null }; };
 /* called on every change of the screen, before it is drawn */
 function navTrack() {
@@ -907,6 +908,8 @@ function render() {
   if (key !== lastRouteKey) U.addRatingOpen = false;
   let html;
   switch (r.p) {
+    case 'home': html = viewHome(); break;
+    case 'setup': html = viewSetup(); break;
     case 'window': html = viewWindow(); break;
     case 'top': html = viewTop(); break;
     case 'insights': html = viewInsights(); break;

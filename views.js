@@ -198,7 +198,7 @@ function viewInsights() {
     <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
     <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a></section>`);
   out.push(ordersSectionHtml(), wishSectionHtml());
-  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${out.join('')}</main>${nav('insights')}`;
+  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${tipHtml('insights')}${out.join('')}</main>${nav('insights')}`;
 }
 
 /* opens the cellar or the journal with the filter that matches a row in Insights */
@@ -296,7 +296,7 @@ function viewTop() {
     <div class="toggle"><button class="${U.topMode === 'mine' ? 'on' : ''}" data-act="top-mode" data-v="mine">My rating</button><button class="${U.topMode === 'ext' ? 'on' : ''}" data-act="top-mode" data-v="ext">External</button></div>
     ${U.topFinished ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:2px">${FIN}<span style="margin-left:4px">marks a finished wine with no bottles left</span></p>` : ''}
     ${U.topDisc ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:6px">${DISC}<span>a wine you tasted out, never in your cellar</span></p>` : ''}`;
-  return `<main class="screen has-nav">${lead}<div id="top-list">${topBody()}</div></main>${nav('top')}`;
+  return `<main class="screen has-nav">${lead}${U.topMode === 'ext' ? tipHtml('top-ext') : ''}<div id="top-list">${topBody()}</div></main>${nav('top')}`;
 }
 
 /* like Show finished wines in the cellar: links below the list to add finished wines and discoveries */
@@ -595,6 +595,7 @@ function viewWine(id) {
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w) || clText(w.size || 75), alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
     <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<span style="display:flex;gap:6px;align-items:center"><button class="icon-btn" data-act="share-wine" data-id="${esc(w.id)}" aria-label="Share this wine">${ICON.share}</button><a class="btn" style="height:40px" href="${editHref}">Edit</a></span></div>
+    ${tipHtml('wine')}
     ${label}
     <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p>${recLineHtml(wineRecBy(w))}</div>
     ${isDisc(w) ? discoveryHtml(w) : stockHtml(w)}

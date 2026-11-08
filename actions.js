@@ -414,8 +414,8 @@ const ACTS = {
       store.set('wc-config', CFG);
       busy(false);
       await sync(true);
-      // the first setup goes on with the taste test, as its last step
-      go(first && S.version >= 34 && !S.tasteTest ? '#/taste' : '#/cellar', true);
+      // a new cellar starts with the setup; the taste test is offered on Home
+      go(first && !S.wines.some(w => !isDisc(w)) && !gdSetupDone() ? '#/setup' : '#/home', true);
       render();
       toast('Connected');
     } catch (e) { busy(false); toast(e.message); }
@@ -566,9 +566,9 @@ const CHANGES = {
   }
 };
 
-Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS, OR_ACTS, BT_ACTS, NT_ACTS);
-Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS, OR_INPUTS);
-Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES, OR_CHANGES, NT_CHANGES);
+Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS, OR_ACTS, BT_ACTS, NT_ACTS, GD_ACTS);
+Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS, OR_INPUTS, GD_INPUTS);
+Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES, OR_CHANGES, NT_CHANGES, GD_CHANGES);
 
 /* ------------------------------------------------------------ start */
 
