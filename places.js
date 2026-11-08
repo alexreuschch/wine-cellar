@@ -300,21 +300,21 @@ function chkChanges() {
 
 function placesHtml() {
   const filtered = U.search || activeCount('cellar');
-  const list = S.wines.filter(w => !isDisc(w) && w.count > 0 && matches(w, U.search) && passes('cellar', w));
+  const list = S.wines.filter(w => !isDisc(w) && w.count > 0 && matches(w, U.search) && passes('cellar', w) && (!U.onlyDue || URGENT.includes(statusOf(w))));
   const by = {};
   list.forEach(w => w.stock.forEach((e, i) => { if (e.n > 0) (by[lc(e.loc)] = by[lc(e.loc)] || []).push({ w, e, i }); }));
   const locs = S.locations.filter(l => by[lc(l)]).concat(Object.keys(by).filter(k => !S.locations.some(l => lc(l) === k)).map(k => by[k][0].e.loc));
-  if (!locs.length) return `<p class="muted small">${filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
+  const only = U.onlyDue ? `<button class="chip on pl-only" data-act="pl-due-off" aria-label="Show all bottles again">Only bottles to open${ICON.x}</button>` : '';
+  if (!locs.length) return `${only ? `<div class="pl-tools">${only}</div>` : ''}<p class="muted small">${U.onlyDue ? 'No bottle needs to be opened soon.' : filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
   const legend = DOTS === 'window'
     ? `<div class="pl-legend">${STATUS_ORDER.filter(s => list.some(w => statusOf(w) === s)).map(s => `<span><i style="background:${STATUS[s].c}"></i>${esc(s)}</span>`).join('')}</div>` : '';
-  return `<div class="pl-tools"><div class="chips"><button class="chip${DOTS === 'type' ? ' on' : ''}" data-act="dots" data-v="type">Type</button><button class="chip${DOTS === 'window' ? ' on' : ''}" data-act="dots" data-v="window">Drinking window</button></div></div>${legend}
+  return `<div class="pl-tools"><div class="chips"><button class="chip${DOTS === 'type' ? ' on' : ''}" data-act="dots" data-v="type">Type</button><button class="chip${DOTS === 'window' ? ' on' : ''}" data-act="dots" data-v="window">Drinking window</button>${only}</div></div>${legend}
     ${locs.map(l => placeCardHtml(l, by[lc(l)], filtered)).join('')}`;
 }
 
 function placeCardHtml(loc, items, filtered) {
   const info = locInfoOf(loc), sp = locSpace(loc), ty = locTypeOf(loc);
   const checking = !!PCHK.loc && lc(PCHK.loc) === lc(loc);
-  const due = items.reduce((a, x) => a + (['Drink soon', 'Past its window'].includes(statusOf(x.w)) ? x.e.n : 0), 0);
   const sh = {};
   items.forEach(x => { const s = shelfVal(x.e.shelf); const k = s === null ? 'none' : String(s); (sh[k] = sh[k] || []).push(x); });
   const keys = Object.keys(sh).filter(k => k !== 'none').map(Number).sort((a, b) => a - b).map(String);
@@ -322,13 +322,13 @@ function placeCardHtml(loc, items, filtered) {
   const sub = [ty && lc(LOC_TYPE_NAME[ty]) !== lc(loc) ? (ty === 'case' && info.owc ? 'Original wooden case' : LOC_TYPE_NAME[ty]) : '', info.checked ? `Checked on ${fmtDate(info.checked)}` : ''].filter(Boolean).join(' · ');
   const head = `<div class="pl-head"><span class="loc-ic">${locIcon(loc)}</span><span class="pl-name"><b>${esc(loc)}</b>${sub ? `<span class="tiny muted">${esc(sub)}</span>` : ''}</span><span class="pl-count"><b>${sp.cap ? `${sp.bottles}/${sp.cap}` : sp.bottles}</b><small>${sp.bottles === 1 && !sp.cap ? 'bottle' : 'bottles'}</small></span></div>`;
   const fill = sp.cap && info.kind !== 'short' ? `<div class="fill-bar ${fillCls(sp.pct)}"><i style="width:${Math.max(2, sp.pct)}%"></i></div>` : '';
-  const dueLine = due && !checking ? `<p class="pl-due">${due} ${due === 1 ? 'bottle' : 'bottles'} to open soon</p>` : '';
+  const dueLine = checking ? '' : dueHtml(items, false);
   const body = keys.map(k => shelfBlockHtml(loc, k, sh[k], checking, keys.length === 1)).join('');
   const n = checking ? chkChanges() : 0;
   const foot = checking
     ? `<p class="small" style="margin:0">Count what lies here. Tap ✓ when a number is right, or change it with minus and plus. Wines that are not here: set them to 0.</p>
       <div class="grid2"><button class="btn" data-act="chk-cancel">Cancel</button><button class="btn primary" data-act="chk-done">${n ? `Done, ${n} ${n === 1 ? 'change' : 'changes'}` : 'Done, all right'}</button></div>`
-    : filtered ? '' : `<button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button>`;
+    : filtered || U.onlyDue ? '' : `<button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button>`;
   return `<section class="pl-card${checking ? ' checking' : ''}" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}${checking ? foot.split('<div class="grid2">')[0] : ''}${body}${checking ? '<div class="grid2">' + foot.split('<div class="grid2">')[1] : foot}</section>`;
 }
 
@@ -339,14 +339,25 @@ function posRank(p) {
   return [r('side'), r('depth'), r('level'), o.other ? 1 : 0];
 }
 const URGENT = ['Past its window', 'Drink soon'];
+/* what should be opened, said exactly and in the colour of its status; a tap shows only those bottles */
+function dueHtml(items, short) {
+  const n = st => items.reduce((a, x) => a + (statusOf(x.w) === st ? x.e.n : 0), 0);
+  const past = n('Past its window'), soon = n('Drink soon');
+  if (!past && !soon) return '';
+  const parts = [];
+  if (past) parts.push(`<span style="color:${STATUS['Past its window'].c}">${past} past ${short ? 'window' : past === 1 ? 'its window' : 'their window'}</span>`);
+  if (soon) parts.push(`<span style="color:${STATUS['Drink soon'].c}">${soon} drink soon</span>`);
+  const txt = parts.join('<span class="muted"> · </span>');
+  return U.onlyDue ? `<span class="pl-due${short ? ' sm' : ''}">${txt}</span>` : `<button class="pl-due${short ? ' sm' : ''}" data-act="pl-due" aria-label="Show only the bottles to open">${txt}</button>`;
+}
 function shelfBlockHtml(loc, k, xs, checking, only) {
   const s = k === 'none' ? null : Number(k), z = s === null ? null : zoneAt(loc, s);
   const title = s === null ? (isCase(loc) || only ? '' : 'No shelf') : shelfLabel(loc, s);
   xs = xs.slice().sort((a, b) => { const ra = posRank(a.e.pos), rb = posRank(b.e.pos); for (let j = 0; j < ra.length; j++) if (ra[j] !== rb[j]) return ra[j] - rb[j]; return wineTitle(a.w).localeCompare(wineTitle(b.w)) || str(a.w.vintage).localeCompare(str(b.w.vintage)); });
-  const n = xs.reduce((a, x) => a + x.e.n, 0), due = xs.reduce((a, x) => a + (URGENT.includes(statusOf(x.w)) ? x.e.n : 0), 0);
-  const count = `${n} ${n === 1 ? 'bottle' : 'bottles'}${due && DOTS === 'window' ? ` · <span class="pl-due-in">${due} to open</span>` : ''}`;
+  const n = xs.reduce((a, x) => a + x.e.n, 0);
+  const count = `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+  const due = checking ? '' : dueHtml(xs, true);
   const rows = xs.map(x => {
-    const st = statusOf(x.w), urgent = URGENT.includes(st);
     const meta = [x.w.vintage, posShow(x.e.pos)].filter(Boolean).join(' · ');
     if (checking) {
       const key = chkKey(x.w, x.i), v = chkVal(x.w, x.i), ok = PCHK.ok[key] && v === x.e.n;
@@ -354,10 +365,12 @@ function shelfBlockHtml(loc, k, xs, checking, only) {
         <div class="stepper sm"><button data-act="chk-n" data-k="${esc(key)}" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span>${v}</span><button data-act="chk-n" data-k="${esc(key)}" data-d="1" aria-label="More">${ICON.plus}</button></div>
         <button class="chk-ok${ok ? ' on' : ''}" data-act="chk-ok" data-k="${esc(key)}" aria-label="The number is right" aria-pressed="${!!ok}">${ICON.check}</button></div>`;
     }
-    return `<a class="pl-wine" href="#/wine/${encodeURIComponent(x.w.id)}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="pl-meta">${esc(meta)}${urgent ? `${meta ? ' · ' : ''}<b style="color:${STATUS[st].c}">${esc(st)}</b>` : ''}</span></span><span class="pl-n">${x.e.n}</span></a>`;
+    const id = esc(x.w.id), place = esc(placeLabel(x.e));
+    return `<div class="pl-wine" style="--tc:${stripeColor(x.w)}"><a class="pl-link" href="#/wine/${encodeURIComponent(x.w.id)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="pl-meta">${esc(meta)}</span></span></a>
+      <div class="pl-end"><div class="stepper sm"><button data-act="minus" data-id="${id}" data-i="${x.i}" aria-label="Take a bottle from ${place}">${ICON.minus}</button><span>${x.e.n}</span><button data-act="plus" data-id="${id}" data-i="${x.i}" aria-label="Add bottles to ${place}">${ICON.plus}</button></div>${pill(x.w)}</div></div>`;
   }).join('');
   const zc = z ? ` style="--zc:${zoneColor(z)}"` : '';
-  return `<div class="pl-shelf${z ? ' zoned' : ''}"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span></span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
+  return `<div class="pl-shelf${z ? ' zoned' : ''}"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span>${due ? ` <span class="muted">·</span> ${due}` : ''}</span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
 }
 
 async function chkSave() {
@@ -417,5 +430,7 @@ Object.assign(PL_ACTS, {
     const l = $('#wine-list'); if (l) l.innerHTML = cellarList();
   },
   'chk-ok': el => { PCHK.ok[el.dataset.k] = !PCHK.ok[el.dataset.k]; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); },
-  'chk-done': () => chkSave()
+  'chk-done': () => chkSave(),
+  'pl-due': () => { U.onlyDue = true; DOTS = 'window'; PCHK.loc = null; const l = $('#wine-list'); if (l) { l.innerHTML = cellarList(); const t = $('.pl-tools'); if (t) t.scrollIntoView({ block: 'start' }); window.scrollBy(0, -12); } },
+  'pl-due-off': () => { U.onlyDue = false; const l = $('#wine-list'); if (l) l.innerHTML = cellarList(); }
 });
