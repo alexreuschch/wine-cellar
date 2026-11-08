@@ -81,7 +81,8 @@ function parseProfile(v) {
     foods: (Array.isArray(p.foods) ? p.foods : []).filter(f => FOODS[f]).filter((f, i, a) => a.indexOf(f) === i).slice(0, 6),
     style: t(p.style), styleDesc: t(p.styleDesc), sub: t(p.sub), producerLine: t(p.producerLine), about: t(p.about),
     classification: t(p.classification), alcohol: Number(p.alcohol) > 0 ? Number(p.alcohol) : null, ageing: t(p.ageing),
-    closure: t(p.closure), vineyard: t(p.vineyard), vintageNote: t(p.vintageNote), typical: p.typical === true
+    closure: t(p.closure), vineyard: t(p.vineyard), vintageNote: t(p.vintageNote), typical: p.typical === true,
+    bottle: ['bordeaux', 'burgundy', 'flute', 'bocksbeutel', 'champagne', 'port', 'fiasco'].includes(p.bottle) ? p.bottle : ''
   };
 }
 /* the alcohol of a wine as shown under its name, or '' */
@@ -411,6 +412,7 @@ function renderProfileEditor() {
 
 function profileFromDraft() {
   const p = Object.assign({}, D.profile);
+  delete p.bottle;   // the bottle shape is kept in D.bottle
   const a = Number(String(p.alcohol === null ? '' : p.alcohol).replace(',', '.'));
   p.alcohol = a > 0 && a < 25 ? a : null;
   p.aromas = p.aromas.filter(x => AROMAS[x.g]).map(x => ({ g: x.g, n: str(x.n).trim() }));

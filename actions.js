@@ -303,7 +303,12 @@ const ACTS = {
   'nav-back': () => history.back(),
   'skip-photo': () => { D.step = 'form'; render(); },
   'new-photo': () => { D.step = 'photo'; render(); },
-  retake: () => { D.step = 'photo'; D.src = null; render(); },
+  retake: () => { D.step = camOk() && !D.camFail ? 'camera' : 'photo'; D.src = null; render(); },
+  'cam-open': () => { D.step = 'camera'; render(); },
+  'cam-cancel': () => { camStop(); D.step = 'photo'; render(); },
+  'cam-shot': () => camShot(),
+  'cam-torch': () => camTorch(),
+  'label-zoom': () => labelZoom(),
   'do-crop': () => finishCrop(D.corners),
   'use-full': () => finishCrop(null),
   'st-n': el => {
@@ -498,6 +503,7 @@ const CHANGES = {
   'top-fav': el => { U.f.top.fav = el.checked; refreshView(); },
   'j-fav': el => { U.jFav = el.checked; refreshView(); },
   'qty-in': el => setQty(el, true),
+  'bottle-sel': el => { if (D) D.bottle = el.value; },
   'size-sel': el => { if (!D) return; D.touched.add('size'); if (el.value === 'other') { D.sizeOther = true; D.fields.size = ''; } else { D.sizeOther = false; D.fields.size = el.value; } renderSizeBox(); refreshSpaceNotes(); if (D.sizeOther) { const i = $('[name="size"]'); if (i) i.focus(); } },
   'stock-loc': async el => {
     if (!D) return;
@@ -542,6 +548,7 @@ const CHANGES = {
     try {
       D.src = await loadPhoto(file);
       D.corners = defaultCorners(D.src);
+      D.mids = null;
       D.cornersTouched = false;
       D.detectStarted = false;
       D.step = 'crop';

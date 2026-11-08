@@ -32,6 +32,7 @@ function newDraft(mode, w) {
     preview: w ? w.thumb : '', thumb: w ? w.thumb : '', imageB64: null,
     src: null, corners: null, cornersTouched: false,
     profile: src.profile ? JSON.parse(JSON.stringify(src.profile)) : emptyProfile(),
+    bottle: src.profile && src.profile.bottle ? src.profile.bottle : '',
     ai: null, aiMsg: '', touched: new Set()
   };
 }
@@ -46,20 +47,22 @@ function viewForm(mode, id) {
   }
   const title = mode === 'add' ? 'Add wine' : 'Edit wine';
   const head = `<header class="form-top"><button data-act="cancel-form">Cancel</button><h1>${title}</h1><span></span></header>`;
-  const stepIdx = { photo: 0, crop: 1, form: 2 }[D.step];
+  const stepIdx = { photo: 0, camera: 0, crop: 1, form: 2 }[D.step];
   const steps = mode === 'add' || D.step !== 'form'
     ? `<div class="steps">${['1 Photo', '2 Crop', '3 Review'].map((l, i) => `<span class="${i < stepIdx ? 'done' : i === stepIdx ? 'cur' : ''}">${l}</span>`).join('')}</div>` : '';
   if (D.step === 'photo') {
     return `<main class="screen">${head}${steps}<div class="photo-pick">
       <p>Photograph the front label. Fill the frame, keep it flat and well lit.</p>
-      <label class="btn primary big">Take photo<input type="file" accept="image/*" capture="environment" data-change="photo" hidden></label>
+      ${camOk() && !D.camFail ? '<button class="btn primary big" data-act="cam-open">Take photo</button>' : `${D.camFail ? '<p class="small muted" style="margin:0">The camera could not be opened in the app. The camera of your phone opens instead.</p>' : ''}<label class="btn primary big">Take photo<input type="file" accept="image/*" capture="environment" data-change="photo" hidden></label>`}
       <label class="btn big">Choose from gallery<input type="file" accept="image/*" data-change="photo" hidden></label>
       <button class="btn ghost" data-act="skip-photo">${mode === 'add' ? 'Skip photo, enter manually' : 'Back to the form'}</button></div></main>`;
   }
+  if (D.step === 'camera') return `<main class="screen cam-screen">${head}${steps}${camHtml()}</main>`;
   if (D.step === 'crop') {
     return `<main class="screen">${head}${steps}
       <div class="crop-wrap" id="crop-wrap"><canvas id="crop-canvas"></canvas><svg id="crop-svg"></svg></div>
       <p class="muted small center" id="crop-hint" style="margin:-6px 0 0">Detecting the label edges…</p>
+      <div class="crop-prev"><canvas id="crop-prev" aria-label="Preview of the straightened label"></canvas><p class="tiny muted">Preview. The two middle points follow a label that bends around the bottle.</p></div>
       <div class="grid2"><button class="btn" data-act="retake">Retake</button><button class="btn accent" data-act="do-crop">Crop</button></div>
       <button class="btn ghost" data-act="use-full">Use the whole photo</button></main>`;
   }
@@ -226,6 +229,7 @@ function formBody() {
       ${field('Vintage', 'vintage', { num: true, ph: '2019' })}
       <label class="field">Type<select name="type" data-change="field">${TYPES.map(t => `<option${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       <div id="size-box" style="display:contents">${sizeFieldHtml()}</div>
+      <label class="field">Bottle shape<select name="bottle" data-change="bottle-sel">${['', ...Object.keys(BOTTLE_SHAPES)].map(k => `<option value="${k}"${k === (D.bottle || '') ? ' selected' : ''}>${k ? BOTTLE_NAMES[k] : `Automatic, ${BOTTLE_NAMES[bottleAuto({ type: f.type, region: f.region, grapes: f.grapes, name: f.name })]}`}</option>`).join('')}</select></label>
     </div>
     ${add ? `${stockBox}
     ${acquisitionBox()}
@@ -393,30 +397,36 @@ function setupCrop() {
   svgEl.addEventListener('pointerdown', e => {
     const p = toImg(e);
     let best = -1, bd = Infinity;
-    D.corners.forEach((c, i) => { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < bd) { bd = d; best = i; } });
+    D.corners.concat(cropMids()).forEach((c, i) => { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < bd) { bd = d; best = i; } });
     if (bd < Math.max(D.src.width, D.src.height) * 0.12) { drag = best; svgEl.setPointerCapture(e.pointerId); e.preventDefault(); }
   });
   svgEl.addEventListener('pointermove', e => {
     if (drag < 0) return;
-    D.corners[drag] = toImg(e);
+    // a corner moves its edges, the middle points keep their bend; a middle point only bends its edge
+    if (drag < 4) D.corners[drag] = toImg(e); else setCropMid(drag - 4, toImg(e));
     D.cornersTouched = true;
     drawCropOverlay();
   });
-  const end = () => { drag = -1; };
+  const end = () => { if (drag >= 0) cropPreview(); drag = -1; };
   svgEl.addEventListener('pointerup', end);
   svgEl.addEventListener('pointercancel', end);
+  cropPreview();
   if (!D.detectStarted) { D.detectStarted = true; detectCorners(); }
-  else setHint('Drag the four corners onto the label edges.');
+  else setHint('Drag the corners onto the label edges.');
 }
 
 function drawCropOverlay() {
   const svgEl = $('#crop-svg');
   if (!svgEl || !D || !D.corners) return;
   const W = D.src.width, H = D.src.height, r = Math.max(W, H) * 0.022;
-  const pts = D.corners.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
-  svgEl.innerHTML = `<path d="M0 0H${W}V${H}H0Z M${D.corners.map(c => `${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' L')}Z" fill="rgba(0,0,0,0.45)" fill-rule="evenodd"/>
-    <polygon points="${pts}" fill="none" stroke="#E6CB98" stroke-width="${(r / 4).toFixed(1)}"/>
-    ${D.corners.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#E6CB98" stroke="#1A0C12" stroke-width="${(r / 5).toFixed(1)}"/>`).join('')}`;
+  const [tl, tr, br, bl] = D.corners, mids = cropMids();
+  const ct = bezCtrl(tl, mids[0], tr), cb = bezCtrl(bl, mids[1], br);
+  const n = p => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  const shape = `M${n(tl)} Q${n(ct)} ${n(tr)} L${n(br)} Q${n(cb)} ${n(bl)} Z`;
+  svgEl.innerHTML = `<path d="M0 0H${W}V${H}H0Z ${shape}" fill="rgba(0,0,0,0.45)" fill-rule="evenodd"/>
+    <path d="${shape}" fill="none" stroke="#E6CB98" stroke-width="${(r / 4).toFixed(1)}"/>
+    ${D.corners.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#E6CB98" stroke="#1A0C12" stroke-width="${(r / 5).toFixed(1)}"/>`).join('')}
+    ${mids.map(c => `<circle class="crop-mid" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${(r * 0.8).toFixed(1)}" fill="#1A0C12" stroke="#E6CB98" stroke-width="${(r / 3).toFixed(1)}"/>`).join('')}`;
 }
 
 const setHint = t => { const h = $('#crop-hint'); if (h) h.textContent = t; };
@@ -473,25 +483,28 @@ async function detectCorners() {
     const cv = window.cv;
     const mat = cv.imread(small);
     const scanner = new window.jscanify();
-    let quad = null;
+    let quad = null, found = null;
     try {
       const contour = scanner.findPaperContour(mat);
       if (contour) {
         const c = scanner.getCornerPoints(contour, mat);
         const pts = [c.topLeftCorner, c.topRightCorner, c.bottomRightCorner, c.bottomLeftCorner];
         if (pts.every(p => p && isFinite(p.x) && isFinite(p.y))) quad = pts.map(p => ({ x: p.x / k, y: p.y / k }));
+        if (quad) found = midsFromContour(contour, quad, k);
       }
     } finally { mat.delete(); }
     if (D !== draft || D.step !== 'crop') return;
     if (quad && quadArea(quad) > 0.08 * src.width * src.height && !D.cornersTouched) {
       D.corners = quad;
+      D.mids = found;
       drawCropOverlay();
-      setHint('Edges detected. Drag the corners to adjust.');
+      cropPreview();
+      setHint(found && cropSag(quad, cropMids()) >= 0.012 ? 'Edges and bend detected. Drag the points to adjust.' : 'Edges detected. Drag the points to adjust.');
       return;
     }
-    setHint('Drag the four corners onto the label edges.');
+    setHint('Drag the corners onto the label edges.');
   } catch (e) {
-    setHint('Drag the four corners onto the label edges.');
+    setHint('Drag the corners onto the label edges.');
   }
 }
 
@@ -576,7 +589,7 @@ async function finishCrop(quad) {
   busy(true, 'Straightening the label…');
   await sleep(30);
   try {
-    const out = quad ? warpQuad(D.src, quad) : D.src;
+    const out = quad ? warpLabel(D.src, quad, cropMids(), 1400) : D.src;
     const full = toJpeg(out, 1200, 0.85);
     D.imageB64 = full.split(',')[1];
     D.preview = full;
@@ -757,7 +770,12 @@ async function saveWineForm() {
     thumb: D.thumb || (base ? base.thumb : ''),
     myRating: D.myRating,
     myFav: !!D.myFav,
-    profile: (() => { const p = profileFromDraft(); if (p && D.touched.has('grapes')) p.typical = false; return p; })()
+    profile: (() => {
+      let p = profileFromDraft();
+      if (p && D.touched.has('grapes')) p.typical = false;
+      if (D.bottle) p = Object.assign(p || emptyProfile(), { bottle: D.bottle });
+      return p;
+    })()
   }));
   const entries = [];
   if (acq && w.count > 0) {

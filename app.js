@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.8.3';
+const APP_VERSION = '3.9.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -565,9 +565,10 @@ const pill = w => {
   const s = statusOf(w);
   return s === 'No window' ? '' : `<span class="pill" style="--c:${STATUS[s].c}">${s}</span>`;
 };
+/* the label as a small card: the photo, or a drawn label with the vintage */
 const thumbHtml = (w, sm) => (w.thumb
-  ? `<img class="thumb${sm ? ' sm' : ''}" src="${esc(w.thumb)}" alt="">`
-  : `<div class="thumb${sm ? ' sm' : ''} thumb-ph">${esc(initials(w))}</div>`);
+  ? `<img class="thumb lab${sm ? ' sm' : ''}" src="${esc(w.thumb)}" alt="">`
+  : labelMiniHtml(w, sm));
 const chip = (label, on, act, v, extra = '') => `<button class="chip${on ? ' on' : ''}" data-act="${act}" data-v="${esc(v)}">${extra}${esc(label)}</button>`;
 const segsHtml = (v, h = 7, cls = '') => {
   const n = v === null ? 0 : Math.round(v / 5);
@@ -906,5 +907,6 @@ function afterRender(r) {
   if (U.jumpTo) { const el = $('#' + U.jumpTo); U.jumpTo = null; if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -10); } }
   if (r.p === 'journal-ai') { const ta = $('#ja-text'); if (ta) autosize(ta); }
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'crop') setupCrop();
+  if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'camera') setupCamera(); else if (CAM.stream) camStop();
   if ((r.p === 'add' || r.p === 'edit') && D && D.step === 'form') { setupRating(); document.querySelectorAll('textarea.autosize').forEach(autosize); if (D.ai) updateBanner(); }
 }
