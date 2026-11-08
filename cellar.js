@@ -351,8 +351,11 @@ function statsHtml() {
   const inStock = S.wines.filter(w => w.count > 0);
   const bottles = inStock.reduce((a, w) => a + w.count, 0);
   const t = totals();
-  const cell = (label, value, unit = '', cls = '') => `<div><span class="st-label">${label}</span><b class="${cls}">${value}</b><span class="st-unit">${unit || '&nbsp;'}</span></div>`;
-  return `<div class="stats">${cell('Wines', inStock.length)}${cell('Bottles', bottles)}${cell('Total Costs', t.costN ? fmtNum(t.cost, 0) : 'N/A', cur())}${cell('Total Street', t.streetN ? fmtNum(t.street, 0) : 'N/A', cur())}</div>`;
+  // one calm card: the four numbers in a row, the currency in the label, the cellar space right below
+  const cell = (label, value) => `<div><span>${label}</span><b>${value}</b></div>`;
+  const cs = cellarSpace();
+  const space = cs.cap ? `<a class="ov-space" href="#/settings" aria-label="Cellar space, set in Settings"><span class="between"><span>Cellar space <b>${Math.round(cs.used)}</b> of about ${cs.cap}</span><span class="${cs.free === 0 ? 'down' : 'muted'}">${cs.free === 0 ? 'Full' : `about ${cs.free} free`}</span></span><span class="fill-bar ${fillCls(cs.pct)}"><i style="width:${Math.max(2, cs.pct)}%"></i></span></a>` : '';
+  return `<section class="cellar-ov"><div class="ov-nums">${cell('Wines', inStock.length)}${cell('Bottles', bottles)}${cell(`Cost ${esc(cur())}`, t.costN ? fmtNum(t.cost, 0) : 'N/A')}${cell(`Street ${esc(cur())}`, t.streetN ? fmtNum(t.street, 0) : 'N/A')}</div>${space}</section>`;
 }
 
 function viewCellar() {
@@ -364,12 +367,9 @@ function viewCellar() {
   }
   const filters = filterArea('cellar');
   const btn = filterButton('cellar');
-  const cs = cellarSpace();
-  const space = cs.cap ? `<a class="space-card" href="#/settings" aria-label="Cellar space, set in Settings">${fillBarHtml(cs, 'Cellar space')}</a>` : '';
-  return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${statsHtml()}${space}
-    <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search wine, grape or food" value="${esc(U.search)}"></label>${btn}</div>
+  return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${statsHtml()}
+    <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search" value="${esc(U.search)}"></label>${cviewToggleHtml()}${btn}</div>
     ${filters}
-    ${cviewToggleHtml()}
     ${CVIEW === 'places' ? `<section><div id="wine-list">${cellarList()}</div></section>` : `<div id="drink-soon">${drinkSoonHtml()}</div>
     <section><div class="sec-head"><h2>All wines</h2>${sortSelectHtml()}</div><div id="wine-list">${cellarList()}</div></section>`}
   </main><a class="fab" href="#/add" aria-label="Add a new wine">${ICON.plusBig}</a>${nav('cellar')}`;

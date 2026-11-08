@@ -101,6 +101,8 @@ function posParse(t) {
   o.other = rest.join(' · ');
   return o;
 }
+/* a position as it is shown: the chip form when it can be read, else the text as it was entered */
+const posShow = p => { const t = str(p).trim(); if (!t) return ''; return posFormat(posParse(t)) || t; };
 /* chips to text: a full group says nothing, so it is left out */
 function posFormat(o) {
   const parts = POS_G.map(([g, , vals]) => {
@@ -274,6 +276,7 @@ Object.assign(PL_ACTS, {
 let CVIEW = (() => { const v = store.get('wc-cview', 'list'); return v === 'places' ? 'places' : 'list'; })();
 let DOTS = (() => { const v = store.get('wc-dots', 'type'); return v === 'window' ? 'window' : 'type'; })();
 const TYPE_DOT = { Red: '#9B3A47', White: '#D6C68C', 'Rosé': '#D59AA3', Sparkling: '#E0D19E', Dessert: '#C8994C', Fortified: '#844232', Orange: '#C7844A' };
+const stripeColor = w => (DOTS === 'window' ? (STATUS[statusOf(w)] || { c: '#888' }).c : typeTint(w));
 const dotColor = w => (DOTS === 'window' ? (STATUS[statusOf(w)] || STATUS.Ready || { c: '#888' }).c : TYPE_DOT[w.type] || TYPE_DOT.Red);
 /* a muted band per zone, cool for sparkling, warm for red */
 function zoneColor(z) {
@@ -283,7 +286,7 @@ function zoneColor(z) {
   if (/red/.test(n) || (t !== null && t >= 15)) return '#A0605F';
   return '#8C7A62';
 }
-const cviewToggleHtml = () => `<div class="toggle cview" role="tablist"><button class="${CVIEW === 'list' ? 'on' : ''}" data-act="cview" data-v="list" aria-pressed="${CVIEW === 'list'}">${ICON.list || ''}List</button><button class="${CVIEW === 'places' ? 'on' : ''}" data-act="cview" data-v="places" aria-pressed="${CVIEW === 'places'}">${LOC_ICON.rack}Places</button></div>`;
+const cviewToggleHtml = () => `<div class="cview" role="group" aria-label="View"><button class="${CVIEW === 'list' ? 'on' : ''}" data-act="cview" data-v="list" aria-pressed="${CVIEW === 'list'}" aria-label="List">${ICON.list}</button><button class="${CVIEW === 'places' ? 'on' : ''}" data-act="cview" data-v="places" aria-pressed="${CVIEW === 'places'}" aria-label="Places">${LOC_ICON.rack}</button></div>`;
 
 /* the check: place by place, every wine there with its count */
 const PCHK = { loc: null, counts: {}, ok: {} };
@@ -304,7 +307,7 @@ function placesHtml() {
   if (!locs.length) return `<p class="muted small">${filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
   const legend = DOTS === 'window'
     ? `<div class="pl-legend">${STATUS_ORDER.filter(s => list.some(w => statusOf(w) === s)).map(s => `<span><i style="background:${STATUS[s].c}"></i>${esc(s)}</span>`).join('')}</div>` : '';
-  return `<div class="pl-tools"><span class="small muted">Colours</span><div class="chips"><button class="chip${DOTS === 'type' ? ' on' : ''}" data-act="dots" data-v="type">Type</button><button class="chip${DOTS === 'window' ? ' on' : ''}" data-act="dots" data-v="window">Drinking window</button></div></div>${legend}
+  return `<div class="pl-tools"><div class="chips"><button class="chip${DOTS === 'type' ? ' on' : ''}" data-act="dots" data-v="type">Type</button><button class="chip${DOTS === 'window' ? ' on' : ''}" data-act="dots" data-v="window">Drinking window</button></div></div>${legend}
     ${locs.map(l => placeCardHtml(l, by[lc(l)], filtered)).join('')}`;
 }
 
@@ -329,26 +332,32 @@ function placeCardHtml(loc, items, filtered) {
   return `<section class="pl-card${checking ? ' checking' : ''}" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}${checking ? foot.split('<div class="grid2">')[0] : ''}${body}${checking ? '<div class="grid2">' + foot.split('<div class="grid2">')[1] : foot}</section>`;
 }
 
+/* the order of a shelf as far as the position tells it: left to right, front to back, top to bottom */
+const POS_RANK = { Left: 0, Center: 1, Right: 2, Front: 0, Back: 1, Upper: 0, Middle: 1, Lower: 2 };
+function posRank(p) {
+  const o = posParse(p), r = g => (o[g].length ? Math.min(...o[g].map(v => POS_RANK[v])) : 9);
+  return [r('side'), r('depth'), r('level'), o.other ? 1 : 0];
+}
+const URGENT = ['Past its window', 'Drink soon'];
 function shelfBlockHtml(loc, k, xs, checking, only) {
   const s = k === 'none' ? null : Number(k), z = s === null ? null : zoneAt(loc, s);
   const title = s === null ? (isCase(loc) || only ? '' : 'No shelf') : shelfLabel(loc, s);
-  xs = xs.slice().sort((a, b) => wineTitle(a.w).localeCompare(wineTitle(b.w)) || str(a.w.vintage).localeCompare(str(b.w.vintage)));
-  const bottles = [];
-  xs.forEach(x => { for (let j = 0; j < x.e.n; j++) bottles.push(x); });
-  const max = 36;
-  const dots = checking ? '' : `<div class="pl-dots">${bottles.slice(0, max).map(x => `<a class="dot" href="#/wine/${encodeURIComponent(x.w.id)}" style="background:${dotColor(x.w)}" aria-label="${esc(fullName(x.w))}"></a>`).join('')}${bottles.length > max ? `<span class="tiny muted">+${bottles.length - max}</span>` : ''}</div>`;
+  xs = xs.slice().sort((a, b) => { const ra = posRank(a.e.pos), rb = posRank(b.e.pos); for (let j = 0; j < ra.length; j++) if (ra[j] !== rb[j]) return ra[j] - rb[j]; return wineTitle(a.w).localeCompare(wineTitle(b.w)) || str(a.w.vintage).localeCompare(str(b.w.vintage)); });
+  const n = xs.reduce((a, x) => a + x.e.n, 0), due = xs.reduce((a, x) => a + (URGENT.includes(statusOf(x.w)) ? x.e.n : 0), 0);
+  const count = `${n} ${n === 1 ? 'bottle' : 'bottles'}${due && DOTS === 'window' ? ` · <span class="pl-due-in">${due} to open</span>` : ''}`;
   const rows = xs.map(x => {
-    const meta = [x.w.vintage, str(x.e.pos).trim()].filter(Boolean).join(' · ');
+    const st = statusOf(x.w), urgent = URGENT.includes(st);
+    const meta = [x.w.vintage, posShow(x.e.pos)].filter(Boolean).join(' · ');
     if (checking) {
       const key = chkKey(x.w, x.i), v = chkVal(x.w, x.i), ok = PCHK.ok[key] && v === x.e.n;
-      return `<div class="chk-row${ok ? ' ok' : ''}${v !== x.e.n ? ' changed' : ''}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="tiny muted">${esc(meta)}${v !== x.e.n ? ` · was ${x.e.n}` : ''}</span></span>
+      return `<div class="chk-row${ok ? ' ok' : ''}${v !== x.e.n ? ' changed' : ''}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="tiny muted">${esc(meta)}${v !== x.e.n ? ` · was ${x.e.n}` : ''}</span></span>
         <div class="stepper sm"><button data-act="chk-n" data-k="${esc(key)}" data-d="-1" aria-label="Fewer">${ICON.minus}</button><span>${v}</span><button data-act="chk-n" data-k="${esc(key)}" data-d="1" aria-label="More">${ICON.plus}</button></div>
         <button class="chk-ok${ok ? ' on' : ''}" data-act="chk-ok" data-k="${esc(key)}" aria-label="The number is right" aria-pressed="${!!ok}">${ICON.check}</button></div>`;
     }
-    return `<a class="pl-wine" href="#/wine/${encodeURIComponent(x.w.id)}" style="--tc:${typeTint(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span>${meta ? `<span class="tiny muted">${esc(meta)}</span>` : ''}</span><span class="pl-n">${x.e.n}</span></a>`;
+    return `<a class="pl-wine" href="#/wine/${encodeURIComponent(x.w.id)}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="pl-meta">${esc(meta)}${urgent ? `${meta ? ' · ' : ''}<b style="color:${STATUS[st].c}">${esc(st)}</b>` : ''}</span></span><span class="pl-n">${x.e.n}</span></a>`;
   }).join('');
   const zc = z ? ` style="--zc:${zoneColor(z)}"` : '';
-  return `<div class="pl-shelf${z ? ' zoned' : ''}"${zc}>${title || z ? `<div class="pl-sh"><span>${esc(title)}</span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>` : ''}${dots}${rows}</div>`;
+  return `<div class="pl-shelf${z ? ' zoned' : ''}"${zc}><div class="pl-sh"><span>${title ? `${esc(title)} · ` : ''}<span class="pl-cnt">${count}</span></span>${z ? `<span class="pl-zone">${ICON.temp}${esc(zoneText(z))}</span>` : ''}</div>${rows}</div>`;
 }
 
 async function chkSave() {

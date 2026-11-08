@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.6.0';
+const APP_VERSION = '3.6.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -283,7 +283,7 @@ const shelfName = (loc, n) => { const m = S.shelfNames[lc(str(loc))]; return m &
 const shelfLabel = (loc, n) => (n === null || n === undefined || n === '' ? '' : shelfName(loc, n) || `Shelf ${n}`);
 const shelfText = (loc, n) => (n === null || n === undefined || n === '' ? 'None' : shelfName(loc, n) || String(n));
 const shelfStep = (v, d) => { if (v === null || v === undefined || v === '') return d > 0 ? 0 : null; const x = Number(v) + d; return x < 0 ? null : Math.min(x, 99); };
-const placeLabel = e => [e.loc || 'No location', shelfLabel(e.loc, shelfVal(e.shelf)), str(e.pos).trim()].filter(Boolean).join(' · ');
+const placeLabel = e => [e.loc || 'No location', shelfLabel(e.loc, shelfVal(e.shelf)), typeof posShow === 'function' ? posShow(e.pos) : str(e.pos).trim()].filter(Boolean).join(' · ');
 const placeOf = e => ({ loc: str(e.loc), shelf: shelfVal(e.shelf), pos: str(e.pos).trim() });
 
 const inEntries = w => S.removals.filter(r => r.wineId === w.id && r.dir === 'in');

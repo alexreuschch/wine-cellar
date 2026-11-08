@@ -472,7 +472,7 @@ function shortStayHtml(w, e) {
   return `<span class="space-note warn" style="margin-top:4px">${ICON.pin}<span>${esc(e.loc)} is for a short stay. For ageing, move it to a cellar location in Edit.</span></span>`;
 }
 
-const whereText = e => [shelfLabel(e.loc, shelfVal(e.shelf)), e.pos].filter(Boolean).join(' · ');
+const whereText = e => [shelfLabel(e.loc, shelfVal(e.shelf)), posShow(e.pos)].filter(Boolean).join(' · ');
 
 function stockHtml(w) {
   const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${e.loc ? locIcon(e.loc) : ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}${zoneAt(e.loc, e.shelf) ? `<span class="stock-zone">${ICON.temp}${esc(zoneText(zoneAt(e.loc, e.shelf)))}</span>` : ''}${zoneWarn(w, e.loc, e.shelf) ? `<span class="zone-warn small">${esc(zoneWarn(w, e.loc, e.shelf))}</span>` : ''}${isOwc(e.loc) ? '<span class="stock-zone">In the original wooden case</span>' : ''}${shortStayHtml(w, e)}</div>

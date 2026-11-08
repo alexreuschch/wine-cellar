@@ -994,8 +994,6 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .wine-row .thumb { border-radius: 6px; }
 
 /* the places view: one card per location, shelf by shelf, a dot per bottle */
-.cview { margin-top: -2px; }
-.cview svg { width: 16px; height: 16px; }
 .pl-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pl-tools .chip { height: 34px; padding: 0 12px; font-size: 14px; }
 .pl-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 2px; font-size: 13px; color: var(--text-2); }
@@ -1012,12 +1010,18 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .pl-due { margin: -2px 0 0; font-size: 14px; color: #E9A15A; }
 .pl-shelf { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid #3B1E2A; }
 .pl-shelf.zoned { padding-left: 10px; border-left: 3px solid var(--zc); border-top-left-radius: 0; }
-.pl-sh { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.pl-sh { display: flex; flex-direction: column; gap: 1px; font-size: 14px; font-weight: 600; color: var(--text-2); }
 .pl-zone { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .pl-zone svg { color: var(--zc, var(--gold)); }
 .pl-dots { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .pl-dots .dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .35), inset 0 1px 2px rgba(255, 255, 255, .25); }
-.pl-wine { display: flex; align-items: center; gap: 10px; padding: 4px 0; color: var(--text); }
+.pl-wine { position: relative; display: flex; align-items: center; gap: 10px; padding: 5px 0 5px 11px; color: var(--text); }
+.pl-wine::before, .chk-row::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--tc); opacity: .8; }
+.chk-row { position: relative; padding-left: 11px !important; }
+.pl-meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-meta b { font-weight: 500; }
+.pl-cnt { font-weight: 400; color: var(--muted); }
+.pl-due-in { color: #E9A15A; }
 .pl-wine:hover { color: var(--text); }
 .pl-wt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .pl-wn { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1030,3 +1034,19 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .chk-ok { flex: none; width: 40px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--muted); }
 .chk-ok.on { background: #2F5E3A; border-color: #3F7A4C; color: #E8F5EA; }
 main:has(.pl-card.checking) ~ .fab { display: none; }
+
+/* cellar overview: four numbers in one calm card, the cellar space right below */
+.cellar-ov { flex: none; display: flex; flex-direction: column; gap: 10px; margin-top: -6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.ov-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ov-nums div { display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 0 4px; }
+.ov-nums div + div { border-left: 1px solid var(--line); }
+.ov-nums span { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ov-nums b { font-size: 18px; font-weight: 600; line-height: 1.3; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ov-space { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line-soft); color: var(--text); font-size: 13px; }
+.ov-space:hover { color: var(--text); }
+.ov-space .fill-bar { display: block; }
+/* list or places, next to the search */
+.cview { flex: none; display: flex; padding: 3px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.cview button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+.cview button.on { background: var(--line); color: var(--text); }
+.cview svg { width: 18px; height: 18px; }
