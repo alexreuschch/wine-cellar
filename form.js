@@ -75,6 +75,8 @@ function sizeFieldHtml() {
 }
 function renderSizeBox() { const b = $('#size-box'); if (b) b.innerHTML = sizeFieldHtml(); }
 
+/* the wine in the form, as far as climate zones care: type and drinking window */
+const formWineLike = () => (D.mode === 'edit' && wineById(D.id) ? Object.assign({}, wineById(D.id), { type: D.fields.type }) : { type: D.fields.type, drinkFrom: Number(D.fields.drinkFrom) || null, peakFrom: Number(D.fields.peakFrom) || null, peakUntil: Number(D.fields.peakUntil) || null, drinkUntil: Number(D.fields.drinkUntil) || null });
 /* the wine being added, as far as size and type matter for space */
 const draftWineLike = () => ({ size: Number(D && D.fields.size) || 75, type: D ? D.fields.type : 'Red' });
 
@@ -82,21 +84,23 @@ function stockEditorHtml() {
   const add = D.mode !== 'edit';
   const rows = D.stock.map((e, i) => {
     const locSel = add
-      ? `<label class="field" style="flex:1;min-width:0">Location<select data-change="stock-loc" data-i="${i}">${e.loc ? '' : '<option value="" selected disabled>Choose a location</option>'}${S.locations.concat(e.loc && !S.locations.includes(e.loc) ? [e.loc] : []).map(l => `<option${l === e.loc ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option></select></label>`
+      ? `<label class="field" style="flex:1;min-width:0">Location<select data-change="stock-loc" data-i="${i}">${e.loc ? '' : '<option value="" selected disabled>Choose a location</option>'}${S.locations.concat(e.loc && !S.locations.includes(e.loc) ? [e.loc] : []).map(l => `<option${l === e.loc ? ' selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add new location…</option><option value="__case">Add a case…</option></select></label>`
       : `<span class="stock-loc" style="flex:1;min-width:0">${ICON.pin}${esc(e.loc || 'No location')}</span>`;
     return `<div class="stock-edit${e.n === 0 ? ' zero' : ''}">
       <div style="display:flex;gap:10px;align-items:${add ? 'flex-end' : 'center'}">${locSel}<div class="stepper"><button data-act="st-n" data-i="${i}" data-d="-1" aria-label="Fewer bottles">${ICON.minus}</button><input class="step-num" type="text" inputmode="numeric" pattern="[0-9]*" id="st-n-${i}" data-input="qty-in" data-change="qty-in" data-k="st" data-i="${i}" aria-label="Number of bottles" value="${e.n}"><button data-act="st-n" data-i="${i}" data-d="1" aria-label="More bottles">${ICON.plus}</button></div></div>
-      <div class="store-row">
+      ${isCase(e.loc) ? '' : `<div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="st-shelf" data-i="${i}" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="st-shelf-${i}" class="shelf-val">${esc(shelfText(e.loc, shelfVal(e.shelf)))}</span><button data-act="st-shelf" data-i="${i}" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
-        <label class="field">Position<input data-input="st-pos" data-i="${i}" placeholder="Back row, left" value="${esc(e.pos)}"></label>
-      </div>
+        ${posFieldHtml('st-' + i)}
+      </div>`}
+      ${isCase(e.loc) ? '' : posPanelHtml('st-' + i)}
+      <div id="st-zone-${i}">${zoneLineHtml(e.loc, e.shelf, formWineLike(), 'st-zone', i)}</div>
       ${add ? `<div id="st-space-${i}">${spaceNoteHtml(e.loc, e.n, draftWineLike())}</div>` : ''}
       ${!add && e.n === 0 ? '<p class="muted tiny" style="margin:0">Empty. Hidden after saving.</p>' : ''}
     </div>`;
   }).join('');
   if (add) return `<div class="box"><span class="box-title">Storage</span>${rows}</div>`;
   const addBox = D.addLoc
-    ? `<div class="chips">${S.locations.map(l => `<button class="chip" data-act="st-add" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}<button class="chip" data-act="st-add-new">${ICON.plus}New location</button><button class="chip" data-act="st-add-close">Cancel</button></div>`
+    ? `<div class="chips">${S.locations.map(l => `<button class="chip" data-act="st-add" data-v="${esc(l)}">${ICON.pin}${esc(l)}</button>`).join('')}<button class="chip" data-act="st-add-new">${ICON.plus}New location</button><button class="chip" data-act="st-add-case">${LOC_ICON.case}New case</button><button class="chip" data-act="st-add-close">Cancel</button></div>`
     : `<div class="chips"><button class="chip" data-act="st-add-open">${ICON.plus}Add storage place</button>${D.stock.some(e => e.n > 0) ? `<button class="chip${D.move ? ' on' : ''}" data-act="st-move-open">${ICON.move}Move bottles</button>` : ''}</div>`;
   let move = '';
   if (D.move) {

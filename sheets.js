@@ -119,10 +119,10 @@ function renderSheet() {
       ${note}`;
   } else {
     const showSite = RS.type === 'Purchase' && RS.rp.people.length;
-    const place = RS.mode === 'add' ? `<div class="store-row">
+    const place = RS.mode === 'add' && !isCase(RS.loc) ? `<div class="store-row">
         <div class="field">Shelf (optional)<div class="stepper"><button data-act="rs-shelf" data-d="-1" aria-label="Shelf down">${ICON.minus}</button><span id="rs-shelf" class="shelf-val">${esc(shelfText(RS.loc, RS.shelf))}</span><button data-act="rs-shelf" data-d="1" aria-label="Shelf up">${ICON.plus}</button></div></div>
-        <label class="field">Position<input name="pos" data-input="rs" placeholder="Back row, left" value="${esc(RS.pos)}"></label>
-      </div><p class="muted tiny" style="margin:-6px 0 0" id="rs-hint">${placeHint()}</p>` : '';
+        ${posFieldHtml('rs')}
+      </div>${posPanelHtml('rs')}<div id="rs-zone">${zoneLineHtml(RS.loc, RS.shelf, w, 'rs-zone')}</div><p class="muted tiny" style="margin:-6px 0 0" id="rs-hint">${placeHint()}</p>` : '';
     body = `${typeGrid}${locs}${place}${qty}${RS.mode === 'add' ? `<div id="space-note">${spaceNoteHtml(RS.loc, RS.qty, w)}</div>` : ''}${date}
       ${RS.type === 'Purchase' ? picker('Retailer') : RS.type === 'Received' ? picker('From') : ''}
       ${showSite ? `<label class="field">Website of ${esc(RS.rp.people[0].name)}<input name="website" data-input="rs" inputmode="url" autocapitalize="off" placeholder="www.shop.ch" value="${esc(RS.website)}"></label>` : ''}
@@ -279,6 +279,7 @@ async function saveSheet(withDetails) {
     const entry = Object.assign({ id: newId(st.kind === 'out' ? 'r' : 'i'), wineId: w.id, wineName: fullName(w) }, fields, place);
     const prevStock = JSON.parse(JSON.stringify(w.stock));
     localStock(w, place, st.kind === 'out' ? -st.qty : st.qty);
+    if (st.kind === 'out') caseEmptyNote(place.loc);
     S.removals.push(normRemoval(entry));
     if (st.kind === 'in') store.set('wc-lastloc', st.loc);
     persist();
@@ -436,6 +437,7 @@ async function adjustCount(id, delta, place) {
   const p = place || (w.stock[0] ? placeOf(w.stock[0]) : { loc: defaultLocation(), shelf: null, pos: '' });
   const prevStock = JSON.parse(JSON.stringify(w.stock));
   localStock(w, p, delta);
+  if (delta < 0) caseEmptyNote(p.loc);
   persist();
   refreshView();
   try { upsertWine(normWine(await api('adjust', Object.assign({ id, delta }, p)))); persist(); refreshView(); }

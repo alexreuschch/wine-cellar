@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 42;
+var API_VERSION = 43;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -29,7 +29,8 @@ var WINE_COLS = [
 var REMOVAL_COLS = ['id', 'wineId', 'date', 'type', 'occasion', 'people', 'food', 'note', 'wineName', 'hearts',
   'dir', 'qty', 'loc', 'price', 'priceCur', 'retailer', 'venue', 'shopRef'];
 // venue of a discovery: "restaurant", "shop" or "other"; shopRef: the shop price it was compared with, as JSON {v, cur}
-var LOCATION_COLS = ['name', 'shelves', 'capacity', 'kind'];
+var LOCATION_COLS = ['name', 'shelves', 'capacity', 'kind', 'type', 'zones', 'owc', 'checked'];
+// type: wine fridge, rack, cellar room, cupboard, wall rack or case; zones: climate zones by shelf; owc: an original wooden case; checked: date of the last check
 // capacity: about how many standard bottles fit; kind: "cellar" for storage, "short" for a short stay such as the kitchen
 var RETAILER_COLS = ['name', 'website'];
 var PEOPLE_COLS = ['name', 'aliases', 'note'];
@@ -48,7 +49,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '19';
+var SCHEMA_VERSION = '20';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -625,7 +626,7 @@ function actionLoad_() {
     wines: readAll_(SHEETS.wines),
     removals: readAll_(SHEETS.removals),
     locations: readAll_(SHEETS.locations).map(function (r) { return String(r.name); }).filter(String),
-    locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(function (r) { return { name: String(r.name), shelves: parseShelves_(r.shelves), capacity: Number(r.capacity) > 0 ? Math.round(Number(r.capacity)) : null, kind: r.kind === 'short' ? 'short' : 'cellar' }; }),
+    locationInfo: readAll_(SHEETS.locations).filter(function (r) { return r.name; }).map(locationOut_),
     retailers: readAll_(SHEETS.retailers).filter(function (r) { return r.name; }),
     people: peopleList_(),
     peopleInfo: peopleInfo_(),
@@ -840,6 +841,23 @@ function deleteRowsWhere_(name, col, value) {
   }
 }
 
+var LOC_TYPES = ['fridge', 'rack', 'room', 'cupboard', 'wall', 'case', 'short'];
+function locationOut_(r) {
+  return { name: String(r.name), shelves: parseShelves_(r.shelves), capacity: Number(r.capacity) > 0 ? Math.round(Number(r.capacity)) : null, kind: r.kind === 'short' ? 'short' : 'cellar',
+    type: LOC_TYPES.indexOf(String(r.type)) >= 0 ? String(r.type) : (r.kind === 'short' ? 'short' : ''), zones: parseZones_(r.zones), owc: r.owc === true || String(r.owc).toUpperCase() === 'TRUE', checked: r.checked ? String(r.checked).slice(0, 10) : '' };
+}
+/** Climate zones of a location: up to three, each with a name, a temperature and the shelves it covers. */
+function parseZones_(v) {
+  var a;
+  try { a = typeof v === 'string' ? JSON.parse(v || '[]') : v; } catch (e) { a = []; }
+  if (!Array.isArray(a)) return [];
+  return a.slice(0, 3).map(function (z) {
+    var from = Math.max(0, Math.round(Number(z && z.from) || 0)), to = Math.max(from, Math.round(Number(z && z.to) || from));
+    var t = Number(z && z.temp);
+    return { name: String(z && z.name || '').trim().slice(0, 40), temp: isFinite(t) && t > -5 && t < 30 ? Math.round(t * 10) / 10 : null, from: from, to: to };
+  }).filter(function (z) { return z.name; });
+}
+
 function parseShelves_(v) {
   try { var o = JSON.parse(v || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; }
 }
@@ -865,12 +883,23 @@ function actionSetLocationInfo_(req) {
   var name = String(req.name || '').trim();
   if (!name) throw new Error('Missing location name');
   var cap = Number(req.capacity) > 0 ? Math.min(100000, Math.round(Number(req.capacity))) : '';
-  var kind = req.kind === 'short' ? 'short' : 'cellar';
-  return withLock_(function () {
-    var n = updateRows_(SHEETS.locations, function (o) { if (lower_(o.name) !== lower_(name)) return false; o.capacity = cap; o.kind = kind; return true; });
+  var type = LOC_TYPES.indexOf(String(req.type)) >= 0 ? String(req.type) : '';
+  var kind = type === 'short' || (!type && req.kind === 'short') ? 'short' : 'cellar';
+  var out = null;
+  withLock_(function () {
+    var n = updateRows_(SHEETS.locations, function (o) {
+      if (lower_(o.name) !== lower_(name)) return false;
+      o.capacity = cap; o.kind = kind;
+      if (req.type !== undefined) o.type = type;
+      if (req.zones !== undefined) o.zones = JSON.stringify(parseZones_(req.zones));
+      if (req.owc !== undefined) o.owc = req.owc === true;
+      if (req.checked !== undefined) o.checked = String(req.checked || '').slice(0, 10);
+      out = locationOut_(o);
+      return true;
+    });
     if (!n) throw new Error('Location not found');
-    return { name: name, capacity: cap || null, kind: kind };
   });
+  return out;
 }
 
 function actionRenameLocation_(req) {
@@ -1827,8 +1856,13 @@ function cellarContext_() {
   var now = new Date();
   var t = now.getFullYear() + now.getMonth() / 12;
   var shelves = {};
-  readAll_(SHEETS.locations).forEach(function (l) { if (l.name) shelves[String(l.name).toLowerCase()] = parseShelves_(l.shelves); });
-  var shelfName = function (loc, n) { var m = shelves[String(loc).toLowerCase()] || {}; return m[String(n)] || ('shelf ' + n); };
+  var zones = {};
+  readAll_(SHEETS.locations).forEach(function (l) { if (l.name) { shelves[String(l.name).toLowerCase()] = parseShelves_(l.shelves); zones[String(l.name).toLowerCase()] = parseZones_(l.zones); } });
+  var shelfName = function (loc, n) {
+    var m = shelves[String(loc).toLowerCase()] || {}, s = Number(n);
+    var z = (zones[String(loc).toLowerCase()] || []).filter(function (x) { return s >= x.from && s <= x.to; })[0];
+    return (m[String(n)] || ('shelf ' + n)) + (z ? ' (' + z.name + (z.temp !== null ? ' zone, ' + z.temp + ' °C' : ' zone') + ')' : '');
+  };
   var all = readAll_(SHEETS.wines).filter(function (w) { return w.id; });
   var bottles = function (w) { var n = parseStock_(w.stock).reduce(function (a, e) { return a + (Number(e.n) || 0); }, 0); return n || Number(w.count) || 0; };
   var wines = all.filter(function (w) { return bottles(w) > 0; });

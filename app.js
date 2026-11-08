@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '3.5.7';
+const APP_VERSION = '3.6.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -45,6 +45,7 @@ const ICON = {
   share: svg('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.7l7.4-4.4M8.3 13.3l7.4 4.4"/>', 20, 1.8),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', 16, 2),
   sort: svg('<path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/>', 16, 1.8),
+  list: svg('<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>', 16, 2),
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', 22, 1.8),
   download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', 18, 2),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 18, 2.2),
@@ -77,7 +78,8 @@ const ICON = {
   tag: svg('<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.6"/>', 18, 1.8),
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>', 16, 1.8),
   link: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>', 13, 1.9),
-  pin: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>', 14, 1.8)
+  pin: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>', 14, 1.8),
+  temp: svg('<path d="M10 14.5V4.5a2 2 0 0 1 4 0v10a4 4 0 1 1-4 0z"/><path d="M12 11v6"/>', 16, 1.8)
 };
 const HEART_PATH = 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z';
 const HEART_ON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${HEART_PATH}"/></svg>`;
@@ -438,7 +440,9 @@ function spaceOf(w) {
   const f = cl < 75 ? 0.6 : cl === 75 ? 1 : cl / 100;
   return w && w.type === 'Sparkling' ? f * 1.2 : f;
 }
-const locInfoOf = loc => S.locInfo[lc(str(loc))] || { capacity: null, kind: 'cellar' };
+const locInfoOf = loc => S.locInfo[lc(str(loc))] || { capacity: null, kind: 'cellar', type: '', zones: [], owc: false, checked: '' };
+/* what the script sends about a location, made safe to use */
+const locInfoNorm = l => ({ capacity: Number(l.capacity) > 0 ? Math.round(Number(l.capacity)) : null, kind: l.kind === 'short' || l.type === 'short' ? 'short' : 'cellar', type: str(l.type), zones: Array.isArray(l.zones) ? l.zones : [], owc: !!l.owc, checked: str(l.checked) });
 /* the space a location has and uses, in standard bottles */
 function locSpace(loc) {
   let used = 0, bottles = 0;
@@ -640,7 +644,7 @@ async function sync(silent) {
     S.shelfNames = {};
     (d.locationInfo || []).forEach(l => { if (l && l.name && l.shelves && Object.keys(l.shelves).length) S.shelfNames[lc(l.name)] = l.shelves; });
     S.locInfo = {};
-    (d.locationInfo || []).forEach(l => { if (l && l.name) S.locInfo[lc(l.name)] = { capacity: Number(l.capacity) > 0 ? Math.round(Number(l.capacity)) : null, kind: l.kind === 'short' ? 'short' : 'cellar' }; });
+    (d.locationInfo || []).forEach(l => { if (l && l.name) S.locInfo[lc(l.name)] = locInfoNorm(l); });
     S.retailers = Array.isArray(d.retailers) ? d.retailers.map(r => ({ name: str(r.name), website: str(r.website) })).filter(r => r.name) : [];
     S.people = Array.isArray(d.people) ? d.people.map(str).filter(Boolean) : [];
     S.peopleInfo = Array.isArray(d.peopleInfo) ? d.peopleInfo.map(normPersonInfo).filter(x => x.name) : [];

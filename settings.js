@@ -11,16 +11,18 @@ function locationsHtml() {
   const rows = S.locations.map(l => {
     const n = used[lc(l)] || 0;
     const others = S.locations.filter(x => x !== l);
-    if (isEditing('loc', l)) return `<div class="loc-row">${editRowHtml(l, undefined, locInfoEditHtml(l) + shelfEditHtml(l))}</div>`;
+    if (isEditing('loc', l)) { const ex = locInfoEditHtml(l); return `<div class="loc-row">${editRowHtml(l, undefined, ex + (['case', 'short', 'wall'].includes(U.edit.ltype) ? '' : shelfEditHtml(l)))}</div>`; }
     const info = locInfoOf(l), sp = locSpace(l);
     const fill = info.kind === 'short' ? '' : info.capacity ? fillBarHtml(sp) : '<p class="muted tiny" style="margin:0">Add its capacity with the edit button to see how full it is.</p>';
-    const head = `<div class="between"><span class="set-name">${esc(l)}${info.kind === 'short' ? '<span class="loc-kind">Short term</span>' : ''} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span><span style="display:flex;gap:6px;flex:none">${n
+    const ty = locTypeOf(l), zs = zonesOf(l);
+    const zoneSum = zs.length ? `<p class="muted tiny loc-zones" style="margin:0">${ICON.temp}${zs.map(z => `${esc(zoneText(z))}, ${esc(shelfRange(l, z))}`).join('; ')}</p>` : '';
+    const head = `<div class="between"><span class="set-name"><span class="loc-ic">${locIcon(l)}</span>${esc(l)}${ty && lc(LOC_TYPE_NAME[ty]) !== lc(l) ? `<span class="loc-kind">${esc(ty === 'case' && info.owc ? 'Original case' : LOC_TYPE_NAME[ty])}</span>` : ''} <span class="muted small">${n ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : 'empty'}</span></span><span style="display:flex;gap:6px;flex:none">${n
       ? `<button class="btn" style="${small}" data-act="loc-show" data-v="${esc(l)}">Show</button><button class="btn" style="${small}" data-act="loc-move-open" data-v="${esc(l)}">Move</button>`
       : `<button class="icon-btn" data-act="loc-del" data-v="${esc(l)}" aria-label="Delete ${esc(l)}">${ICON.trash}</button>`}${editBtn('loc', l)}</span></div>`;
     const move = U.locMove === l ? (others.length
       ? `<div class="move-box"><span class="tiny muted">Move all bottles from ${esc(l)} to</span><div style="display:flex;gap:8px"><label class="field" style="flex:1"><span class="sr-only">Target location</span><select id="move-to">${others.map(o => `<option>${esc(o)}</option>`).join('')}</select></label><button class="btn accent" data-act="loc-move" data-v="${esc(l)}">Move</button><button class="icon-btn" data-act="loc-move-cancel" aria-label="Cancel">${ICON.x}</button></div></div>`
       : `<div class="move-box"><span class="small muted">Add another location first, then move the bottles there.</span></div>`) : '';
-    return `<div class="loc-row">${head}${fill}${move}</div>`;
+    return `<div class="loc-row">${head}${fill}${zoneSum}${move}</div>`;
   }).join('');
   return `<section class="box"><span class="box-title">Locations</span>
     ${rows || '<p class="muted small" style="margin:0">No locations yet. Add where you keep your wine, for example Wine fridge, Basement or Kitchen.</p>'}
@@ -48,13 +50,21 @@ function editRowHtml(name, website, extra = '') {
 /* capacity and kind of a location, edited together with its name */
 function locInfoEditHtml(loc) {
   const ed = U.edit;
-  if (ed.lkind === undefined) { const i = locInfoOf(loc); ed.cap = i.capacity ? String(i.capacity) : ''; ed.lkind = i.kind; }
-  const b = (v, label) => `<button class="${ed.lkind === v ? 'on' : ''}" data-act="loc-kind" data-v="${v}" aria-pressed="${ed.lkind === v}">${label}</button>`;
-  return `<div class="field"><span>Kind</span><div class="toggle">${b('cellar', 'Cellar')}${b('short', 'Short term')}</div></div>
-    ${ed.lkind === 'cellar'
-      ? `<label class="field">Capacity, about how many 75 cl bottles<input id="ed-cap" data-input="ed-cap" inputmode="numeric" placeholder="For example 100" value="${esc(ed.cap)}"></label>
-        <p class="muted tiny" style="margin:-4px 0 0">A rough estimate is enough. A magnum counts as 1.5 bottles, a half bottle as 0.6, sparkling wine a little more.</p>`
-      : '<p class="muted tiny" style="margin:0">For bottles that stay only a short time, for example in the kitchen. Not counted as cellar space.</p>'}`;
+  if (ed.ltype === undefined) {
+    const i = locInfoOf(loc);
+    Object.assign(ed, { cap: i.capacity ? String(i.capacity) : '', ltype: i.type || (i.kind === 'short' ? 'short' : ''), zones: (i.zones || []).map(z => Object.assign({}, z)), owc: !!i.owc });
+    ed.zoneOn = ed.zones.length > 0;
+  }
+  const t = ed.ltype;
+  const types = `<div class="field"><span>Type</span><div class="chips">${LOC_TYPES.map(([v, l]) => `<button class="chip${t === v ? ' on' : ''}" data-act="loc-type" data-v="${v}" aria-pressed="${t === v}">${LOC_ICON[v]}${l}</button>`).join('')}</div></div>`;
+  if (t === 'short') return `${types}<p class="muted tiny" style="margin:0">For bottles that stay only a short time, for example in the kitchen. Not counted as cellar space.</p>`;
+  const cap = t === 'case'
+    ? `<div class="field"><span>Bottles it holds</span><div class="chips">${['6', '12'].map(n => `<button class="chip${ed.cap === n ? ' on' : ''}" data-act="loc-cap" data-v="${n}">${n}</button>`).join('')}<input id="ed-cap" class="chip-input" data-input="ed-cap" inputmode="numeric" placeholder="Other" aria-label="Other number of bottles" value="${['6', '12'].includes(ed.cap) ? '' : esc(ed.cap)}"></div></div>
+      <label class="switch"><input type="checkbox" data-change="loc-owc"${ed.owc ? ' checked' : ''}>Original wooden case of the winery</label>
+      <p class="muted tiny" style="margin:-6px 0 0">Wines kept in their original case show it on their page. Collectors pay more for them.</p>`
+    : `<label class="field">Capacity, about how many 75 cl bottles<input id="ed-cap" data-input="ed-cap" inputmode="numeric" placeholder="For example 100" value="${esc(ed.cap)}"></label>
+      <p class="muted tiny" style="margin:-4px 0 0">A rough estimate is enough. A magnum counts as 1.5 bottles, a half bottle as 0.6, sparkling wine a little more.</p>`;
+  return `${types}${cap}${t === 'case' || t === 'wall' ? '' : zoneEditHtml(loc)}`;
 }
 
 /* shelf names, edited together with the location */
@@ -164,9 +174,12 @@ async function saveEdit() {
     if (JSON.stringify(clean) !== JSON.stringify(S.shelfNames[lc(ed.name)] || {})) shelves = clean;
   }
   let info = null;
-  if (ed.kind === 'loc' && ed.lkind !== undefined) {
+  if (ed.kind === 'loc' && ed.ltype !== undefined) {
     const now = locInfoOf(ed.name), cap = Math.round(Number(String(ed.cap).replace(/[^\d.]/g, ''))) || null;
-    if (cap !== now.capacity || ed.lkind !== now.kind) info = { capacity: ed.lkind === 'cellar' ? cap : now.capacity, kind: ed.lkind };
+    const kind = ed.ltype === 'short' ? 'short' : 'cellar';
+    const zones = ed.zoneOn && ed.ltype !== 'case' && ed.ltype !== 'wall' && ed.ltype !== 'short' ? zonesClean(ed.zones) : [];
+    const next = { capacity: kind === 'cellar' ? cap : now.capacity, kind, type: ed.ltype, zones, owc: ed.ltype === 'case' && !!ed.owc };
+    if (next.capacity !== now.capacity || kind !== now.kind || next.type !== str(now.type) || JSON.stringify(zones) !== JSON.stringify(now.zones || []) || next.owc !== !!now.owc) info = next;
   }
   if (sameName && !shelves && !info && (site === undefined || site === str((S.retailers.find(r => r.name === ed.name) || {}).website))) { U.edit = null; refreshView(); return; }
   U.edit = null;
@@ -181,11 +194,11 @@ async function saveEdit() {
     if (ed.kind === 'loc') {
       if (!sameName) S.locations = await api('renameLocation', { from: ed.name, to });
       if (info) {
-        S.locInfo[lc(to)] = info;
+        S.locInfo[lc(to)] = Object.assign({}, locInfoOf(to), info);
         persist();
         refreshView();
-        const saved = await api('setLocationInfo', { name: to, capacity: info.capacity, kind: info.kind });
-        S.locInfo[lc(to)] = { capacity: saved.capacity || null, kind: saved.kind };
+        const saved = await api('setLocationInfo', Object.assign({ name: to }, info));
+        S.locInfo[lc(to)] = locInfoNorm(saved);
       }
       if (shelves) {
         if (Object.keys(shelves).length) S.shelfNames[lc(to)] = shelves; else delete S.shelfNames[lc(to)];

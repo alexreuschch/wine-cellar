@@ -369,8 +369,9 @@ function viewCellar() {
   return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${statsHtml()}${space}
     <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search wine, grape or food" value="${esc(U.search)}"></label>${btn}</div>
     ${filters}
-    <div id="drink-soon">${drinkSoonHtml()}</div>
-    <section><div class="sec-head"><h2>All wines</h2>${sortSelectHtml()}</div><div id="wine-list">${cellarList()}</div></section>
+    ${cviewToggleHtml()}
+    ${CVIEW === 'places' ? `<section><div id="wine-list">${cellarList()}</div></section>` : `<div id="drink-soon">${drinkSoonHtml()}</div>
+    <section><div class="sec-head"><h2>All wines</h2>${sortSelectHtml()}</div><div id="wine-list">${cellarList()}</div></section>`}
   </main><a class="fab" href="#/add" aria-label="Add a new wine">${ICON.plusBig}</a>${nav('cellar')}`;
 }
 
@@ -391,8 +392,11 @@ function priceLine(w) {
   return `<span class="price-row">${part('Ø Cost', a !== null ? fmtNum(a) : 'N/A', cls)}${part('Street', s !== null ? fmtNum(s) : 'N/A')}${w.count > 0 ? pill(w) : ''}</span>`;
 }
 
+/* a muted colour per wine type, for the thin stripe on the cards */
+const TYPE_TINT = { Red: '#7A2B37', White: '#B3A574', 'Rosé': '#B98089', Sparkling: '#BBA978', Dessert: '#A98242', Fortified: '#6A3527', Orange: '#A9713F' };
+const typeTint = w => TYPE_TINT[w.type] || TYPE_TINT.Red;
 function wineRow(w) {
-  return `<div class="wine-row${w.count === 0 ? ' finished' : ''}">
+  return `<div class="wine-row${w.count === 0 ? ' finished' : ''}" style="--tc:${typeTint(w)}">
     <a class="row-link" href="#/wine/${encodeURIComponent(w.id)}">${thumbHtml(w)}<div class="row-text"><span class="row-title">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${w.count === 0 ? FIN : ''}</span><span class="row-sub">${flagOf(w)}${esc(wineSub(w))}</span></div></a>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" aria-label="Remove a bottle"${w.count ? '' : ' disabled'}>${ICON.minus}</button><span>${w.count}</span><button data-act="plus" data-id="${esc(w.id)}" aria-label="Add bottles">${ICON.plus}</button></div>
     <a class="row-foot" href="#/wine/${encodeURIComponent(w.id)}">${priceLine(w)}</a>
@@ -412,6 +416,7 @@ function sortCmp(a, b) {
 const sortSelectHtml = () => `<label class="sort-sel"><span class="sr-only">Sort by</span>${ICON.sort}<select data-change="sort">${Object.keys(SORTS).map(k => `<option value="${k}"${k === SORT ? ' selected' : ''}>${SORTS[k]}</option>`).join('')}</select></label>`;
 
 function cellarList() {
+  if (CVIEW === 'places') return placesHtml();
   const list = S.wines.filter(w => !isDisc(w) && matches(w, U.search) && passes('cellar', w)).sort(sortCmp);
   const stock = list.filter(w => w.count > 0), done = list.filter(w => w.count === 0);
   const filtered = U.search || activeCount('cellar');

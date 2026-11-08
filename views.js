@@ -475,7 +475,7 @@ function shortStayHtml(w, e) {
 const whereText = e => [shelfLabel(e.loc, shelfVal(e.shelf)), e.pos].filter(Boolean).join(' · ');
 
 function stockHtml(w) {
-  const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}${shortStayHtml(w, e)}</div>
+  const rows = w.stock.map((e, i) => `<div class="stock-row"><div style="min-width:0"><span class="stock-loc">${e.loc ? locIcon(e.loc) : ICON.pin}${esc(e.loc || 'No location')}</span>${whereText(e) ? `<span class="stock-where">${esc(whereText(e))}</span>` : ''}${zoneAt(e.loc, e.shelf) ? `<span class="stock-zone">${ICON.temp}${esc(zoneText(zoneAt(e.loc, e.shelf)))}</span>` : ''}${zoneWarn(w, e.loc, e.shelf) ? `<span class="zone-warn small">${esc(zoneWarn(w, e.loc, e.shelf))}</span>` : ''}${isOwc(e.loc) ? '<span class="stock-zone">In the original wooden case</span>' : ''}${shortStayHtml(w, e)}</div>
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Take a bottle from ${esc(placeLabel(e))}">${ICON.minus}</button><span>${e.n}</span><button data-act="plus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Add bottles to ${esc(placeLabel(e))}">${ICON.plus}</button></div></div>`).join('');
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>

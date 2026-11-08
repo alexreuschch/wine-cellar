@@ -958,3 +958,75 @@ section > .rate-fav { align-self: flex-start; margin-top: 4px; }
 .fold-head .fold-sum { flex: 1; text-align: right; }
 .fold-head svg { width: 18px; height: 18px; color: var(--muted); transform: rotate(90deg); transition: transform .2s; }
 .fold.open .fold-head svg { transform: rotate(-90deg); }
+
+/* storage places: position chips, climate zones, location types */
+.pos-btn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; height: 48px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; color: var(--text); font-size: 15px; text-align: left; }
+.pos-btn.on { border-color: var(--gold); }
+.pos-btn svg { flex: none; width: 14px; height: 14px; color: var(--muted); transform: rotate(90deg); }
+.pos-btn.on svg { transform: rotate(-90deg); }
+.pos-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.pos-g { display: flex; flex-direction: column; gap: 6px; }
+.pos-gl { font-size: 13px; color: var(--text-2); }
+.pos-panel .chip { height: 38px; padding: 0 14px; font-size: 15px; }
+.zone-line { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 14px; color: var(--text-2); line-height: 1.4; }
+.zone-line svg { flex: none; margin-top: 2px; color: var(--gold); }
+.zone-line span { flex: 1; }
+.zone-line .link-btn { height: 22px; font-size: 14px; }
+.zone-warn { color: var(--danger); }
+.stock-zone { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.stock-zone svg { color: var(--gold); }
+.loc-ic { display: inline-flex; vertical-align: -4px; margin-right: 8px; color: var(--gold); }
+.loc-ic svg { width: 20px; height: 20px; }
+.loc-zones { display: flex; align-items: flex-start; gap: 6px; }
+.loc-zones svg { flex: none; color: var(--gold); margin-top: 1px; }
+.chip svg { width: 16px; height: 16px; }
+.chip-input { width: 84px; height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 15px; }
+.zone-ed { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.zone-grid { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 8px; align-items: end; }
+.zone-grid input { width: 100%; }
+.zone-grid .stepper button { width: 34px; }
+
+/* the cellar list as fine cards: each wine stands apart, a thin muted stripe tells the type */
+.wine-row { position: relative; overflow: hidden; margin-bottom: 6px; padding: 8px 10px 8px 13px !important; row-gap: 1px !important; border: 1px solid #3B1E2A !important; border-radius: 14px; background: linear-gradient(180deg, #2C1520, #26121A); box-shadow: 0 2px 10px rgba(0, 0, 0, .22); }
+.wine-row::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--tc); opacity: .85; }
+.wine-row .row-title { font-family: var(--serif); font-weight: 400; font-size: 16.5px; line-height: 1.25; letter-spacing: .1px; }
+.wine-row .row-sub { font-size: 12.5px; }
+.wine-row .thumb { border-radius: 6px; }
+
+/* the places view: one card per location, shelf by shelf, a dot per bottle */
+.cview { margin-top: -2px; }
+.cview svg { width: 16px; height: 16px; }
+.pl-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pl-tools .chip { height: 34px; padding: 0 12px; font-size: 14px; }
+.pl-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 2px; font-size: 13px; color: var(--text-2); }
+.pl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.pl-card { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid #3B1E2A; border-radius: 16px; background: linear-gradient(180deg, #2C1520, #26121A); box-shadow: 0 2px 10px rgba(0, 0, 0, .22); }
+.pl-card.checking { border-color: var(--gold); }
+.pl-head { display: flex; align-items: center; gap: 4px; }
+.pl-head .loc-ic svg { width: 24px; height: 24px; }
+.pl-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pl-name b { font-family: var(--serif); font-weight: 400; font-size: 19px; line-height: 1.2; }
+.pl-count { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.pl-count b { font-size: 17px; }
+.pl-count small { font-size: 12px; color: var(--muted); }
+.pl-due { margin: -2px 0 0; font-size: 14px; color: #E9A15A; }
+.pl-shelf { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid #3B1E2A; }
+.pl-shelf.zoned { padding-left: 10px; border-left: 3px solid var(--zc); border-top-left-radius: 0; }
+.pl-sh { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.pl-zone { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.pl-zone svg { color: var(--zc, var(--gold)); }
+.pl-dots { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.pl-dots .dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .35), inset 0 1px 2px rgba(255, 255, 255, .25); }
+.pl-wine { display: flex; align-items: center; gap: 10px; padding: 4px 0; color: var(--text); }
+.pl-wine:hover { color: var(--text); }
+.pl-wt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pl-wn { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-n { flex: none; min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 14px; background: var(--line-soft); font-size: 14px; font-weight: 600; }
+.pl-check { align-self: flex-start; height: 40px; font-size: 15px; }
+.chk-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.chk-row.changed .stepper span { color: var(--gold); font-weight: 700; }
+.stepper.sm button { width: 36px; height: 38px; }
+.stepper.sm span { min-width: 30px; text-align: center; }
+.chk-ok { flex: none; width: 40px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--muted); }
+.chk-ok.on { background: #2F5E3A; border-color: #3F7A4C; color: #E8F5EA; }
+main:has(.pl-card.checking) ~ .fab { display: none; }

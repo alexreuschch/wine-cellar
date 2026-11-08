@@ -60,7 +60,7 @@ const ACTS = {
   },
   'ed-open': el => { U.edit = { kind: el.dataset.k, name: el.dataset.v }; U.locMove = null; refreshView(); const i = $('#ed-name'); if (i) i.focus(); },
   'ed-cancel': () => { U.edit = null; refreshView(); },
-  'loc-kind': el => { if (U.edit) { const i = $('#ed-name'); if (i) U.edit.typed = i.value; U.edit.lkind = el.dataset.v; refreshView(); } },
+
   'shelf-more': () => { if (U.edit) { const i = $('#ed-name'); if (i) U.edit.typed = i.value; U.edit.shelfTop = (U.edit.shelfTop || 0) + 1; refreshView(); } },
   'ed-save': () => saveEdit(),
   'ret-add': async () => {
@@ -268,6 +268,7 @@ const ACTS = {
     $('#rs-shelf').textContent = shelfText(RS.loc, RS.shelf);
     const h = $('#rs-hint');
     if (h) h.textContent = placeHint();
+    const z = $('#rs-zone'); if (z) z.innerHTML = zoneLineHtml(RS.loc, RS.shelf, wineById(RS.wineId), 'rs-zone');
   },
   'rs-qty': el => { RS.qty = clamp(RS.qty + Number(el.dataset.d), 1, qtyMax()); $('#rs-qty').value = RS.qty; refreshSpaceNotes(); },
   'rs-skip': () => saveSheet(false),
@@ -314,6 +315,7 @@ const ACTS = {
     const e = D.stock[Number(el.dataset.i)];
     e.shelf = shelfStep(shelfVal(e.shelf), Number(el.dataset.d));
     $('#st-shelf-' + el.dataset.i).textContent = shelfText(e.loc, e.shelf);
+    const z = $('#st-zone-' + el.dataset.i); if (z) z.innerHTML = zoneLineHtml(e.loc, e.shelf, formWineLike(), 'st-zone', Number(el.dataset.i));
   },
   'st-add-open': () => { D.addLoc = true; D.move = null; renderStockBox(); },
   'st-add-close': () => { D.addLoc = false; renderStockBox(); },
@@ -496,8 +498,8 @@ const CHANGES = {
   'stock-loc': async el => {
     if (!D) return;
     const e = D.stock[Number(el.dataset.i)];
-    if (el.value !== '__new') { e.loc = el.value; refreshSpaceNotes(); return; }
-    const name = await newLocationPrompt();
+    if (el.value !== '__new' && el.value !== '__case') { e.loc = el.value; refreshSpaceNotes(); const z = $('#st-zone-' + el.dataset.i); if (z) z.innerHTML = zoneLineHtml(e.loc, e.shelf, formWineLike(), 'st-zone', Number(el.dataset.i)); return; }
+    const name = el.value === '__case' ? await newCasePrompt() : await newLocationPrompt();
     if (name) e.loc = name;
     renderStockBox();
   },
@@ -545,9 +547,9 @@ const CHANGES = {
   }
 };
 
-Object.assign(ACTS, TQ_ACTS, RH_ACTS);
-Object.assign(INPUTS, TQ_INPUTS);
-Object.assign(CHANGES, TQ_CHANGES);
+Object.assign(ACTS, TQ_ACTS, RH_ACTS, PL_ACTS);
+Object.assign(INPUTS, TQ_INPUTS, PL_INPUTS);
+Object.assign(CHANGES, TQ_CHANGES, PL_CHANGES);
 
 /* ------------------------------------------------------------ start */
 
