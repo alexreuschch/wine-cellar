@@ -311,7 +311,9 @@ function viewSettings(first) {
       <div class="field">Currency<button class="pick-btn" data-act="pick-open" data-k="currency"><span class="ellipsis">${esc(cur())} · ${esc(GEO_CURRENCIES[cur()] || cur())}</span>${ICON.chevron}</button></div>
       <p class="muted tiny" style="margin:0">${fxNote()} Switch it, for example, to show your cellar to a friend from abroad.</p>
       <div class="field">Country for shopping<button class="pick-btn" data-act="pick-open" data-k="country"><span class="ellipsis">${flagOfCode(shopCountry())}${esc(shopCountryName())}</span>${ICON.chevron}</button></div>
-      <p class="muted tiny" style="margin:0">Street prices, best offers and the AI consultant search shops for this country${GEO_EU.includes(shopCountry()) ? ', including shops in other EU countries that deliver there, with shipping costs' : ''}. Offers you already have stay until you tap Update best offer. On a trip, the sommelier has its own country for Will I like it? and Wine list.</p></section>
+      <p class="muted tiny" style="margin:0">Street prices, best offers and the AI consultant search shops for this country${GEO_EU.includes(shopCountry()) ? ', including shops in other EU countries that deliver there, with shipping costs' : ''}. Offers you already have stay until you tap Update best offer. On a trip, the sommelier has its own country for Will I like it? and Wine list.</p>
+      <label class="field">Your name<input data-change="my-name" value="${esc(recMyName())}" placeholder="For example Alex" autocapitalize="words" autocomplete="given-name" enterkeyhint="done"></label>
+      <p class="muted tiny" style="margin:0">Friends see this name on wines you share with them.</p></section>
       ${notifyHtml()}
       <section class="box"><span class="box-title">Street prices</span>
       <p class="small" style="margin:0">${priced} of ${inStock.length} wines in stock have a street price.</p>

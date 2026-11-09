@@ -108,6 +108,7 @@ function renderSheet() {
   if (RS.kind === 'order') { root.innerHTML = orderSheetHtml(); return; }
   if (RS.kind === 'bottle') { root.innerHTML = bottleSheetHtml(); return; }
   if (RS.kind === 'rec') { root.innerHTML = recSheetHtml(); return; }
+  if (RS.kind === 'recin') { root.innerHTML = recInSheetHtml(); return; }
   const w = wineById(RS.wineId);
   const r = RS.id ? S.removals.find(x => x.id === RS.id) : null;
   const name = w ? `${wineTitle(w)} ${w.vintage}`.trim() : ((r && r.wineName) || 'Deleted wine');

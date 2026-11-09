@@ -184,14 +184,28 @@ function labelCardHtml(w) {
 /* in the lists: the vintage is the one thing that can still be read */
 const labelMiniHtml = (w, sm) => `<div class="thumb${sm ? ' sm' : ''} dl-mini" aria-hidden="true"><span>${esc(w.vintage || 'NV')}</span><i></i></div>`;
 
-/* the top of the wine page: bottle and label side by side in a frame, on one line like on a shelf */
+/* the top of the wine page: bottle and label side by side in a frame, both centred */
 function wineTopHtml(w) {
   const photo = w.thumb || w.labelFileId;
+  // the label photo may be as tall as the bottle; a wide label gets smaller so the bottle keeps its place
+  const b = BOTTLES[bottleShapeOf(w)], bh = Math.min(BT_FRAME, b.h * BT_FRAME / 30) * (b.h * BT_K) / (b.h * BT_K + 4);
   const label = photo
-    ? `<button class="wtop-lab" data-act="label-zoom" aria-label="Show the label large"><img id="label-img" class="label-photo"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}"></button>`
+    ? `<button class="wtop-lab" data-act="label-zoom" aria-label="Show the label large"><img id="label-img" class="label-photo" data-bh="${bh.toFixed(0)}" style="max-height:${bh.toFixed(0)}px"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}"></button>`
     : `<div class="wtop-lab">${labelCardHtml(w)}</div>`;
   return `<div class="wframe"><div class="wtop-b">${bottleSvg(w, null, null, true)}</div>${label}</div>`;
 }
+/* the label as tall as the bottle, unless it is so wide that it would take the bottle's place */
+function fitLabel(img) {
+  const fr = img && img.closest('.wframe'), bt = fr && fr.querySelector('.wtop-b');
+  if (!fr || !bt || !img.naturalWidth) return;
+  const cs = getComputedStyle(fr), gap = parseFloat(cs.columnGap) || 28;
+  const room = fr.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - bt.offsetWidth - gap;
+  const h = Math.max(60, Math.min(Number(img.dataset.bh) || 196, room * img.naturalHeight / img.naturalWidth));
+  Object.assign(img.style, { height: h.toFixed(0) + 'px', width: 'auto', maxHeight: 'none', maxWidth: 'none' });
+}
+document.addEventListener('load', e => { if (e.target && e.target.id === 'label-img') fitLabel(e.target); }, true);
+window.addEventListener('resize', () => { const im = document.getElementById('label-img'); if (im && im.complete) fitLabel(im); });
+
 function labelZoom() {
   const img = $('#label-img');
   if (!img || !img.src) return;

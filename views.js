@@ -781,14 +781,14 @@ async function shareCard(w) {
   return new Promise(res => c.toBlob(b => res(b), 'image/jpeg', 0.9));
 }
 /* Share: first the sheet that asks whether to add a shop link, and for which country */
-const SHARE = { id: null, cc: '', phase: '', offer: null, note: '' };
+const SHARE = { id: null, cc: '', phase: '', offer: null, note: '', name: '' };
 const shareHomeOffer = w => {
   const o = w && w.offer;
   if (!o || !o.url || offerOtherCountry(o)) return null;
   return o.date && (Date.now() - new Date(o.date).getTime()) / 86400000 > 14 ? null : o;
 };
 function shareOpen(id) {
-  Object.assign(SHARE, { id, cc: shopCountry(), phase: 'ask', offer: null, note: '' });
+  Object.assign(SHARE, { id, cc: shopCountry(), phase: 'ask', offer: null, note: '', name: recMyName(), askName: !recMyName() });
   shareRender();
 }
 function shareClose() { SHARE.phase = ''; shareRender(); }
@@ -805,7 +805,8 @@ function shareRender() {
   const ready = home && shareHomeOffer(w), old = !home && S.version && S.version < 40;
   let body;
   if (SHARE.phase === 'ask') {
-    body = `<p class="small" style="margin:0;line-height:1.5">Sends a picture with the label, your rating and the heart if it is a favorite. You can add a link to the best online offer, so your friend can buy it.</p>
+    body = `<p class="small" style="margin:0;line-height:1.5">Sends a picture with the label, your rating and the heart if it is a favorite, and a link that saves the wine in Vintary. You can add a link to the best online offer, so your friend can buy it.</p>
+      ${SHARE.askName ? `<label class="field">Your name<input data-input="share-name" value="${esc(SHARE.name)}" placeholder="For example Alex" autocapitalize="words" autocomplete="given-name" enterkeyhint="done"></label><p class="tiny muted" style="margin:-6px 0 0">So your friend sees who recommends it. Asked once, you can change it in Settings.</p>` : ''}
       <div class="field">Where is your friend?<button class="pick-btn" data-act="pick-open" data-k="share"><span class="ellipsis">${flagOfCode(SHARE.cc)}${esc(name)}</span>${ICON.chevron || ''}</button></div>
       <p class="tiny muted" style="margin:0">${old ? 'A shop link for another country needs the new Code.gs.' : ready ? `Uses your best offer from ${esc(ready.shop)}.` : `Searches online shops in ${esc(name)}, about 2 to 5 cents. Offers of the last 14 days are reused.`}</p>
       <div class="grid2"><button class="btn" data-act="share-go" data-link="0">Picture only</button><button class="btn primary" data-act="share-go" data-link="1"${old ? ' disabled' : ''}>With shop link</button></div>`;
@@ -822,6 +823,7 @@ function shareRender() {
 async function shareGo(link) {
   const w = wineById(SHARE.id);
   if (!w) return;
+  if (SHARE.askName && str(SHARE.name).trim()) { SHARE.askName = false; await recSetMyName(SHARE.name); }
   // picture only, or the best offer you already have: share right away
   const have = SHARE.cc === shopCountry() ? shareHomeOffer(w) : null;
   if (!link || have) { const o = link ? have : null; shareClose(); shareWine(w.id, o); return; }
@@ -856,7 +858,7 @@ async function shareWine(id, offer) {
   if (!blob) { toast('The picture could not be made.'); return; }
   const name = `vintary-${String(fullName(w)).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'wine'}.jpg`;
   const file = new File([blob], name, { type: 'image/jpeg' });
-  const text = `${fullName(w)}${w.myRating !== null ? ` · my rating ${w.myRating}%` : ''}${offer && offer.url ? `\n\nAvailable at ${offer.shop}: ${offer.url}` : ''}`;
+  const text = `${fullName(w)}${w.myRating !== null ? ` · my rating ${w.myRating}%` : ''}${offer && offer.url ? `\n\nAvailable at ${offer.shop}: ${offer.url}` : ''}\n\nOpen in Vintary: ${recLink(w)}`;
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], text }); } catch (e) { if (e && e.name !== 'AbortError') toast('Sharing did not work.'); }
     return;

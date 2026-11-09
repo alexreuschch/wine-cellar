@@ -237,7 +237,8 @@ function ordersSectionHtml() {
 }
 function wishSectionHtml() {
   return `<section class="ins-sec list-sec" id="wishlist"><div class="sec-head"><h2 class="list-sec-h">${ICON.bookmark}Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
-    ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save wines here from the consultant, a wine list or Will I like it?.</p>'}
+    ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save wines here from the consultant, a wine list, Will I like it? or a recommendation of a friend.</p>'}
+    <button class="link-btn" style="align-self:flex-start" data-act="rec-paste">${REC_IC}Paste a recommendation</button>
   </section>`;
 }
 /* the header icons in Insights lead to these sections */
