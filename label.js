@@ -9,26 +9,30 @@
 
 const BT_K = 9.6, BT_G = 352;
 const BOTTLES = {
-  bordeaux: { name: 'Bordeaux', wines: 'Bordeaux, Rioja, Cabernet, Merlot, most reds', h: 30, cap: 5.5, fill: 7.6,
-    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [8.2, 1.4], [9.2, 1.75], [10.1, 2.9], [10.8, 3.55], [11.6, 3.75], [29.2, 3.75], [29.8, 3.5], [30, 3.1]], label: [16, 25.5] },
-  burgundy: { name: 'Burgundy', wines: 'Burgundy, Pinot Noir, Chardonnay, Rhône, Loire, Barolo', h: 29.5, cap: 5.5, fill: 7.2,
-    p: [[0, 1.55], [0.6, 1.55], [0.7, 1.4], [7, 1.45], [9, 1.9], [11, 2.75], [13, 3.5], [15, 3.95], [16.5, 4.1], [28.8, 4.1], [29.3, 3.8], [29.5, 3.3]], label: [17.5, 26.5] },
-  flute: { name: 'Alsace flute', wines: 'Riesling, Alsace, Mosel, Austria', h: 35, cap: 7, fill: 9,
-    p: [[0, 1.45], [0.6, 1.45], [0.7, 1.3], [8, 1.35], [12, 1.75], [16, 2.3], [20, 2.9], [23, 3.35], [24.5, 3.5], [34.4, 3.5], [34.8, 3.2], [35, 2.8]], label: [25.5, 32.5] },
+  bordeaux: { name: 'Bordeaux', wines: 'Bordeaux, Rioja, Cabernet, Merlot, most reds', h: 30, cap: 4.8, fill: 6.59,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [7.1, 1.4], [8.15, 1.75], [9.1, 2.9], [9.83, 3.55], [10.67, 3.75], [29.16, 3.75], [29.79, 3.5], [30, 3.1]], label: [15.29, 25.27] },
+  burgundy: { name: 'Burgundy', wines: 'Burgundy, Pinot Noir, Chardonnay, Rhône, Loire, Barolo', h: 29.5, cap: 4.74, fill: 6.21,
+    p: [[0, 1.55], [0.6, 1.55], [0.7, 1.4], [6, 1.45], [8.09, 1.9], [10.18, 2.75], [12.27, 3.5], [14.36, 3.95], [15.92, 4.1], [28.77, 4.1], [29.29, 3.8], [29.5, 3.3]], label: [16.97, 26.37] },
+  tapered: { name: 'Tapered', wines: 'Primitivo, Negroamaro, Puglia, wider at the top', h: 30, cap: 5.45, fill: 7.06,
+    p: [[0, 1.62], [0.6, 1.62], [0.7, 1.5], [6.55, 1.52], [7.4, 1.62], [8.03, 1.95], [8.61, 2.4], [9.14, 3], [9.67, 3.37], [10.25, 3.64], [10.78, 3.77], [11.41, 3.86], [12.05, 4.02], [29.16, 3.32], [29.68, 3.14], [30, 2.82]], label: [13.53, 23.03] },
+  roundshoulder: { name: 'Round shoulder', wines: 'Ribera del Duero, Toro, Spanish reds', h: 30, cap: 5.87, fill: 7.61,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.38], [7.4, 1.42], [8.24, 1.55], [8.98, 1.94], [9.51, 2.42], [10.04, 2.74], [10.57, 3], [11.62, 3.36], [12.57, 3.56], [13.53, 3.7], [14.37, 3.75], [29.26, 3.75], [29.79, 3.5], [30, 3.1]], label: [14.58, 26.83] },
+  flute: { name: 'Alsace flute', wines: 'Riesling, Alsace, Mosel, Austria', h: 35, cap: 6.05, fill: 7.94,
+    p: [[0, 1.45], [0.6, 1.45], [0.7, 1.3], [6.9, 1.35], [11.06, 1.75], [15.23, 2.3], [19.39, 2.9], [22.51, 3.35], [24.07, 3.5], [34.38, 3.5], [34.79, 3.2], [35, 2.8]], label: [25.11, 32.4] },
   champagne: { name: 'Champagne', wines: 'Champagne and other sparkling wines', h: 30.5, cap: 11, foil: true, fill: 8,
     p: [[0, 1.6], [1, 1.6], [1.1, 1.45], [6, 1.55], [9, 2.2], [12, 3.1], [15, 3.9], [17, 4.3], [18, 4.4], [29.8, 4.4], [30.3, 4], [30.5, 3.4]], label: [19.5, 26.5] },
-  provence: { name: 'Provence', wines: 'Rosé from Provence, curved like a skittle', h: 30, cap: 5, fill: 7.2,
-    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [7, 1.4], [10, 1.95], [14, 2.95], [18, 3.6], [21, 3.85], [24, 3.55], [26.5, 3.15], [28.2, 3.2], [29.6, 3.45], [30, 3.05]], label: [16.5, 23.5] },
-  bocksbeutel: { name: 'Bocksbeutel', wines: 'Franken, Silvaner, Mateus', h: 22.5, cap: 4.5, fill: 5.4, round: true,
-    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [5.4, 1.4], [6.4, 1.85], [7.5, 3.2], [9, 5], [11, 6.5], [13.5, 7.35], [15.5, 7.5], [17.5, 7.15], [19.5, 6.3], [21.2, 5.1], [22.2, 4.3], [22.5, 4]], label: [11.8, 19.4] },
-  port: { name: 'Port and Sherry', wines: 'Port, Madeira, Sherry, with a bulge on the neck', h: 30, cap: 4, fill: 7.8,
-    p: [[0, 1.65], [0.6, 1.65], [0.7, 1.4], [3.4, 1.42], [4.6, 1.8], [5.8, 1.42], [8.4, 1.48], [9.4, 1.85], [10.4, 3], [11.2, 3.7], [12, 3.85], [29.3, 3.85], [29.8, 3.5], [30, 3.1]], label: [15.5, 25] },
-  clavelin: { name: 'Clavelin', wines: 'Vin Jaune from the Jura, squat, 62 cl', h: 21, cap: 4, fill: 4.6,
-    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [4.8, 1.4], [5.8, 1.95], [6.6, 3.3], [7.3, 3.8], [20.4, 3.8], [20.8, 3.5], [21, 3.1]], label: [10, 17.5] },
-  tokaji: { name: 'Tokaji and dessert', wines: 'Tokaji, ice wine, sweet wines, slim and tall', h: 30, cap: 6, fill: 9.5,
-    p: [[0, 1.3], [0.6, 1.3], [0.7, 1.15], [10, 1.2], [11.5, 1.7], [12.8, 2.65], [13.6, 3.05], [29.4, 3.05], [29.8, 2.8], [30, 2.4]], label: [18, 26] },
-  fiasco: { name: 'Chianti fiasco', wines: 'Traditional Chianti in straw', h: 31, cap: 4.5, fill: 9.5, straw: 17,
-    p: [[0, 1.4], [0.6, 1.4], [0.7, 1.25], [10.5, 1.4], [13, 2.3], [15, 3.7], [17, 5], [20, 6.2], [23, 6.5], [26, 6], [28, 4.9], [29.2, 3.8], [30, 3.4], [31, 3.4]], label: [12.4, 14.8] }
+  provence: { name: 'Provence', wines: 'Rosé from Provence, curved like a skittle', h: 30, cap: 4.32, fill: 6.21,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [6, 1.4], [9.13, 1.95], [13.3, 2.95], [17.48, 3.6], [20.61, 3.85], [23.74, 3.55], [26.35, 3.15], [28.12, 3.2], [29.58, 3.45], [30, 3.05]], label: [15.91, 23.22] },
+  bocksbeutel: { name: 'Bocksbeutel', wines: 'Franken, Silvaner, Mateus', h: 22.5, cap: 3.85, fill: 4.6, round: true,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [4.6, 1.4], [5.65, 1.85], [6.8, 3.2], [8.37, 5], [10.46, 6.5], [13.08, 7.35], [15.17, 7.5], [17.27, 7.15], [19.36, 6.3], [21.14, 5.1], [22.19, 4.3], [22.5, 4]], label: [11.3, 19.25] },
+  port: { name: 'Port and Sherry', wines: 'Port, Madeira, Sherry, with a bulge on the neck', h: 30, cap: 3.49, fill: 6.69,
+    p: [[0, 1.65], [0.6, 1.65], [0.7, 1.4], [2.98, 1.42], [3.99, 1.8], [5.01, 1.42], [7.2, 1.48], [8.26, 1.85], [9.31, 3], [10.16, 3.7], [11, 3.85], [29.26, 3.85], [29.79, 3.5], [30, 3.1]], label: [14.69, 24.72] },
+  clavelin: { name: 'Clavelin', wines: 'Vin Jaune from the Jura, squat, 62 cl', h: 21, cap: 3.44, fill: 3.93,
+    p: [[0, 1.5], [0.6, 1.5], [0.7, 1.35], [4.1, 1.4], [5.14, 1.95], [5.98, 3.3], [6.71, 3.8], [20.37, 3.8], [20.79, 3.5], [21, 3.1]], label: [9.52, 17.35] },
+  tokaji: { name: 'Tokaji and dessert', wines: 'Tokaji, ice wine, sweet wines, slim and tall', h: 30, cap: 5.2, fill: 8.18,
+    p: [[0, 1.3], [0.6, 1.3], [0.7, 1.15], [8.6, 1.2], [10.21, 1.7], [11.6, 2.65], [12.45, 3.05], [29.36, 3.05], [29.79, 2.8], [30, 2.4]], label: [17.16, 25.72] },
+  fiasco: { name: 'Chianti fiasco', wines: 'Traditional Chianti in straw', h: 31, cap: 3.92, fill: 8.15, straw: 14.04,
+    p: [[0, 1.4], [0.6, 1.4], [0.7, 1.25], [9, 1.4], [11.68, 2.3], [13.83, 3.7], [15.98, 5], [19.2, 6.2], [22.41, 6.5], [25.63, 6.1], [28.21, 5.3], [30.03, 4.5], [31, 4.35]], label: [11.04, 13.61] }
 };
 const BOTTLE_NAMES = Object.fromEntries(Object.keys(BOTTLES).map(k => [k, BOTTLES[k].name]));
 /* the glass colours the glassworks really make; clear glass shows the wine */
@@ -53,13 +57,15 @@ function bottleAuto(w) {
   if (w.type === 'Rosé' && /provence|bandol|c[ôo]tes de provence/i.test(t)) return 'provence';
   if (/franken|bocksbeutel|w[üu]rzburg|silvaner/i.test(t)) return 'bocksbeutel';
   if (/riesling|alsace|elsass|mosel|gew[üu]rz|rheingau|pfalz|nahe|wachau|kamptal|gr[üu]ner/i.test(t)) return 'flute';
+  if (/puglia|apulia|salento|primitivo|negro ?amaro|manduria/i.test(t)) return 'tapered';
+  if (/ribera del duero|\btoro\b/i.test(t)) return 'roundshoulder';
   if (/burgund|bourgogne|pinot noir|chardonnay|rh[ôo]ne|syrah|chasselas|nebbiolo|barolo|barbaresco|beaujolais|loire|sancerre/i.test(t)) return 'burgundy';
   return 'bordeaux';
 }
 const bottleShapeOf = w => (w.profile && BOTTLES[w.profile.bottle] ? w.profile.bottle : bottleAuto(w));
 function glassAuto(w, shape) {
   const k = shape || bottleShapeOf(w);
-  if (w.type === 'Fortified' || k === 'port') return 'black';
+  if (w.type === 'Fortified' || k === 'port' || k === 'tapered') return 'black';
   if (['Rosé', 'Dessert', 'Orange'].includes(w.type) || k === 'tokaji' || k === 'provence') return 'clear';
   if (w.type === 'Sparkling' || k === 'clavelin') return 'olive';
   if (w.type === 'White') return 'light';

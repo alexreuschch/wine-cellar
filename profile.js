@@ -82,7 +82,7 @@ function parseProfile(v) {
     style: t(p.style), styleDesc: t(p.styleDesc), sub: t(p.sub), producerLine: t(p.producerLine), about: t(p.about),
     classification: t(p.classification), alcohol: Number(p.alcohol) > 0 ? Number(p.alcohol) : null, ageing: t(p.ageing),
     closure: t(p.closure), vineyard: t(p.vineyard), vintageNote: t(p.vintageNote), typical: p.typical === true,
-    bottle: ['bordeaux', 'burgundy', 'flute', 'champagne', 'provence', 'bocksbeutel', 'port', 'clavelin', 'tokaji', 'fiasco'].includes(p.bottle) ? p.bottle : '',
+    bottle: ['bordeaux', 'burgundy', 'tapered', 'roundshoulder', 'flute', 'champagne', 'provence', 'bocksbeutel', 'port', 'clavelin', 'tokaji', 'fiasco'].includes(p.bottle) ? p.bottle : '',
     glass: ['black', 'green', 'olive', 'light', 'amber', 'clear'].includes(p.glass) ? p.glass : '',
     label: p.label === 'oval' ? 'oval' : ''
   };

@@ -140,6 +140,26 @@ function b3Render(o) {
         c1 = (capC[1] * (0.25 + 0.55 * diff) + capC[1] * cE * 0.55 + hi) * ring;
         c2 = (capC[2] * (0.25 + 0.55 * diff) + capC[2] * cE * 0.55 + hi) * ring;
       }
+      // straw of the fiasco: strands running to the neck, a plaited band on top
+      if (b.straw && yc >= b.straw) {
+        const phi = Math.asin(u), tx = nz0, tz = -u;
+        let a, ridge, tone, gap;
+        if (yc < b.straw + 1.1) {
+          const v = (yc - b.straw) / 1.1, row = v < 0.5 ? 1 : -1;
+          a = phi * 70 / (2 * Math.PI) + row * (v % 0.5) * 2.2;
+          const s = a - Math.floor(a); ridge = Math.cos(Math.PI * s); gap = Math.sin(Math.PI * s) * Math.min(1, Math.abs(v - 0.5) * 9, v * 9, (1 - v) * 9); tone = 0.92;
+        } else {
+          a = phi * 84 / (2 * Math.PI);
+          const s = a - Math.floor(a), id = Math.floor(a) + 200;
+          ridge = Math.cos(Math.PI * s); gap = Math.sin(Math.PI * s); tone = 0.84 + 0.22 * ((id * 7919) % 13) / 13;
+          if (Math.abs(yc - (b.h - 4.2)) < 0.35) { const v = (yc - (b.h - 4.55)) / 0.7, a2 = phi * 70 / (2 * Math.PI) + v * 1.2, s2 = a2 - Math.floor(a2); ridge = Math.cos(Math.PI * s2); gap = Math.sin(Math.PI * s2) * Math.min(1, v * 8, (1 - v) * 8); tone = 0.9; }
+        }
+        let snx = nx + tx * 0.55 * ridge, sny = ny, snz = nz + tz * 0.55 * ridge;
+        const sl = Math.hypot(snx, sny, snz); snx /= sl; sny /= sl; snz /= sl;
+        const diff = Math.max(0, snx * L[0] + sny * L[1] + snz * L[2]), hv = Math.max(0, snz * 0.8 - 0.35);
+        const lit = (0.22 + 0.85 * diff) * (0.45 + 0.55 * Math.sqrt(Math.max(0, gap))) * tone;
+        c0 = 0.86 * lit + 0.12 * hv * hv; c1 = 0.71 * lit + 0.11 * hv * hv; c2 = 0.45 * lit + 0.08 * hv * hv;
+      }
       // paper: the label wrapped around the glass, a neck label, or the drawn placeholder
       let pc = null;
       if (lab && yc >= lab.ya && yc <= lab.ya + lab.hh) {
