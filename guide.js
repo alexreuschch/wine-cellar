@@ -53,7 +53,7 @@ function viewHome() {
   const daily = GD_DAILY.map(([h, ic, t, s]) => gdRow(h === 'ext' ? 'href="#/top" data-act="gd-ext"' : `href="${h}"`, ic, t, s)).join('');
   return `<main class="screen has-nav home">
     <header class="top"><h1 class="title home-title"><img src="icon-192.png" alt="" width="34" height="34">Vintary</h1>
-      <div class="top-actions"><button class="icon-btn" data-act="refresh" aria-label="Refresh">${ICON.refresh}</button><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>
+      <div class="top-actions"><a class="icon-btn" href="#/settings" aria-label="Settings">${ICON.gear}</a></div></header>
     <div class="hm-stat">${stat}</div>
     <h2 class="home-q">What would you like to do?</h2>
     ${started}

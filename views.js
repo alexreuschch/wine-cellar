@@ -94,10 +94,15 @@ const insSection = (title, sub, body) => `<section class="ins-sec"><div class="s
 
 function viewInsights() {
   const nw = S.wishlist.length, no = S.orders.length, late = S.orders.some(orderOverdue);
-  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><button class="icon-btn magic-btn rh-ic" data-act="go-orders" aria-label="Ordered${no ? `, ${no} orders` : ''}">${ICON.box}${no ? `<span class="rh-n${late ? ' late' : ''}">${no}</span>` : ''}</button><button class="icon-btn magic-btn rh-ic" data-act="go-wishlist" aria-label="Wishlist${nw ? `, ${nw} wines` : ''}">${ICON.bookmark}${nw ? `<span class="rh-n">${nw}</span>` : ''}</button><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
+  const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
+  // orders and the wishlist as chips, your best wines as a card with the way to the full ranking
+  const chips = no || nw ? `<div class="ins-chips">${no ? `<button data-act="go-orders"${late ? ' class="late"' : ''}>${ICON.box}<b>${no}</b> ordered</button>` : ''}${nw ? `<button data-act="go-wishlist">${ICON.bookmark}<b>${nw}</b> on the wishlist</button>` : ''}</div>` : '';
+  const best = S.wines.filter(w => w.myRating !== null).sort((a, b) => b.myRating - a.myRating).slice(0, 3);
+  const topCard = `<section class="ins-top"><div class="between"><h2>Top rated</h2><a href="#/top" class="small">Show the ranking ›</a></div>
+    ${best.length ? best.map((w, i) => `<a class="ins-tr" href="#/wine/${encodeURIComponent(w.id)}"><span class="n">${i + 1}</span><span class="t"><b>${esc([wineTitle(w), w.vintage].filter(Boolean).join(' '))}</b>${segsHtml(w.myRating)}</span><span class="v">${w.myRating}%</span></a>`).join('') : '<p class="muted small" style="margin:0">Rate your wines and your favorites show up here.</p>'}</section>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
-  if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div>${ordersSectionHtml()}${wishSectionHtml()}</main>${nav('insights')}`;
+  if (!total) return `<main class="screen has-nav">${head}${chips}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div>${ordersSectionHtml()}${wishSectionHtml()}</main>${nav('insights')}`;
   const bottles = w => w.count;
   const year = now.getFullYear();
   const out = [];
@@ -140,7 +145,7 @@ function viewInsights() {
   let cost = 0, street = 0, withCost = 0, withStreet = 0, costB = 0, streetB = 0;
   const valRows = TYPES.map(t => ({ t, c: 0, s: 0 }));
   wines.forEach(w => {
-    const a = avgPrice(w), st = streetOf(w), v = valRows.find(x => x.t === w.type);
+    const a = costPerBottle(w), st = streetOf(w), v = valRows.find(x => x.t === w.type);
     if (a !== null) { cost += a * w.count; withCost += w.count; if (v) v.c += a * w.count; }
     if (st !== null) { street += st * w.count; withStreet += w.count; if (v) v.s += st * w.count; }
     if (a !== null && st !== null) { costB += a * w.count; streetB += st * w.count; }
@@ -198,7 +203,7 @@ function viewInsights() {
     <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
     <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a></section>`);
   out.push(ordersSectionHtml(), wishSectionHtml());
-  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${tipHtml('insights')}${out.join('')}</main>${nav('insights')}`;
+  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${chips}${topCard}${tipHtml('insights')}${out.join('')}</main>${nav('insights')}`;
 }
 
 /* opens the cellar or the journal with the filter that matches a row in Insights */
@@ -291,7 +296,7 @@ function viewTop() {
   const btn = filterButton('top');
   // in External, the gold AI symbol checks published scores of the wines in the current selection
   const magic = U.topMode === 'ext' ? rhIconHtml(topPool().filter(w => passes('top', w)).map(w => w.id)) : '';
-  const lead = `<header class="top"><h1 class="title">Top rated</h1><div class="top-actions">${magic}${btn}</div></header>
+  const lead = `${backLinkHtml('#/insights', 'Insights')}<header class="top"><h1 class="title">Top rated</h1><div class="top-actions">${magic}${btn}</div></header>
     ${filters}
     <div class="toggle"><button class="${U.topMode === 'mine' ? 'on' : ''}" data-act="top-mode" data-v="mine">My rating</button><button class="${U.topMode === 'ext' ? 'on' : ''}" data-act="top-mode" data-v="ext">External</button></div>
     ${U.topFinished ? `<p class="muted tiny" style="margin:-6px 0 0;display:flex;align-items:center;gap:2px">${FIN}<span style="margin-left:4px">marks a finished wine with no bottles left</span></p>` : ''}
@@ -491,7 +496,7 @@ function stockHtml(w) {
     <div class="stepper"><button data-act="minus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Take a bottle from ${esc(placeLabel(e))}">${ICON.minus}</button><span>${e.n}</span><button data-act="plus" data-id="${esc(w.id)}" data-i="${i}" aria-label="Add bottles to ${esc(placeLabel(e))}">${ICON.plus}</button></div></div>`).join('');
   return `<section><div class="sec-head"><h2>In stock</h2><span class="small muted">${w.count} ${w.count === 1 ? 'bottle' : 'bottles'}</span></div>
     <div class="card stock-card">${rows || `<div class="between"><span class="muted small">No bottles left</span><button class="btn" style="height:38px" data-act="plus" data-id="${esc(w.id)}">${ICON.plus}Add bottles</button></div>`}</div>
-    ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">Storage places and moving bottles are managed in Edit.</p>' : ''}
+    ${w.stock.length > 1 ? '<p class="muted tiny" style="margin:-4px 0 0">To move bottles to another place, use Places in the cellar.</p>' : ''}
     ${ordersFor(w.id).map(o => `<button class="ord-line" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.box}<span><b>${o.qty} on order</b>${o.retailer ? ` from ${esc(o.retailer)}` : ''} · ${esc(orderWhen(o).text)}</span></button>`).join('')}</section>`;
 }
 
@@ -594,7 +599,7 @@ function viewWine(id) {
   const label = wineTopHtml(w);
   const meta = [w.name ? w.producer : '', w.region, w.vintage, w.type, sizeText(w) || clText(w.size || 75), alcText(w)].filter(Boolean).join(' · ');
   return `<main class="screen detail">
-    <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<span style="display:flex;gap:6px;align-items:center"><button class="icon-btn" data-act="share-wine" data-id="${esc(w.id)}" aria-label="Share this wine">${ICON.share}</button><a class="btn" style="height:40px" href="${editHref}">Edit</a></span></div>
+    <div class="detail-top">${isDisc(w) ? backLinkHtml('#/top', 'Top rated') : backLinkHtml('#/cellar', 'Cellar')}<span style="display:flex;gap:6px;align-items:center"><button class="icon-btn" data-act="share-wine" data-id="${esc(w.id)}" aria-label="Share this wine">${ICON.share}</button><a class="link-top" href="${editHref}">Edit</a></span></div>
     ${tipHtml('wine')}
     ${label}
     <div><h1 class="title" style="font-size:28px">${esc(wineTitle(w))}${isGift(w) ? GIFT_MARK : ''}${isDisc(w) ? DISC : w.count === 0 ? FIN : ''}</h1><p class="meta">${flagOf(w)}${esc(meta)}</p>${recLineHtml(wineRecBy(w))}</div>

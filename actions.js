@@ -620,7 +620,34 @@ function setQty(el, final) {
   if (final || String(v) !== raw && raw !== '') el.value = v;
 }
 
+/* pull the screen down at the top to load your data from Google Drive again */
+function setupPullRefresh() {
+  const el = document.createElement('div');
+  el.className = 'ptr'; el.setAttribute('aria-hidden', 'true'); el.innerHTML = ICON.refresh;
+  document.body.appendChild(el);
+  let y0 = null, dy = 0;
+  const blocked = () => !CFG || isFormRoute() || document.querySelector('.sheet, .sheet-backdrop, .pick-sheet') || syncing;
+  document.addEventListener('touchstart', e => { y0 = window.scrollY <= 0 && e.touches.length === 1 && !blocked() ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    dy = Math.max(0, (e.touches[0].clientY - y0) * 0.5);
+    if (window.scrollY > 0) { y0 = null; dy = 0; }
+    el.classList.toggle('on', dy > 8);
+    el.style.transform = `translateY(${Math.min(dy, 80) - 50}px) rotate(${dy * 4}deg)`;
+  }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (y0 === null) return;
+    y0 = null;
+    if (dy >= 60) {
+      el.classList.add('go'); el.style.transform = 'translateY(24px)';
+      sync(false).finally(() => { el.classList.remove('go', 'on'); el.style.transform = ''; });
+    } else { el.classList.remove('on'); el.style.transform = ''; }
+    dy = 0;
+  }, { passive: true });
+}
+
 function init() {
+  setupPullRefresh();
   document.addEventListener('click', e => {
     const ext = e.target.closest('a[target="_blank"]');
     if (ext && /^https?:/i.test(ext.href)) { e.preventDefault(); openExternal(ext.href); return; }

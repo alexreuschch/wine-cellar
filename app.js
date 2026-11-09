@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '4.1.1';
+const APP_VERSION = '4.2.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -294,8 +294,21 @@ const inEntries = w => S.removals.filter(r => r.wineId === w.id && r.dir === 'in
 const isOpened = r => r.dir === 'out' && r.type !== 'Sale' && r.type !== 'Gift' && r.type !== 'Correction';
 const isGift = w => inEntries(w).some(r => r.type === 'Received');
 
-/** Average purchase price per bottle over all purchases and gifts (gifts count as 0). Null when no price is known. */
+/** Average price per bottle of the bottles you bought. Gifts do not lower it; a wine you only got as a gift shows 0.
+ *  Null when no price is known. */
 function avgPrice(w) {
+  let q = 0, sum = 0, gift = false;
+  inEntries(w).forEach(e => {
+    if (e.type === 'Received') { gift = true; return; }
+    const p = conv(e.price, e.priceCur);
+    if (p === null) return;
+    q += e.qty;
+    sum += p * e.qty;
+  });
+  return q ? sum / q : gift ? 0 : null;
+}
+/** What a bottle cost you on average, gifts counted as 0: for the totals of the cellar, the money you really spent. */
+function costPerBottle(w) {
   let q = 0, sum = 0;
   inEntries(w).forEach(e => {
     const p = e.type === 'Received' ? 0 : conv(e.price, e.priceCur);
@@ -310,7 +323,7 @@ const streetOf = w => (w.street ? conv(w.street.v, w.street.cur) : null);
 function totals() {
   let cost = 0, street = 0, costN = 0, streetN = 0;
   S.wines.filter(w => w.count > 0).forEach(w => {
-    const a = avgPrice(w), s = streetOf(w);
+    const a = costPerBottle(w), s = streetOf(w);
     if (a !== null) { cost += a * w.count; costN++; }
     if (s !== null) { street += s * w.count; streetN++; }
   });
@@ -599,7 +612,7 @@ function nav(active) {
   const late = on && S.orders.some(orderOverdue);
   const badge = (n, label) => (n ? `<span class="nav-n" aria-label="${n} ${label}">${n > 99 ? '99+' : n}</span>` : '');
   const item = (href, key, icon, label, extra = '') => `<a href="${href}" class="${active === key ? 'on' : ''}"><span class="nav-ic">${icon}${extra}</span>${label}</a>`;
-  return `<nav class="nav" aria-label="Main">${item('#/home', 'home', ICON.home, 'Home')}${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/top', 'top', ICON.trophy, 'Top rated')}${item('#/insights', 'insights', ICON.chart, 'Insights', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
+  return `<nav class="nav" aria-label="Main">${item('#/home', 'home', ICON.home, 'Home')}${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/insights', active === 'top' ? 'top' : 'insights', ICON.chart, 'Insights', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
 }
 /* the monthly email and the badges, as chosen in Settings */
 const notifyOf = () => Object.assign({ mail: true, to: '', window: true, orders: true, month: true, badges: true }, (S.settings && S.settings.notify) || {});

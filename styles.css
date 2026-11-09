@@ -7,8 +7,8 @@
   --line-soft: #341A24;
   --text: #FFF8E9;
   --text-2: #F0E4D8;
-  --muted: #C2ACA8;
-  --faint: #9A8580;
+  --muted: #CDB8B3;
+  --faint: #B5A19B;
   --gold: #E6CB98;
   --gold-hi: #F4DFB4;
   --on-gold: #1A0C12;
@@ -103,7 +103,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .fab { position: fixed; right: max(20px, calc(50% - 260px)); bottom: calc(var(--nav-h) + var(--safe-b) + 16px); width: 58px; height: 58px; border-radius: 50%; background: var(--gold); color: var(--on-gold); display: flex; align-items: center; justify-content: center; z-index: 20; }
 .fab:hover { color: var(--on-gold); }
 
-.nav { position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b); background: var(--surface-2); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); z-index: 20; }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b); background: var(--surface-2); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); z-index: 20; }
 .nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-size: 12px; }
 .nav a.on { color: var(--gold); font-weight: 500; }
 
@@ -1402,3 +1402,31 @@ button.rec-by { align-self: flex-start; border: 0; background: none; padding: 0;
 .im-sum { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; }
 .im-sum span { text-align: right; }
 
+
+/* 4.2: one style. The serif font only for the title of a screen; names in lists in the normal font */
+.wine-row .row-title { font-family: var(--sans); font-weight: 600; font-size: 15px; line-height: 1.3; letter-spacing: 0; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pl-name b { font-family: var(--sans); font-weight: 600; font-size: 16px; }
+.dl-n { font-family: var(--sans); font-size: 18px; }
+/* badges: one shape, a soft fill, the colour tells the status */
+.pill, .badge { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 999px; line-height: 16px; }
+.pill { background: color-mix(in srgb, var(--c) 16%, transparent); border-color: transparent; }
+.badge.correction { border: 0; background: var(--line-soft); }
+/* small actions in a header or a line: gold text */
+.link-top { font-size: 15px; font-weight: 600; color: var(--gold); padding: 8px 4px; }
+/* Insights: orders, wishlist and the best rated wines */
+.ins-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -6px; }
+.ins-chips button { display: inline-flex; gap: 6px; align-items: center; padding: 6px 11px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); font-size: 13px; }
+.ins-chips b { color: var(--gold); }
+.ins-chips svg { width: 15px; height: 15px; color: var(--gold); }
+.ins-chips .late { border-color: #E06C6C; } .ins-chips .late b, .ins-chips .late svg { color: #E06C6C; }
+.ins-top { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.ins-top h2 { font-size: 15px; font-weight: 600; }
+.ins-tr { display: grid; grid-template-columns: 16px minmax(0, 1fr) 46px; gap: 10px; align-items: center; color: var(--text); }
+.ins-tr .n { color: var(--muted); font-size: 13px; }
+.ins-tr b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+.ins-tr .v { text-align: right; font-weight: 700; }
+/* pull down to load the data again */
+.ptr { position: fixed; left: 50%; top: 0; z-index: 40; width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); color: var(--gold); display: grid; place-items: center; transform: translateY(-50px); transition: transform .2s, opacity .2s; opacity: 0; pointer-events: none; box-shadow: 0 4px 14px rgba(0, 0, 0, .35); }
+.ptr svg { width: 20px; height: 20px; }
+.ptr.on { opacity: 1; }
+.ptr.go svg { animation: spin .9s linear infinite; }
