@@ -1402,15 +1402,3 @@ button.rec-by { align-self: flex-start; border: 0; background: none; padding: 0;
 .im-sum { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; }
 .im-sum span { text-align: right; }
 
-/* QR labels */
-.lb-screen { display: flex; flex-direction: column; gap: 12px; }
-.lb-sheets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.lb-sheets .gd-type b { display: block; font-size: 14px; }
-.lb-sheets .gd-type small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
-.lb-grid { display: grid; grid-template-columns: repeat(var(--c), minmax(0, 1fr)); gap: 4px; padding: 10px; border-radius: 10px; background: #F4EFE6; max-width: 300px; }
-.lb-cell { aspect-ratio: var(--ar); border: 1px dashed #C9BDAA; border-radius: 4px; background: #fff; font-size: 9px; color: #3A2129; padding: 0 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.lb-cell.on { background: var(--gold); border: 1px solid var(--gold); color: var(--on-gold); font-weight: 600; }
-.lb-cell.used { background: #E4DCCF; border-style: solid; }
-.lb-hint { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1.5px solid var(--gold); border-radius: 14px; background: color-mix(in srgb, var(--gold) 8%, transparent); }
-.lb-hint p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-2); }
-.pl-labels { margin-top: 4px; }

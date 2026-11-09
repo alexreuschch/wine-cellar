@@ -323,8 +323,7 @@ function placesHtml() {
   if (!locs.length) return `${only ? `<div class="pl-tools">${only}</div>` : ''}<p class="muted small">${U.onlyDue ? 'No bottle needs to be opened soon.' : filtered ? 'No wine in stock matches your search or filter.' : 'No bottles in stock.'}</p>`;
   // the stripe shows the type, the chip under the count the drinking window, so no colour switch is needed
   return `${only ? `<div class="pl-tools">${only}</div>` : ''}${tipHtml('places')}
-    ${locs.map(l => placeCardHtml(l, by[lc(l)], filtered)).join('')}
-    ${filtered || U.onlyDue || !S.locations.length ? '' : `<button class="btn ghost block pl-labels" data-act="lb-open" data-v="">${ICON.qr}QR labels for all places</button>`}`;
+    ${locs.map(l => placeCardHtml(l, by[lc(l)], filtered)).join('')}`;
 }
 
 function placeCardHtml(loc, items, filtered) {
@@ -346,7 +345,7 @@ function placeCardHtml(loc, items, filtered) {
     ? `<p class="small" style="margin:0">Count what lies here. Tap ✓ when a number is right, or change it with minus and plus. Wines that are not here: set them to 0.</p>
       <div class="grid2"><button class="btn" data-act="chk-cancel">Cancel</button><button class="btn primary" data-act="chk-done">${n ? `Done, ${n} ${n === 1 ? 'change' : 'changes'}` : 'Done, all right'}</button></div>`
     : moving ? mvFootHtml()
-    : filtered || U.onlyDue ? '' : `<div class="pl-acts"><button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button><button class="btn ghost pl-check" data-act="bm-start" data-v="${esc(loc)}">${ICON.move}Move bottles</button><button class="btn ghost pl-check" data-act="lb-open" data-v="${esc(loc)}">${ICON.qr}QR label</button></div>`;
+    : filtered || U.onlyDue ? '' : `<div class="pl-acts"><button class="btn ghost pl-check" data-act="chk-start" data-v="${esc(loc)}">${ICON.check}Check this place</button><button class="btn ghost pl-check" data-act="bm-start" data-v="${esc(loc)}">${ICON.move}Move bottles</button></div>`;
   if (fold) return `<section class="pl-card folded" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}</section>`;
   if (moving) return `<section class="pl-card checking moving" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}<p class="small" style="margin:0">Choose how many bottles of each wine go. <b>All</b> takes a whole shelf. Then choose where they go.</p>${body}${foot}</section>`;
   return `<section class="pl-card${checking ? ' checking' : ''}" id="pl-${esc(lc(loc).replace(/[^a-z0-9]+/g, '-'))}">${head}${fill}${dueLine}${checking ? foot.split('<div class="grid2">')[0] : ''}${body}${checking ? '<div class="grid2">' + foot.split('<div class="grid2">')[1] : foot}</section>`;
