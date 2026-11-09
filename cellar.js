@@ -13,7 +13,7 @@ const cellarPool = () => S.wines.filter(w => !isDisc(w) && (U.showFinished || w.
 const topPool = () => S.wines.filter(w => (isDisc(w) ? U.topDisc : U.topFinished || w.count > 0));
 const finishedWines = () => S.wines.filter(w => w.count === 0 && !isDisc(w));
 const discWines = () => S.wines.filter(isDisc);
-const ENTRY_LABEL = { Gift: 'Gift given', Received: 'Gift received', Added: 'Added', Correction: 'Stock correction' };
+const ENTRY_LABEL = { Gift: 'Gift given', Received: 'Gift received', Added: 'Added', Correction: 'Stock correction', Imported: 'Imported' };
 const entryType = r => ENTRY_LABEL[r.type] || r.type || 'Other';
 const entryWine = r => { const w = wineById(r.wineId); return w ? `${wineTitle(w)} ${w.vintage}`.trim() : (r.wineName || 'Deleted wine'); };
 const switchHtml = (change, on, label) => `<label class="switch"><input type="checkbox" data-change="${change}"${on ? ' checked' : ''}>${label}</label>`;
@@ -109,7 +109,7 @@ const CTX = {
     noun: 'entries',
     facets: {
       person: { label: 'Person', plural: 'people', of: r => namesOf(r.people) },
-      type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Discovery', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added', 'Stock correction'] },
+      type: { label: 'Type', plural: 'types', of: r => [entryType(r)], order: ['Dinner', 'Lunch', 'Celebration', 'Other', 'Discovery', 'Gift given', 'Sale', 'Purchase', 'Gift received', 'Added', 'Imported', 'Stock correction'] },
       retailer: { label: 'Retailer', plural: 'retailers', of: r => (r.retailer ? [r.retailer] : []) },
       producer: { hidden: true, label: 'Producer', plural: 'producers', of: r => { const w = wineById(r.wineId); return w && w.producer ? [w.producer] : []; } },
       month: { hidden: true, label: 'Month', plural: 'months', sortHint: 'Newest first. ', of: r => (monthOf(r) ? [monthOf(r)] : []), sort: (a, b) => monthKey(b.name).localeCompare(monthKey(a.name)) }

@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 52;
+var API_VERSION = 53;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -106,7 +106,9 @@ var ACTIONS = {
   setSettings: actionSetSettings_,
   setTasteTest: actionSetTasteTest_,
   tasteAnchor: actionTasteAnchor_,
-  ratingHints: actionRatingHints_
+  ratingHints: actionRatingHints_,
+  importMap: actionImportMap_,
+  importWines: actionImportWines_
 };
 
 // ---------------------------------------------------------------- setup
@@ -293,7 +295,7 @@ function doPost(e) {
 // ---------------------------------------------------------------- AI usage and estimated costs
 
 var USAGE_ = [];
-var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background', journalAsk: 'Journal', tasteAnchor: 'Taste test', ratingHints: 'Rating hints' };
+var USAGE_KIND = { analyze: 'Wine info', complete: 'Wine info', preview: 'Wine info', infoKeys: 'Background', streetPrice: 'Street prices', bestOffer: 'Best offer', offerFor: 'Best offer', sommelier: 'Sommelier', consultant: 'Consultant', winelist: 'Wine list', profiles: 'Wine info', info: 'Background', infoFill: 'Background', journalAsk: 'Journal', tasteAnchor: 'Taste test', ratingHints: 'Rating hints', importMap: 'Import' };
 // estimated list prices in USD per million tokens, and per web search; the Claude Console shows the exact amounts
 var USAGE_RATES = { haiku: { inp: 1, out: 5 }, sonnet: { inp: 3, out: 15 }, opus: { inp: 5, out: 25 } };
 var SEARCH_USD = 0.01;
@@ -2506,6 +2508,163 @@ function parseJson_(text, failMsg) {
     }
     throw new Error(failMsg);
   }
+}
+
+// ---------------------------------------------------------------- import from another app
+
+var IMPORT_RULES = [
+  'You help to move a wine collection from another app into Vintary, a cellar app. You get the name of the export file, its column names and its first rows.',
+  'Decide how each column fits the Vintary fields. You never convert the values yourself: you only choose columns and a conversion from the fixed lists below. The app applies them to every row.',
+  'Vintary fields and their keys:',
+  'producer: the producer or winery. name: the name of the wine without producer and vintage, for example "Puligny-Montrachet 1er Cru Les Pucelles". vintage: the year. type: red, white and so on. region: region and country, for example "Burgundy, France", several columns are joined with commas. grapes: grape varieties.',
+  'bottles: how many bottles a row stands for. size: the bottle size. location: the storage place, for example a cellar or a fridge. shelf: the bin, rack, shelf or slot inside the place.',
+  'retailer: where the wine was bought. date: the purchase date. price: the purchase price per bottle. currency: the currency of the price. myRating: the own score of the owner. ratings: published scores of critics or a community. drinkFrom and drinkUntil: the drinking window as years. note: a note of the owner about the bottle or the purchase.',
+  'Rules:',
+  '1. "source" is the app the file most likely comes from, for example "CellarTracker", "InVintory", "Vivino", "Oeni", "VinoCell", or "Spreadsheet" when unknown.',
+  '2. "rowKind" is "bottle" when every row stands for one single bottle (then rows of the same wine repeat, for example once per bottle in an inventory), or "wine" when a row stands for a wine with a quantity column. Never use a quantity column for a file with rowKind "bottle", the rows are counted.',
+  '3. "fields" maps a field key to {"cols": ["Column name", ...]} with exactly the column names given. Leave out fields that no column fits. Use several columns only for name (joined with spaces, for example cuvee and designation), region (joined with commas, for example region and country), grapes, and type (for example a colour column and a category column that tells sparkling or dessert wines).',
+  '4. For producer and name: when the file has one column with the full wine name including the producer and no producer column, put it into name and leave producer out.',
+  '5. Conversions, add them to the field object: vintage, drinkFrom, drinkUntil: none, the app takes the four digit year. size: none, the app reads values like "750ml", "0.75 l", "75 cl", "1.5L" or "Magnum". date: "fmt" is "YMD", "DMY", "MDY" or "excel" (a day number of a spreadsheet), as the sample values show. price: none. currency: either {"cols": [..]} or {"fixed": "USD"} with a three letter code; when the file shows no currency, use the currency of the owner. myRating: "scale" is "100" (points from 50 to 100), "20", "10", "5" (stars) or "pct" (already 0 to 100 percent of liking).',
+  '6. type: add "values" with a map from each type value you see in the sample to one of Red, White, Rosé, Sparkling, Dessert, Fortified, for example {"Red": "Red", "Rouge": "Red"}. The app maps other values by keywords.',
+  '7. ratings: a list instead of "cols": [{"col": "WA", "sys": "Robert Parker", "scale": "100"}]. "sys" must be one of: Vivino, Robert Parker, Falstaff, James Suckling, Wine Spectator, Decanter, Jancis Robinson, Vinum. Common short columns: WA or RP is Robert Parker (Wine Advocate), WS is Wine Spectator, JS is James Suckling, JR is Jancis Robinson (scale 20), DEC is Decanter, FAL is Falstaff. An average community rating of Vivino has scale "5". Leave out scores of other critics and of other communities.',
+  '8. "ignored" lists every column you did not use, each with a short reason of at most six words, for example "Internal id of the app".',
+  '9. "notes" is one short sentence in English for the owner when something needs attention, otherwise empty. Do not use dashes as punctuation.',
+  '10. Return ONLY a JSON object, no other text: {"source": "", "rowKind": "bottle|wine", "fields": {"producer": {"cols": []}, "date": {"cols": [], "fmt": "MDY"}, "currency": {"fixed": "CHF"}, "ratings": [{"col": "", "sys": "", "scale": "100"}]}, "ignored": [{"col": "", "why": ""}], "notes": ""}.'
+].join('\n');
+
+var IMPORT_KEYS = ['producer', 'name', 'vintage', 'type', 'region', 'grapes', 'bottles', 'size', 'location', 'shelf', 'retailer', 'date', 'price', 'currency', 'myRating', 'drinkFrom', 'drinkUntil', 'note'];
+var IMPORT_SYS = ['Vivino', 'Robert Parker', 'Falstaff', 'James Suckling', 'Wine Spectator', 'Decanter', 'Jancis Robinson', 'Vinum'];
+
+/** Suggests how the columns of an export file fit Vintary. Only the column names and a few rows are sent, never the whole file. */
+function actionImportMap_(req) {
+  var headers = (req.headers || []).map(function (h) { return String(h || '').slice(0, 80); });
+  if (!headers.length) throw new Error('The file has no columns');
+  var rows = (req.rows || []).slice(0, 5).map(function (r) { return (r || []).map(function (v) { return String(v === null || v === undefined ? '' : v).slice(0, 80); }); });
+  var cur = String(req.currency || settings_().currency || 'CHF');
+  var user = 'File: ' + String(req.file || 'export').slice(0, 120) + '\nRows in the file: ' + (Number(req.total) || rows.length) + '\nCurrency of the owner: ' + cur +
+    '\nColumns: ' + JSON.stringify(headers) + '\nFirst rows:\n' + rows.map(function (r) { return JSON.stringify(r); }).join('\n');
+  var body = { model: props_().getProperty('CLAUDE_MODEL') || DEFAULT_MODEL, max_tokens: 2400, system: IMPORT_RULES, messages: [{ role: 'user', content: user }] };
+  var d;
+  try {
+    d = parseJson_(textOf_(callClaude_(body)), 'x');
+  } catch (e) {
+    if (String(e.message) !== 'x') throw e;
+    body.messages = [{ role: 'user', content: user + '\n\nAnswer with ONLY the JSON object.' }];
+    d = parseJson_(textOf_(callClaude_(body)), 'The AI could not read the columns of this file. Please try again.');
+  }
+  return importMapClean_(d, headers, cur);
+}
+
+/** Keeps only known fields, existing columns and allowed conversions. */
+function importMapClean_(d, headers, cur) {
+  var has = function (c) { return headers.indexOf(String(c)) >= 0; };
+  var out = { source: String(d.source || 'Spreadsheet').slice(0, 40), rowKind: d.rowKind === 'bottle' ? 'bottle' : 'wine', fields: {}, ratings: [], ignored: [], notes: String(d.notes || '').slice(0, 300) };
+  var f = d.fields || {};
+  IMPORT_KEYS.forEach(function (k) {
+    var x = f[k];
+    if (!x || typeof x !== 'object') return;
+    if (k === 'currency' && x.fixed && /^[A-Z]{3}$/.test(String(x.fixed))) { out.fields.currency = { fixed: String(x.fixed) }; return; }
+    var cols = (Array.isArray(x.cols) ? x.cols : []).map(String).filter(has).slice(0, 4);
+    if (!cols.length) return;
+    var o = { cols: cols };
+    if (k === 'date') o.fmt = ['YMD', 'DMY', 'MDY', 'excel'].indexOf(x.fmt) >= 0 ? x.fmt : '';
+    if (k === 'myRating') o.scale = ['100', '20', '10', '5', 'pct'].indexOf(String(x.scale)) >= 0 ? String(x.scale) : '100';
+    if (k === 'type' && x.values && typeof x.values === 'object') {
+      o.values = {};
+      Object.keys(x.values).slice(0, 40).forEach(function (v) { var t = String(x.values[v]); if (['Red', 'White', 'Rosé', 'Sparkling', 'Dessert', 'Fortified'].indexOf(t) >= 0) o.values[String(v).slice(0, 60)] = t; });
+    }
+    out.fields[k] = o;
+  });
+  if (out.rowKind === 'bottle') delete out.fields.bottles;
+  if (!out.fields.currency) out.fields.currency = { fixed: cur };
+  (Array.isArray(d.ratings) ? d.ratings : Array.isArray(f.ratings) ? f.ratings : []).forEach(function (r) {
+    if (r && has(r.col) && IMPORT_SYS.indexOf(String(r.sys)) >= 0 && !out.ratings.some(function (x) { return x.col === String(r.col); }))
+      out.ratings.push({ col: String(r.col), sys: String(r.sys), scale: ['100', '20', '10', '5'].indexOf(String(r.scale)) >= 0 ? String(r.scale) : '100' });
+  });
+  (Array.isArray(d.ignored) ? d.ignored : []).forEach(function (x) { if (x && has(x.col)) out.ignored.push({ col: String(x.col), why: String(x.why || '').slice(0, 60) }); });
+  return out;
+}
+
+/** A row for a sheet, the same way writeRow_ writes one. */
+function rowOf_(headers, obj) {
+  return headers.map(function (h) {
+    var v = obj[h];
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'string' && /^[=+@]/.test(v)) return "'" + v;
+    if (typeof v === 'object') return JSON.stringify(v);
+    return v;
+  });
+}
+
+/**
+ * Writes one part of an import: new places, new wines, bottles added to wines already in the cellar and their journal entries.
+ * The app sends the import in parts. Ids that are in the sheet already are skipped, so a part sent twice does no harm.
+ */
+function actionImportWines_(req) {
+  return withLock_(function () {
+    var out = { places: 0, wines: 0, adds: 0, entries: 0 };
+    var now = new Date().toISOString();
+    // places
+    var places = (req.places || []).map(function (p) { return String(p || '').trim(); }).filter(String);
+    if (places.length) {
+      var have = readAll_(SHEETS.locations).map(function (r) { return String(r.name).toLowerCase(); });
+      var newPl = places.filter(function (p, i) { return have.indexOf(p.toLowerCase()) < 0 && places.indexOf(p) === i; });
+      if (newPl.length) {
+        var lsh = sheet_(SHEETS.locations), lh = lsh.getRange(1, 1, 1, lsh.getLastColumn()).getValues()[0].map(String);
+        lsh.getRange(lsh.getLastRow() + 1, 1, newPl.length, lh.length).setValues(newPl.map(function (p) { return rowOf_(lh, { name: p }); }));
+        out.places = newPl.length;
+      }
+    }
+    // new wines
+    var t = ltable_(SHEETS.wines);
+    var rows = [];
+    (req.wines || []).forEach(function (w) {
+      if (!w || !w.id || keyIndex_(t, w.id) >= 0) return;
+      var o = {};
+      WINE_COLS.forEach(function (c) { o[c] = ''; });
+      Object.keys(w).forEach(function (k) { if (WINE_COLS.indexOf(k) >= 0 && k !== 'stock') o[k] = w[k]; });
+      setStock_(o, w.stock || []);
+      o.createdAt = now; o.updatedAt = now;
+      rows.push(rowOf_(t.headers, o));
+      t.ids.push(String(w.id));
+    });
+    if (rows.length) t.sh.getRange(t.sh.getLastRow() + 1, 1, rows.length, t.headers.length).setValues(rows);
+    out.wines = rows.length;
+    // bottles for wines already in the cellar
+    (req.adds || []).forEach(function (a) {
+      var idx = a && a.wineId ? keyIndex_(t, a.wineId) : -1;
+      if (idx < 0) return;
+      var obj = toObj_(t.headers, t.rows[idx]);
+      (a.stock || []).forEach(function (p) { var n = Math.max(0, Math.round(Number(p.n) || 0)); if (n) changeStock_(obj, { loc: p.loc, shelf: p.shelf, pos: p.pos }, n); });
+      if (obj.origin) obj.origin = '';
+      obj.updatedAt = now;
+      writeRow_(t, idx, obj);
+      out.adds++;
+    });
+    // journal entries
+    var ents = (req.entries || []).filter(function (e) { return e && e.id && e.wineId; });
+    if (ents.length) {
+      var rt = ltable_(SHEETS.removals), erows = [], rets = {};
+      var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      ents.forEach(function (e) {
+        if (keyIndex_(rt, e.id) >= 0) return;
+        var o = {};
+        REMOVAL_COLS.forEach(function (c) { o[c] = e[c] === undefined || e[c] === null ? '' : e[c]; });
+        o.dir = 'in';
+        o.qty = Math.max(1, Math.round(Number(o.qty) || 1));
+        if (!o.date) o.date = today;
+        if (o.retailer) rets[String(o.retailer).toLowerCase()] = String(o.retailer);
+        erows.push(rowOf_(rt.headers, o));
+        rt.ids.push(String(e.id));
+      });
+      if (erows.length) rt.sh.getRange(rt.sh.getLastRow() + 1, 1, erows.length, rt.headers.length).setValues(erows);
+      out.entries = erows.length;
+      var known = readAll_(SHEETS.retailers).map(function (r) { return String(r.name).toLowerCase(); });
+      var newR = Object.keys(rets).filter(function (k) { return known.indexOf(k) < 0; }).map(function (k) { return [rets[k], '']; });
+      if (newR.length) sheet_(SHEETS.retailers).getRange(sheet_(SHEETS.retailers).getLastRow() + 1, 1, newR.length, 2).setValues(newR);
+    }
+    return out;
+  });
 }
 
 // ---------------------------------------------------------------- monthly digest

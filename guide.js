@@ -81,7 +81,8 @@ function viewSetup() {
     text = 'Prices, shops and restaurant markups are looked up for this country, and amounts are shown in its currency. You can change both any time in Settings.';
     body = `<div class="field">Country for shopping<button class="pick-btn" data-act="pick-open" data-k="country"><span class="ellipsis">${flagOfCode(shopCountry())}${esc(shopCountryName())}</span>${ICON.chevron}</button></div>
       <div class="field">Currency<button class="pick-btn" data-act="pick-open" data-k="currency"><span class="ellipsis">${esc(cur())} · ${esc(GEO_CURRENCIES[cur()] || '')}</span>${ICON.chevron}</button></div>
-      <p class="gd-sub">Travelling? The sommelier asks for the country where you are.</p>`;
+      <p class="gd-sub">Travelling? The sommelier asks for the country where you are.</p>
+      ${GS.only ? '' : `<a class="gd-row" href="#/import" data-act="im-from-setup"><span class="gd-ic">${ICON.upload}</span><span class="t"><b>Coming from another app?</b><small>Import your cellar from CellarTracker, Vivino, InVintory or a spreadsheet.</small></span>${ICON.chevron}</a>`}`;
   } else if (n === 2) {
     title = 'Your first storage place';
     text = 'Where do your bottles lie? You can add more places later in Settings. The app shows where each bottle is and how much room is left.';

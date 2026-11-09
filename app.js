@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '4.0.1';
+const APP_VERSION = '4.1.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -81,7 +81,9 @@ const ICON = {
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>', 16, 1.8),
   link: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>', 13, 1.9),
   pin: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>', 14, 1.8),
-  temp: svg('<path d="M10 14.5V4.5a2 2 0 0 1 4 0v10a4 4 0 1 1-4 0z"/><path d="M12 11v6"/>', 16, 1.8)
+  temp: svg('<path d="M10 14.5V4.5a2 2 0 0 1 4 0v10a4 4 0 1 1-4 0z"/><path d="M12 11v6"/>', 16, 1.8),
+  upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>', 20, 1.8),
+  qr: svg('<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2"/>', 18, 1.8)
 };
 const HEART_PATH = 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z';
 const HEART_ON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${HEART_PATH}"/></svg>`;
@@ -587,6 +589,7 @@ const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gif
   : t === 'Purchase' ? `<span class="badge purchase">${ICON.cart}Purchase</span>`
   : t === 'Added' ? '<span class="badge">Added</span>'
   : t === 'Correction' ? `<span class="badge correction">${ICON.check}Stock correction</span>`
+  : t === 'Imported' ? `<span class="badge">${ICON.upload.replace('width="20" height="20"', 'width="12" height="12"')}Imported</span>`
   : t === 'Discovery' ? `<span class="badge discovery">${ICON.spark}Discovery</span>`
   : `<span class="badge${t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`);
 
@@ -875,7 +878,7 @@ const go = (hash, replace) => { if (replace) { NAV.replacing = true; location.re
 
 /* where you came from: the screens of this session in order, and how far down each was scrolled */
 const NAV = { stack: [location.hash || '#/cellar'], scroll: {}, replacing: false, restore: null };
-const NAV_LABEL = { home: 'Home', cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', orders: 'Ordered', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back' };
+const NAV_LABEL = { home: 'Home', cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', orders: 'Ordered', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back', import: 'Import', labels: 'QR labels' };
 const hashRoute = h => { const [p, id] = String(h || '').replace(/^#\/?/, '').split('/'); return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null }; };
 /* called on every change of the screen, before it is drawn */
 function navTrack() {
@@ -923,6 +926,9 @@ function render() {
     case 'add': html = viewForm('add', null); break;
     case 'edit': html = viewForm('edit', r.id); break;
     case 'settings': html = viewSettings(false); break;
+    case 'import': html = viewImport(); break;
+    case 'labels': html = viewLabels(); break;
+    case 'place': setTimeout(() => openPlace(r.id)); html = viewCellar(); break;
     default: html = viewCellar();
   }
   app.innerHTML = html;

@@ -220,7 +220,7 @@ async function saveEdit() {
 }
 
 /* AI usage of the last months, logged by the script with estimated list prices */
-const USAGE_ORDER = ['Wine info', 'Background', 'Street prices', 'Best offer', 'Sommelier', 'Wine list', 'Consultant'];
+const USAGE_ORDER = ['Wine info', 'Background', 'Street prices', 'Best offer', 'Sommelier', 'Wine list', 'Consultant', 'Import'];
 // earlier names of the same features
 const USAGE_OLD = { 'Label details': 'Wine info', 'Taste profiles': 'Wine info' };
 function usageMonth(m) {
@@ -325,7 +325,9 @@ function viewSettings(first) {
     ${first ? '' : ttSettingsHtml()}
     ${first ? '' : `<section class="box"><span class="box-title">Your data</span>
       <button class="btn block" data-act="export"${U.exporting ? ' disabled' : ''}>${ICON.download}${U.exporting ? 'Preparing file…' : 'Export all data to Excel'}</button>
-      <p class="muted tiny" style="margin:0">Downloads one Excel file with your wines, journal, locations, retailers, people and wishlist. Keep it as a backup. The label photos stay in the Labels folder of your Google Drive.</p></section>`}
+      <p class="muted tiny" style="margin:0">Downloads one Excel file with your wines, journal, locations, retailers, people and wishlist. Keep it as a backup. The label photos stay in the Labels folder of your Google Drive.</p>
+      <a class="btn block" href="#/import" data-act="im-open-settings">${ICON.upload}Import from another app</a>
+      <p class="muted tiny" style="margin:0">Bring your cellar over from CellarTracker, InVintory, Vivino, Oeni, VinoCell or any CSV or Excel file. You check everything before it is imported.</p></section>`}
     ${first ? '' : '<h2 style="font-size:15px;font-weight:600;margin-top:8px">Connection</h2>'}
     <p class="muted" style="margin:0">Paste the web app URL and the token from your Google Apps Script. Both stay on this device.</p>
     <label class="field">Script URL<input id="cfg-url" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c.url)}"></label>
