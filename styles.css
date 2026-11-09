@@ -1430,3 +1430,5 @@ button.rec-by { align-self: flex-start; border: 0; background: none; padding: 0;
 .ptr svg { width: 20px; height: 20px; }
 .ptr.on { opacity: 1; }
 .ptr.go svg { animation: spin .9s linear infinite; }
+/* moving bottles: what stays at this place, updated with every tap */
+.pl-here { color: color-mix(in srgb, var(--gold) 85%, var(--muted)); font-weight: 500; white-space: nowrap; }

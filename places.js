@@ -381,7 +381,7 @@ function shelfBlockHtml(loc, k, xs, checking, only, moving) {
     const meta = [x.w.vintage, posShow(x.e.pos)].filter(Boolean).join(' · ');
     if (moving) {
       const key = chkKey(x.w, x.i), v = Math.min(mvVal(key), x.e.n);
-      return `<div class="chk-row${v ? ' changed' : ''}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="tiny muted">${esc(meta)}${meta ? ' · ' : ''}${x.e.n} here</span></span>
+      return `<div class="chk-row${v ? ' changed' : ''}" style="--tc:${stripeColor(x.w)}">${thumbHtml(x.w, true)}<span class="pl-wt"><span class="pl-wn">${esc(wineTitle(x.w))}</span><span class="tiny"><span class="muted">${esc(meta)}${meta ? ' · ' : ''}</span><span class="pl-here">${x.e.n - v} ${x.e.n - v === 1 ? 'bottle' : 'bottles'} here</span></span></span>
         <div class="stepper sm"><button data-act="bm-n" data-k="${esc(key)}" data-d="-1" aria-label="Move fewer">${ICON.minus}</button><span>${v}</span><button data-act="bm-n" data-k="${esc(key)}" data-d="1" aria-label="Move more">${ICON.plus}</button></div></div>`;
     }
     if (checking) {
