@@ -66,9 +66,12 @@ function recInSheetHtml() {
     <div class="between"><h2 style="font-size:18px;font-weight:600">${esc(from)} recommends</h2><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ICON.x}</button></div>
     <div class="rin-wine"><b>${esc([d.name || d.producer, d.vintage].filter(Boolean).join(' '))}</b><span>${esc([d.name ? d.producer : '', d.size !== 75 ? clText(d.size) : ''].filter(Boolean).join(' · '))}</span>${info ? `<span>${esc(info)}</span>` : ''}</div>
     ${said}${status}
+    ${mine ? '' : `<div class="cons-actions rin-more"><button class="link-btn" data-act="rin-more">${ICON.magic}More about this wine</button></div>`}
     ${recFieldHtml(RS.rec)}
     <div class="grid2"><button class="btn" data-act="sheet-close">Not now</button><button class="btn primary" data-act="rin-save">Save to wishlist</button></div></div>`;
 }
+/* the recommended wine for More about this wine: the same view as for Will I like it?, loaded only when you tap it */
+const recBase = d => ({ producer: d.producer, name: d.name, vintage: d.vintage, type: d.type, region: d.region, grapes: d.grapes });
 async function recInSave() {
   const d = RS.d, names = recNames(RS);
   closeSheet();
@@ -83,11 +86,12 @@ async function recInSave() {
     return;
   }
   const why = d.rating !== null ? `${d.from || 'Your friend'} rated it ${d.rating}%${d.fav ? ', one of the favorites' : ''}.` : '';
-  const x = normWish({ id: newId('x'), producer: d.producer, name: d.name, vintage: d.vintage, type: d.type, region: d.region, grapes: d.grapes, label: 'Recommended', why, recBy: names, createdAt: new Date().toISOString() });
+  // what was loaded with More about this wine goes along, so the AI is not asked again
+  const x = normWish({ id: newId('x'), producer: d.producer, name: d.name, vintage: d.vintage, type: d.type, region: d.region, grapes: d.grapes, label: 'Recommended', why, recBy: names, createdAt: new Date().toISOString(), details: previewOf(recBase(d)) });
   S.wishlist.push(x);
   persist();
   try {
-    await api('saveWish', { wish: Object.assign({}, x, { offer: '', details: '' }) });
+    await api('saveWish', { wish: Object.assign({}, x, { offer: '', details: x.details ? JSON.stringify(x.details) : '' }) });
     toast('Saved to your wishlist.');
     goSection('wishlist');
   } catch (e) {
@@ -126,6 +130,7 @@ window.addEventListener('beforeinstallprompt', e => { if (!CFG && route().p === 
 
 const RECS_ACTS = {
   'rin-save': () => recInSave(),
+  'rin-more': () => { if (RS && RS.kind === 'recin') openPreview(recBase(RS.d), '', null); },
   'rec-paste': () => recPaste(),
   'sheet-close-go': el => { closeSheet(); go(el.dataset.href); }
 };
