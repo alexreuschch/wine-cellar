@@ -83,7 +83,8 @@ function parseProfile(v) {
     classification: t(p.classification), alcohol: Number(p.alcohol) > 0 ? Number(p.alcohol) : null, ageing: t(p.ageing),
     closure: t(p.closure), vineyard: t(p.vineyard), vintageNote: t(p.vintageNote), typical: p.typical === true,
     bottle: ['bordeaux', 'burgundy', 'flute', 'champagne', 'provence', 'bocksbeutel', 'port', 'clavelin', 'tokaji', 'fiasco'].includes(p.bottle) ? p.bottle : '',
-    glass: ['black', 'green', 'olive', 'light', 'amber', 'clear'].includes(p.glass) ? p.glass : ''
+    glass: ['black', 'green', 'olive', 'light', 'amber', 'clear'].includes(p.glass) ? p.glass : '',
+    label: p.label === 'oval' ? 'oval' : ''
   };
 }
 /* the alcohol of a wine as shown under its name, or '' */

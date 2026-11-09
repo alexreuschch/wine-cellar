@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 53;
+var API_VERSION = 55;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -390,7 +390,8 @@ function settings_() {
   var c = p.getProperty('CURRENCY');
   var currency = CURRENCIES.indexOf(c) >= 0 ? c : 'CHF';
   var k = p.getProperty('COUNTRY');
-  return { currency: currency, country: COUNTRIES[k] ? k : countryOfCur_(currency), notify: notify_(), mailDefault: ownerMail_() };
+  // name: how the owner signs wines shared with friends
+  return { currency: currency, country: COUNTRIES[k] ? k : countryOfCur_(currency), notify: notify_(), mailDefault: ownerMail_(), name: p.getProperty('MY_NAME') || '' };
 }
 
 /** What the monthly email holds and where it goes; the badges in the app are kept here too. */
@@ -414,6 +415,7 @@ function actionSetSettings_(req) {
     if (!COUNTRIES[String(s.country)]) throw new Error('Unsupported country');
     props_().setProperty('COUNTRY', String(s.country));
   }
+  if (s.name !== undefined) props_().setProperty('MY_NAME', String(s.name || '').replace(/\s+/g, ' ').trim().slice(0, 40));
   if (s.notify && typeof s.notify === 'object') {
     var n = notify_();
     Object.keys(NOTIFY_DEFAULT).forEach(function (k) {
@@ -1323,6 +1325,8 @@ function actionProfiles_(req) {
       var hasShares = /\d\s*%/.test(String(obj.grapes || ''));
       if (r.grapes && !hasShares) obj.grapes = String(r.grapes).slice(0, 200);
       else r.profile.typical = false;
+      // the bottle, glass and label shape chosen by the owner stay
+      try { var old = JSON.parse(obj.profile || '{}') || {}; ['bottle', 'glass', 'label'].forEach(function (k) { if (old[k]) r.profile[k] = old[k]; }); } catch (e) { /* no old profile */ }
       obj.profile = JSON.stringify(r.profile);
       obj.updatedAt = new Date().toISOString();
       writeRow_(t2, idx, obj);

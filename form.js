@@ -34,6 +34,7 @@ function newDraft(mode, w) {
     profile: src.profile ? JSON.parse(JSON.stringify(src.profile)) : emptyProfile(),
     bottle: src.profile && src.profile.bottle ? src.profile.bottle : '',
     glass: src.profile && src.profile.glass ? src.profile.glass : '',
+    labelShape: src.profile && src.profile.label === 'oval' ? 'oval' : '', cropShape: src.profile && src.profile.label === 'oval' ? 'oval' : 'rect', oval: null, flat: 0,
     ai: null, aiMsg: '', touched: new Set()
   };
 }
@@ -61,9 +62,11 @@ function viewForm(mode, id) {
   if (D.step === 'camera') return `<main class="screen cam-screen">${head}${steps}${camHtml()}</main>`;
   if (D.step === 'crop') {
     return `<main class="screen">${head}${steps}
+      <div class="crop-shape"><button class="chip${D.cropShape === 'oval' ? '' : ' on'}" data-act="crop-shape" data-v="rect" aria-pressed="${D.cropShape !== 'oval'}">Rectangle</button><button class="chip${D.cropShape === 'oval' ? ' on' : ''}" data-act="crop-shape" data-v="oval" aria-pressed="${D.cropShape === 'oval'}">Round or oval</button></div>
       <div class="crop-wrap" id="crop-wrap"><canvas id="crop-canvas"></canvas><svg id="crop-svg"></svg></div>
       <p class="muted small center" id="crop-hint" style="margin:-6px 0 0">Detecting the label edges…</p>
-      <div class="crop-prev"><canvas id="crop-prev" aria-label="Preview of the straightened label"></canvas><p class="tiny muted">Preview. The two middle points follow a label that bends around the bottle.</p></div>
+      <div class="crop-prev"><canvas id="crop-prev" aria-label="Preview of the straightened label"></canvas><p class="tiny muted">${D.cropShape === 'oval' ? 'Preview of the flattened label.' : 'Preview. The two middle points follow a label that bends around the bottle.'}</p></div>
+      ${D.cropShape === 'oval' ? `<label class="field crop-flat"><span class="between"><span>Flatten</span><span class="muted tiny">for a label that bends around the bottle</span></span><input type="range" min="0" max="100" step="1" value="${Math.round((D.flat || 0) * 100)}" data-input="crop-flat" aria-label="Flatten"></label>` : ''}
       <div class="grid2"><button class="btn" data-act="retake">Retake</button><button class="btn accent" data-act="do-crop">Crop</button></div>
       <button class="btn ghost" data-act="use-full">Use the whole photo</button></main>`;
   }
@@ -384,6 +387,7 @@ function defaultCorners(c) {
 function setupCrop() {
   const canvas = $('#crop-canvas'), svgEl = $('#crop-svg');
   if (!canvas || !D || !D.src) return;
+  if (D.cropShape === 'oval' && !D.oval) D.oval = ovalFromQuad(D.corners);
   canvas.width = D.src.width;
   canvas.height = D.src.height;
   canvas.getContext('2d').drawImage(D.src, 0, 0);
@@ -397,11 +401,12 @@ function setupCrop() {
   };
   // the point moves with the finger instead of jumping under it, so it stays in sight; the loupe shows it enlarged
   let off = { x: 0, y: 0 };
-  const pointAt = i => (i < 4 ? D.corners[i] : cropMids()[i - 4]);
+  const oval = () => D.cropShape === 'oval';
+  const pointAt = i => (oval() ? D.oval[i] : i < 4 ? D.corners[i] : cropMids()[i - 4]);
   svgEl.addEventListener('pointerdown', e => {
     const p = toImg(e);
     let best = -1, bd = Infinity;
-    D.corners.concat(cropMids()).forEach((c, i) => { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < bd) { bd = d; best = i; } });
+    (oval() ? D.oval : D.corners.concat(cropMids())).forEach((c, i) => { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < bd) { bd = d; best = i; } });
     if (bd < Math.max(D.src.width, D.src.height) * 0.14) {
       drag = best;
       const q = pointAt(best);
@@ -416,7 +421,8 @@ function setupCrop() {
     const f = toImg(e);
     const p = { x: clamp(f.x + off.x, 0, D.src.width), y: clamp(f.y + off.y, 0, D.src.height) };
     // a corner moves its edges, the middle points keep their bend; a middle point only bends its edge
-    if (drag < 4) D.corners[drag] = p; else setCropMid(drag - 4, p);
+    if (oval()) D.oval[drag] = p;
+    else if (drag < 4) D.corners[drag] = p; else setCropMid(drag - 4, p);
     D.cornersTouched = true;
     drawCropOverlay();
     loupeShow(drag, e);
@@ -426,13 +432,21 @@ function setupCrop() {
   svgEl.addEventListener('pointercancel', end);
   cropPreview();
   if (!D.detectStarted) { D.detectStarted = true; detectCorners(); }
-  else setHint('Drag the corners onto the label edges.');
+  else setHint(D.cropShape === 'oval' ? 'Drag the four points onto the edge of the label.' : 'Drag the corners onto the label edges.');
 }
 
 function drawCropOverlay() {
   const svgEl = $('#crop-svg');
   if (!svgEl || !D || !D.corners) return;
   const W = D.src.width, H = D.src.height, r = Math.max(W, H) * 0.022;
+  if (D.cropShape === 'oval') {
+    const n = p => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`, edge = ovalPoints(D.oval, 96);
+    const shape = `M${edge.map(n).join(' L')} Z`;
+    svgEl.innerHTML = `<path d="M0 0H${W}V${H}H0Z ${shape}" fill="rgba(0,0,0,0.45)" fill-rule="evenodd"/>
+      <path d="${shape}" fill="none" stroke="#E6CB98" stroke-width="${(r / 4).toFixed(1)}"/>
+      ${D.oval.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#E6CB98" stroke="#1A0C12" stroke-width="${(r / 5).toFixed(1)}"/>`).join('')}`;
+    return;
+  }
   const [tl, tr, br, bl] = D.corners, mids = cropMids();
   const ct = bezCtrl(tl, mids[0], tr), cb = bezCtrl(bl, mids[1], br);
   const n = p => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
@@ -505,12 +519,20 @@ async function detectCorners() {
         const pts = [c.topLeftCorner, c.topRightCorner, c.bottomRightCorner, c.bottomLeftCorner];
         if (pts.every(p => p && isFinite(p.x) && isFinite(p.y))) quad = pts.map(p => ({ x: p.x / k, y: p.y / k }));
         if (quad) found = midsFromContour(contour, quad, k);
+        if (quad) { try { const fillR = cv.contourArea(contour) / (quadArea(quad) * k * k); D.roundGuess = fillR > 0.6 && fillR < 0.86; } catch (e) { D.roundGuess = false; } }
       }
     } finally { mat.delete(); }
     if (D !== draft || D.step !== 'crop') return;
     if (quad && quadArea(quad) > 0.08 * src.width * src.height && !D.cornersTouched) {
       D.corners = quad;
       D.mids = found;
+      if (D.roundGuess && D.cropShape !== 'oval') {
+        D.cropShape = 'oval';
+        D.oval = ovalFromQuad(quad);
+        render();
+        setHint('Round label detected. Drag the four points onto its edge.');
+        return;
+      }
       drawCropOverlay();
       cropPreview();
       setHint(found && cropSag(quad, cropMids()) >= 0.012 ? 'Edges and bend detected. Drag the points to adjust.' : 'Edges detected. Drag the points to adjust.');
@@ -603,7 +625,8 @@ async function finishCrop(quad) {
   busy(true, 'Straightening the label…');
   await sleep(30);
   try {
-    const out = quad ? warpLabel(D.src, quad, cropMids(), 1400) : D.src;
+    const out = quad ? cropOut(1400) : D.src;
+    D.labelShape = quad && D.cropShape === 'oval' ? 'oval' : '';
     const full = toJpeg(out, 1200, 0.85);
     D.imageB64 = full.split(',')[1];
     D.preview = full;
@@ -788,6 +811,7 @@ async function saveWineForm() {
       let p = profileFromDraft();
       if (p && D.touched.has('grapes')) p.typical = false;
       if (D.bottle || D.glass) p = Object.assign(p || emptyProfile(), D.bottle ? { bottle: D.bottle } : {}, D.glass ? { glass: D.glass } : {});
+      if (D.labelShape || (p && p.label)) p = Object.assign(p || emptyProfile(), { label: D.labelShape || '' });
       return p;
     })()
   }));

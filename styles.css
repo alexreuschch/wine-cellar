@@ -1441,3 +1441,15 @@ button.rec-by { align-self: flex-start; border: 0; background: none; padding: 0;
 .rin-heart { display: inline-flex; color: #E06C6C; }
 .rin-heart svg { width: 16px; height: 16px; fill: currentColor; }
 .rin-card { display: flex; flex-direction: column; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+
+/* rendered bottles */
+canvas.b3 { display: block; }
+.wframe canvas.b3 { filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .5)); }
+.b3-box { display: flex; align-items: flex-end; justify-content: center; }
+.bp-card .b3-box canvas.b3, .bp-glass .b3-box canvas.b3 { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45)); }
+.label-photo.oval, .zoom img.oval { border-radius: 50% !important; }
+.wframe .wtop-lab .label-photo.typo { background: none; }
+/* crop: the shape of the label */
+.crop-shape { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.crop-shape .chip { justify-content: center; height: 36px; }
+.crop-flat input[type=range] { width: 100%; accent-color: var(--gold); }

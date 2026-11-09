@@ -322,6 +322,11 @@ const ACTS = {
   'cam-torch': () => camTorch(),
   'label-zoom': () => labelZoom(),
   'do-crop': () => finishCrop(D.corners),
+  'crop-shape': el => {
+    D.cropShape = el.dataset.v === 'oval' ? 'oval' : 'rect';
+    if (D.cropShape === 'oval' && !D.oval) D.oval = ovalFromQuad(D.corners);
+    render();
+  },
   'use-full': () => finishCrop(null),
   'st-n': el => {
     const e = D.stock[Number(el.dataset.i)];
@@ -433,6 +438,7 @@ const ACTS = {
 };
 
 const INPUTS = {
+  'crop-flat': el => { D.flat = Number(el.value) / 100; cropPreview(); },
   search: el => {
     U.search = el.value;
     const l = $('#wine-list'), f = $('#facet-chips-cellar'), d = $('#drink-soon');

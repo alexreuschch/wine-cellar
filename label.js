@@ -135,14 +135,14 @@ function bottleSvg(w, shape, glass, tight) {
 
 function bottleFieldHtml() {
   const w = formBottleWine(), k = D.bottle || bottleAuto(w), g = D.glass || glassAuto(w, k);
-  return `<button type="button" class="bt-field" data-act="bt-open"><span class="bt-mini">${bottleSvg(w, k, g)}</span><span><small class="muted">Bottle</small><b>${esc(BOTTLES[k].name)} · ${esc(GLASSES[g].name)}</b>${D.bottle || D.glass ? '' : '<small class="muted">Chosen automatically</small>'}</span>${ICON.chevron}</button>`;
+  return `<button type="button" class="bt-field" data-act="bt-open"><span class="bt-mini">${b3Mini(w, k, g, 54)}</span><span><small class="muted">Bottle</small><b>${esc(BOTTLES[k].name)} · ${esc(GLASSES[g].name)}</b>${D.bottle || D.glass ? '' : '<small class="muted">Chosen automatically</small>'}</span>${ICON.chevron}</button>`;
 }
 /* the wine as the form has it now, for the automatic choice */
 const formBottleWine = () => ({ type: D.fields.type, region: D.fields.region, grapes: D.fields.grapes, name: D.fields.name, producer: D.fields.producer });
 function bottleSheetHtml() {
   const w = formBottleWine(), auto = bottleAuto(w), k = D.bottle || auto, gAuto = glassAuto(w, k), g = D.glass || gAuto;
-  const card = s => `<button class="bp-card${D.bottle === s ? ' on' : ''}" data-act="bt-shape" data-v="${s}" aria-pressed="${D.bottle === s}">${bottleSvg(w, s, D.glass || glassAuto(w, s))}<b>${esc(BOTTLES[s].name)}</b><small>${esc(BOTTLES[s].wines)}</small>${!D.bottle && s === auto ? '<em>Auto</em>' : ''}</button>`;
-  const swatch = x => `<button class="bp-glass${D.glass === x ? ' on' : ''}" data-act="bt-glass" data-v="${x}" aria-pressed="${D.glass === x}">${bottleSvg(w, k, x)}<small>${esc(GLASSES[x].name)}</small>${!D.glass && x === gAuto ? '<em>Auto</em>' : ''}</button>`;
+  const card = s => `<button class="bp-card${D.bottle === s ? ' on' : ''}" data-act="bt-shape" data-v="${s}" aria-pressed="${D.bottle === s}">${b3Mini(w, s, D.glass || glassAuto(w, s), 118)}<b>${esc(BOTTLES[s].name)}</b><small>${esc(BOTTLES[s].wines)}</small>${!D.bottle && s === auto ? '<em>Auto</em>' : ''}</button>`;
+  const swatch = x => `<button class="bp-glass${D.glass === x ? ' on' : ''}" data-act="bt-glass" data-v="${x}" aria-pressed="${D.glass === x}">${b3Mini(w, k, x, 74)}<small>${esc(GLASSES[x].name)}</small>${!D.glass && x === gAuto ? '<em>Auto</em>' : ''}</button>`;
   return `<div class="sheet-backdrop" data-act="bt-close"></div><div class="sheet bp-sheet" role="dialog" aria-modal="true" aria-label="Bottle"><div class="grab"></div>
     <div class="between"><h2 style="font-size:18px;font-weight:600">Bottle</h2><button class="icon-btn" data-act="bt-close" aria-label="Close">${ICON.x}</button></div>
     <span class="fsec-h">Shape</span>
@@ -184,15 +184,23 @@ function labelCardHtml(w) {
 /* in the lists: the vintage is the one thing that can still be read */
 const labelMiniHtml = (w, sm) => `<div class="thumb${sm ? ' sm' : ''} dl-mini" aria-hidden="true"><span>${esc(w.vintage || 'NV')}</span><i></i></div>`;
 
-/* the top of the wine page: bottle and label side by side in a frame, both centred */
+/* the top of the wine page: the rendered bottle and the label side by side in a frame, both centred.
+   The label photo, or a label set in type for a wine without one, is also wrapped around the bottle. */
+const btHeight = k => Math.min(BT_FRAME, BOTTLES[k].h * BT_FRAME / 30);
 function wineTopHtml(w) {
   const photo = w.thumb || w.labelFileId;
-  // the label photo may be as tall as the bottle; a wide label gets smaller so the bottle keeps its place
-  const b = BOTTLES[bottleShapeOf(w)], bh = Math.min(BT_FRAME, b.h * BT_FRAME / 30) * (b.h * BT_K) / (b.h * BT_K + 4);
-  const label = photo
-    ? `<button class="wtop-lab" data-act="label-zoom" aria-label="Show the label large"><img id="label-img" class="label-photo" data-bh="${bh.toFixed(0)}" style="max-height:${bh.toFixed(0)}px"${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}"></button>`
-    : `<div class="wtop-lab">${labelCardHtml(w)}</div>`;
-  return `<div class="wframe"><div class="wtop-b">${bottleSvg(w, null, null, true)}</div>${label}</div>`;
+  const o = b3Opts(w);
+  if (w.type === 'Sparkling' && w.vintage) o.neck = String(w.vintage);
+  const bh = btHeight(o.shape), round = o.oval || BOTTLES[o.shape].round;
+  const img = `<img id="label-img" class="label-photo${round ? ' oval' : ''}${photo ? '' : ' typo'}" data-bh="${bh.toFixed(0)}" style="max-height:${bh.toFixed(0)}px"${photo ? '' : ' data-typo="1"'}${w.thumb ? ` src="${esc(w.thumb)}"` : ''} alt="Label of ${esc(fullName(w))}">`;
+  if (!photo) b3FontsReady().then(() => { const im = document.getElementById('label-img'); if (im && im.dataset.typo && !im.getAttribute('src')) im.src = b3TypoLabel(w, o.shape).toDataURL('image/png'); });
+  return `<div class="wframe"><div class="wtop-b">${b3Html(w, o, bh, `data-wid="${esc(w.id)}" data-h="${bh.toFixed(1)}"`)}</div><button class="wtop-lab" data-act="label-zoom" aria-label="Show the label large">${img}</button></div>`;
+}
+/* small rendered bottles for the choice in Edit; shapes keep their real size to each other */
+function b3Mini(w, shape, glass, boxPx) {
+  const o = Object.assign(b3Opts(w, shape, glass), { plain: true });
+  const h = boxPx * BOTTLES[shape].h / 36;
+  return `<span class="b3-box" style="height:${boxPx}px">${b3Html(w, o, h)}</span>`;
 }
 /* the label as tall as the bottle, unless it is so wide that it would take the bottle's place */
 function fitLabel(img) {
@@ -203,7 +211,18 @@ function fitLabel(img) {
   const h = Math.max(60, Math.min(Number(img.dataset.bh) || 196, room * img.naturalHeight / img.naturalWidth));
   Object.assign(img.style, { height: h.toFixed(0) + 'px', width: 'auto', maxHeight: 'none', maxWidth: 'none' });
 }
-document.addEventListener('load', e => { if (e.target && e.target.id === 'label-img') fitLabel(e.target); }, true);
+/* the label is there: it gets its size, and the bottle wears it */
+function labelLoaded(img) {
+  const cv = document.querySelector('.wframe canvas.b3[data-wid]');
+  const w = cv && wineById(cv.dataset.wid);
+  if (cv && w) {
+    const o = b3Opts(w);
+    if (w.type === 'Sparkling' && w.vintage) o.neck = String(w.vintage);
+    b3Paint(cv, w, o, Number(cv.dataset.h), img);
+  }
+  fitLabel(img);
+}
+document.addEventListener('load', e => { if (e.target && e.target.id === 'label-img') labelLoaded(e.target); }, true);
 window.addEventListener('resize', () => { const im = document.getElementById('label-img'); if (im && im.complete) fitLabel(im); });
 
 function labelZoom() {
@@ -211,7 +230,7 @@ function labelZoom() {
   if (!img || !img.src) return;
   const z = document.createElement('div');
   z.className = 'zoom';
-  z.innerHTML = `<img src="${esc(img.src)}" alt="${esc(img.alt)}"><button class="icon-btn" aria-label="Close">${ICON.x}</button>`;
+  z.innerHTML = `<img src="${esc(img.src)}" alt="${esc(img.alt)}"${img.classList.contains('oval') ? ' class="oval"' : ''}><button class="icon-btn" aria-label="Close">${ICON.x}</button>`;
   z.onclick = () => { z.remove(); window.removeEventListener('hashchange', off); };
   const off = () => z.remove();
   window.addEventListener('hashchange', off, { once: true });
@@ -357,6 +376,51 @@ function warpCurved(srcCanvas, quad, mids, maxSide = 1400) {
 /* straight edges keep the exact perspective correction, bent ones are unrolled */
 const warpLabel = (src, quad, mids, maxSide) => (cropSag(quad, mids) < 0.012 ? warpQuad(src, quad, maxSide) : warpCurved(src, quad, mids, maxSide));
 
+/* ---------------------------------------------------------------- round and oval labels
+   Four points on the edge: top, right, bottom, left. Seen at an angle a circle becomes an ellipse; the four
+   points carry that perspective. "Flatten" gives a label that bends around the bottle its width back. */
+const OVAL_UNIT = [{ x: 0.5, y: 0 }, { x: 1, y: 0.5 }, { x: 0.5, y: 1 }, { x: 0, y: 0.5 }];
+const homApply = (h, x, y) => { const d = h[6] * x + h[7] * y + 1; return { x: (h[0] * x + h[1] * y + h[2]) / d, y: (h[3] * x + h[4] * y + h[5]) / d }; };
+/* points along the edge of the label */
+function ovalPoints(pts, n) {
+  let h;
+  try { h = solveHomography(OVAL_UNIT, pts); } catch (e) { return pts; }
+  return Array.from({ length: n }, (_, i) => { const a = i / n * Math.PI * 2; return homApply(h, 0.5 + 0.5 * Math.cos(a - Math.PI / 2), 0.5 + 0.5 * Math.sin(a - Math.PI / 2)); });
+}
+const ovalFromQuad = q => [midOf(q[0], q[1]), midOf(q[1], q[2]), midOf(q[2], q[3]), midOf(q[3], q[0])];
+function warpOval(srcCanvas, pts, flat, maxSide = 1400) {
+  const h = solveHomography(OVAL_UNIT, pts);
+  const th = clamp(flat, 0, 1) * 1.1, unroll = th > 0.05;
+  const sOf = u => (unroll ? 0.5 + Math.sin((u - 0.5) * 2 * th) / (2 * Math.sin(th)) : u);
+  let W = dist(pts[1], pts[3]) * (unroll ? th / Math.sin(th) : 1), H = dist(pts[0], pts[2]);
+  const k = Math.min(1, maxSide / Math.max(W, H));
+  W = Math.max(8, Math.round(W * k)); H = Math.max(8, Math.round(H * k));
+  const sw = srcCanvas.width, sh = srcCanvas.height, sd = srcCanvas.getContext('2d').getImageData(0, 0, sw, sh).data;
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const octx = out.getContext('2d'), img = octx.createImageData(W, H), od = img.data;
+  // the corners outside the oval get the colour of its edge, so a square thumbnail still looks calm
+  let er = 0, eg = 0, eb = 0, en = 0;
+  ovalPoints(pts, 64).forEach(p => { const x = clamp(Math.round(p.x), 0, sw - 1), y = clamp(Math.round(p.y), 0, sh - 1), i = (y * sw + x) * 4; er += sd[i]; eg += sd[i + 1]; eb += sd[i + 2]; en++; });
+  er /= en; eg /= en; eb /= en;
+  for (let v = 0; v < H; v++) {
+    for (let u = 0; u < W; u++) {
+      const fu = (u + 0.5) / W, fv = (v + 0.5) / H, o = (v * W + u) * 4;
+      const inside = (fu - 0.5) ** 2 + (fv - 0.5) ** 2 <= 0.25;
+      if (!inside) { od[o] = er; od[o + 1] = eg; od[o + 2] = eb; od[o + 3] = 255; continue; }
+      const p = homApply(h, sOf(fu), fv);
+      const x = clamp(p.x - 0.5, 0, sw - 1), y = clamp(p.y - 0.5, 0, sh - 1);
+      const x0 = x | 0, y0 = y | 0, x1 = Math.min(x0 + 1, sw - 1), y1 = Math.min(y0 + 1, sh - 1), fx = x - x0, fy = y - y0;
+      const i00 = (y0 * sw + x0) * 4, i10 = (y0 * sw + x1) * 4, i01 = (y1 * sw + x0) * 4, i11 = (y1 * sw + x1) * 4;
+      for (let c = 0; c < 3; c++) od[o + c] = (sd[i00 + c] * (1 - fx) + sd[i10 + c] * fx) * (1 - fy) + (sd[i01 + c] * (1 - fx) + sd[i11 + c] * fx) * fy;
+      od[o + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  return out;
+}
+/* what the crop step makes of the photo, for the preview and when saving */
+const cropOut = maxSide => (D.cropShape === 'oval' ? warpOval(D.src, D.oval, D.flat || 0, maxSide) : warpLabel(D.src, D.corners, cropMids(), maxSide));
+
 /* the bend of the edges from the outline found by the scanner: the outline point in the middle of each edge */
 function midsFromContour(contour, quad, k) {
   try {
@@ -387,10 +451,14 @@ function cropPreview() {
     const c = $('#crop-prev');
     if (!c || !D || !D.src || !D.corners) return;
     try {
-      const out = warpLabel(D.src, D.corners, cropMids(), 260);
+      const out = cropOut(260);
       c.width = out.width;
       c.height = out.height;
-      c.getContext('2d').drawImage(out, 0, 0);
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, c.width, c.height);
+      if (D.cropShape === 'oval') { g.save(); g.beginPath(); g.ellipse(c.width / 2, c.height / 2, c.width / 2, c.height / 2, 0, 0, Math.PI * 2); g.clip(); }
+      g.drawImage(out, 0, 0);
+      if (D.cropShape === 'oval') g.restore();
     } catch (e) { /* corners too close together */ }
   }, 60);
 }
@@ -412,7 +480,7 @@ function loupeShow(i, ev) {
   }
   const r = svgEl.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
   const sc = r.width / D.src.width;
-  const mids = cropMids(), pts = D.corners.concat(mids), c = pts[i];
+  const oval = D.cropShape === 'oval', mids = cropMids(), pts = oval ? D.oval : D.corners.concat(mids), c = pts[i];
   const px = c.x * sc + (r.left - wr.left), py = c.y * sc + (r.top - wr.top);
   const left = px > wr.width / 2;
   L.style.left = left ? '10px' : '';
@@ -429,9 +497,12 @@ function loupeShow(i, ev) {
   x.strokeStyle = 'rgba(230, 203, 152, .95)';
   x.lineWidth = 3;
   x.beginPath();
-  const edge = (a, m, b) => { const q = bezCtrl(a, m, b); x.moveTo(...to(a)); x.quadraticCurveTo(...to(q), ...to(b)); };
-  edge(tl, mids[0], tr); edge(bl, mids[1], br);
-  x.moveTo(...to(tr)); x.lineTo(...to(br)); x.moveTo(...to(tl)); x.lineTo(...to(bl));
+  if (oval) { ovalPoints(D.oval, 96).forEach((p, j) => (j ? x.lineTo(...to(p)) : x.moveTo(...to(p)))); x.closePath(); }
+  else {
+    const edge = (a, m, b) => { const q = bezCtrl(a, m, b); x.moveTo(...to(a)); x.quadraticCurveTo(...to(q), ...to(b)); };
+    edge(tl, mids[0], tr); edge(bl, mids[1], br);
+    x.moveTo(...to(tr)); x.lineTo(...to(br)); x.moveTo(...to(tl)); x.lineTo(...to(bl));
+  }
   x.stroke();
   x.strokeStyle = '#fff';
   x.lineWidth = 2;
