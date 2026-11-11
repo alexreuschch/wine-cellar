@@ -122,7 +122,7 @@ function viewTaste() {
   else if (s === 3) body = q(3, 'How do you take your coffee?', '', tqOpts('coffee', TQ_COFFEE.map((l, i) => [i + 1, l])) + tqSkip("I don't drink coffee"));
   else if (s === 4) body = q(4, 'Which fruit do you enjoy most?', '', tqOpts('fruit', TQ_FRUIT) + tqSkip());
   else if (s === 5) body = q(5, 'Which chocolate do you prefer?', '', tqOpts('choc', TQ_CHOC.map((l, i) => [i + 1, l])) + tqSkip("I don't eat chocolate"));
-  else if (s === 6) body = q(6, 'Vanilla, toast and butter in a wine?', 'Typical for wines aged in oak barrels.', tqOpts('oak', [['yes', 'I like that'], ['no', 'Rather not']]) + tqSkip());
+  else if (s === 6) body = q(6, 'Vanilla, toast and butter in a wine?', 'Typical for wines aged in oak barrels.', tqOpts('oak', [[true, 'I like that'], [false, 'Rather not']]) + tqSkip());
   else body = `<h1 class="title tq-title">Your starting profile</h1>${tqSummaryHtml()}`;
   return `<main class="screen tq">${top}${body}</main>`;
 }
@@ -216,7 +216,7 @@ const TQ_ACTS = {
   },
   'tq-pick': el => {
     const k = el.dataset.k, v = el.dataset.v;
-    TQ.a[k] = k === 'oak' ? v === 'yes' : k === 'fruit' ? v : Number(v);
+    TQ.a[k] = k === 'oak' ? v === 'true' : k === 'fruit' ? v : Number(v);
     render();
     if (TQ.edit) { tqSaveEdit(); return; }
     setTimeout(() => { if (route().p === 'taste' && TQ.step <= TT_Q) tqGo(TQ.step + 1); }, 220);
