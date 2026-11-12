@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 56;
+var API_VERSION = 57;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -39,8 +39,8 @@ var OFFER_COLS = ['key', 'offer', 'date'];
 var INFO_COLS = ['key', 'kind', 'name', 'data', 'date'];
 var HISTORY_COLS = ['month', 'bottles', 'cost', 'street', 'cur', 'date'];
 // wines ordered but not delivered yet; wineId when it is a wine already in the cellar; price per bottle
-var ORDER_COLS = ['id', 'wineId', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'size', 'qty', 'price', 'priceCur', 'retailer', 'ordered', 'expected', 'sub', 'note', 'details', 'createdAt', 'fit', 'why', 'recBy'];
-var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt', 'fit', 'details', 'recBy'];
+var ORDER_COLS = ['id', 'wineId', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'size', 'qty', 'price', 'priceCur', 'retailer', 'ordered', 'expected', 'sub', 'note', 'details', 'createdAt', 'fit', 'why', 'recBy', 'window'];
+var WISH_COLS = ['id', 'producer', 'name', 'vintage', 'type', 'region', 'grapes', 'price', 'priceCur', 'label', 'why', 'value', 'qty', 'replaces', 'offer', 'createdAt', 'fit', 'details', 'recBy', 'window'];
 // recBy: who recommended the wine, names separated by commas; it goes on to the order and to the purchase in the journal (people)
 // all countries with their currency [name, currency], and the EU members
 var GEO_COUNTRIES = {"AD":["Andorra","EUR"],"AE":["United Arab Emirates","AED"],"AF":["Afghanistan","AFN"],"AG":["Antigua & Barbuda","XCD"],"AI":["Anguilla","XCD"],"AL":["Albania","ALL"],"AM":["Armenia","AMD"],"AO":["Angola","AOA"],"AR":["Argentina","ARS"],"AS":["American Samoa","USD"],"AT":["Austria","EUR"],"AU":["Australia","AUD"],"AW":["Aruba","AWG"],"AX":["Åland Islands","EUR"],"AZ":["Azerbaijan","AZN"],"BA":["Bosnia and Herzegovina","BAM"],"BB":["Barbados","BBD"],"BD":["Bangladesh","BDT"],"BE":["Belgium","EUR"],"BF":["Burkina Faso","XOF"],"BG":["Bulgaria","BGN"],"BH":["Bahrain","BHD"],"BI":["Burundi","BIF"],"BJ":["Benin","XOF"],"BL":["St. Barthélemy","EUR"],"BM":["Bermuda","BMD"],"BN":["Brunei","BND"],"BO":["Bolivia","BOB"],"BQ":["Caribbean Netherlands","USD"],"BR":["Brazil","BRL"],"BS":["Bahamas","BSD"],"BT":["Bhutan","INR"],"BW":["Botswana","BWP"],"BY":["Belarus","BYN"],"BZ":["Belize","BZD"],"CA":["Canada","CAD"],"CC":["Cocos (Keeling) Islands","AUD"],"CD":["DR Congo","CDF"],"CF":["Central African Republic","XAF"],"CG":["Congo","XAF"],"CH":["Switzerland","CHF"],"CI":["Côte d'Ivoire","XOF"],"CK":["Cook Islands","NZD"],"CL":["Chile","CLP"],"CM":["Cameroon","XAF"],"CN":["China","CNY"],"CO":["Colombia","COP"],"CR":["Costa Rica","CRC"],"CU":["Cuba","CUP"],"CV":["Cape Verde","CVE"],"CW":["Curaçao","XCG"],"CX":["Christmas Island","AUD"],"CY":["Cyprus","EUR"],"CZ":["Czechia","CZK"],"DE":["Germany","EUR"],"DJ":["Djibouti","DJF"],"DK":["Denmark","DKK"],"DM":["Dominica","XCD"],"DO":["Dominican Republic","DOP"],"DZ":["Algeria","DZD"],"EC":["Ecuador","USD"],"EE":["Estonia","EUR"],"EG":["Egypt","EGP"],"EH":["Western Sahara","MAD"],"ER":["Eritrea","ERN"],"ES":["Spain","EUR"],"ET":["Ethiopia","ETB"],"FI":["Finland","EUR"],"FJ":["Fiji","FJD"],"FK":["Falkland Islands","FKP"],"FM":["Micronesia","USD"],"FO":["Faroe Islands","DKK"],"FR":["France","EUR"],"GA":["Gabon","XAF"],"GB":["United Kingdom","GBP"],"GD":["Grenada","XCD"],"GE":["Georgia","GEL"],"GF":["French Guiana","EUR"],"GG":["Guernsey","GBP"],"GH":["Ghana","GHS"],"GI":["Gibraltar","GIP"],"GL":["Greenland","DKK"],"GM":["Gambia","GMD"],"GN":["Guinea","GNF"],"GP":["Guadeloupe","EUR"],"GQ":["Equatorial Guinea","XAF"],"GR":["Greece","EUR"],"GT":["Guatemala","GTQ"],"GU":["Guam","USD"],"GW":["Guinea-Bissau","XOF"],"GY":["Guyana","GYD"],"HK":["Hong Kong","HKD"],"HN":["Honduras","HNL"],"HR":["Croatia","EUR"],"HT":["Haiti","HTG"],"HU":["Hungary","HUF"],"ID":["Indonesia","IDR"],"IE":["Ireland","EUR"],"IL":["Israel","ILS"],"IM":["Isle of Man","GBP"],"IN":["India","INR"],"IQ":["Iraq","IQD"],"IR":["Iran","IRR"],"IS":["Iceland","ISK"],"IT":["Italy","EUR"],"JE":["Jersey","GBP"],"JM":["Jamaica","JMD"],"JO":["Jordan","JOD"],"JP":["Japan","JPY"],"KE":["Kenya","KES"],"KG":["Kyrgyzstan","KGS"],"KH":["Cambodia","KHR"],"KI":["Kiribati","AUD"],"KM":["Comoros","KMF"],"KN":["St. Kitts & Nevis","XCD"],"KP":["North Korea","KPW"],"KR":["South Korea","KRW"],"KW":["Kuwait","KWD"],"KY":["Cayman Islands","KYD"],"KZ":["Kazakhstan","KZT"],"LA":["Laos","LAK"],"LB":["Lebanon","LBP"],"LC":["St. Lucia","XCD"],"LI":["Liechtenstein","CHF"],"LK":["Sri Lanka","LKR"],"LR":["Liberia","LRD"],"LS":["Lesotho","ZAR"],"LT":["Lithuania","EUR"],"LU":["Luxembourg","EUR"],"LV":["Latvia","EUR"],"LY":["Libya","LYD"],"MA":["Morocco","MAD"],"MC":["Monaco","EUR"],"MD":["Moldova","MDL"],"ME":["Montenegro","EUR"],"MF":["St. Martin","EUR"],"MG":["Madagascar","MGA"],"MH":["Marshall Islands","USD"],"MK":["North Macedonia","MKD"],"ML":["Mali","XOF"],"MM":["Myanmar","MMK"],"MN":["Mongolia","MNT"],"MO":["Macao","MOP"],"MP":["Northern Mariana Islands","USD"],"MQ":["Martinique","EUR"],"MR":["Mauritania","MRU"],"MS":["Montserrat","XCD"],"MT":["Malta","EUR"],"MU":["Mauritius","MUR"],"MV":["Maldives","MVR"],"MW":["Malawi","MWK"],"MX":["Mexico","MXN"],"MY":["Malaysia","MYR"],"MZ":["Mozambique","MZN"],"NA":["Namibia","ZAR"],"NC":["New Caledonia","XPF"],"NE":["Niger","XOF"],"NF":["Norfolk Island","AUD"],"NG":["Nigeria","NGN"],"NI":["Nicaragua","NIO"],"NL":["Netherlands","EUR"],"NO":["Norway","NOK"],"NP":["Nepal","NPR"],"NR":["Nauru","AUD"],"NU":["Niue","NZD"],"NZ":["New Zealand","NZD"],"OM":["Oman","OMR"],"PA":["Panama","PAB"],"PE":["Peru","PEN"],"PF":["French Polynesia","XPF"],"PG":["Papua New Guinea","PGK"],"PH":["Philippines","PHP"],"PK":["Pakistan","PKR"],"PL":["Poland","PLN"],"PM":["St. Pierre & Miquelon","EUR"],"PN":["Pitcairn Islands","NZD"],"PR":["Puerto Rico","USD"],"PS":["Palestine","ILS"],"PT":["Portugal","EUR"],"PW":["Palau","USD"],"PY":["Paraguay","PYG"],"QA":["Qatar","QAR"],"RE":["Réunion","EUR"],"RO":["Romania","RON"],"RS":["Serbia","RSD"],"RU":["Russia","RUB"],"RW":["Rwanda","RWF"],"SA":["Saudi Arabia","SAR"],"SB":["Solomon Islands","SBD"],"SC":["Seychelles","SCR"],"SD":["Sudan","SDG"],"SE":["Sweden","SEK"],"SG":["Singapore","SGD"],"SH":["St. Helena","SHP"],"SI":["Slovenia","EUR"],"SJ":["Svalbard & Jan Mayen","NOK"],"SK":["Slovakia","EUR"],"SL":["Sierra Leone","SLE"],"SM":["San Marino","EUR"],"SN":["Senegal","XOF"],"SO":["Somalia","SOS"],"SR":["Suriname","SRD"],"SS":["South Sudan","SSP"],"ST":["São Tomé & Príncipe","STN"],"SV":["El Salvador","USD"],"SX":["Sint Maarten","XCG"],"SY":["Syria","SYP"],"SZ":["Eswatini","SZL"],"TC":["Turks & Caicos Islands","USD"],"TD":["Chad","XAF"],"TG":["Togo","XOF"],"TH":["Thailand","THB"],"TJ":["Tajikistan","TJS"],"TK":["Tokelau","NZD"],"TL":["Timor-Leste","USD"],"TM":["Turkmenistan","TMT"],"TN":["Tunisia","TND"],"TO":["Tonga","TOP"],"TR":["Türkiye","TRY"],"TT":["Trinidad & Tobago","TTD"],"TV":["Tuvalu","AUD"],"TW":["Taiwan","TWD"],"TZ":["Tanzania","TZS"],"UA":["Ukraine","UAH"],"UG":["Uganda","UGX"],"US":["United States","USD"],"UY":["Uruguay","UYU"],"UZ":["Uzbekistan","UZS"],"VA":["Vatican City","EUR"],"VC":["St. Vincent & Grenadines","XCD"],"VE":["Venezuela","VES"],"VG":["British Virgin Islands","USD"],"VI":["U.S. Virgin Islands","USD"],"VN":["Vietnam","VND"],"VU":["Vanuatu","VUV"],"WF":["Wallis & Futuna","XPF"],"WS":["Samoa","WST"],"XK":["Kosovo","EUR"],"YE":["Yemen","YER"],"YT":["Mayotte","EUR"],"ZA":["South Africa","ZAR"],"ZM":["Zambia","ZMW"],"ZW":["Zimbabwe","USD"]};
@@ -52,7 +52,7 @@ var CURRENCIES = (function () {
 })();
 
 // Raise this when columns are added. The script then upgrades the sheet by itself on the next request.
-var SCHEMA_VERSION = '24';
+var SCHEMA_VERSION = '25';
 
 var DEFAULT_MODEL = 'claude-sonnet-5-5';
 var PRICE_MODEL = 'claude-haiku-5-5';
@@ -1911,7 +1911,8 @@ var SOMMELIER_RULES = [
   '3. Use the journal, the taste history and the taste test (if given) to understand the taste of the owner and the people mentioned. The taste history shows wines the owner finished or tasted elsewhere; they are not in the cellar and can never be picked.',
   '4. If nothing in the cellar fits well, say so honestly and suggest in "buy" what style or wine to buy instead. Otherwise leave "buy" empty.',
   '5. Answer in the language of the question. Keep "answer" to two to four sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '6. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "buy": "text or empty"}.'
+  '6. "fit" of each pick is how well the wine fits the taste of the owner and this moment, from 0 to 100: the food, the occasion and the wishes, the wines they rated highly or low and their favorites.',
+  '7. Return ONLY a JSON object, no other text: {"answer": "text", "picks": [{"id": "wine id", "fit": 85, "why": "one sentence"}], "buy": "text or empty"}.'
 ].join('\n');
 
 var CHECK_RULES = [
@@ -2043,7 +2044,7 @@ function actionSommelier_(req) {
   var ids = {};
   ctx.wines.forEach(function (w) { ids[String(w.id)] = true; });
   var picks = (Array.isArray(d.picks) ? d.picks : []).filter(function (p) { return p && ids[String(p.id)]; }).slice(0, 3)
-    .map(function (p) { return { id: String(p.id), why: String(p.why || '') }; });
+    .map(function (p) { var f = Number(p.fit); return { id: String(p.id), why: String(p.why || ''), fit: p.fit === null || p.fit === undefined || p.fit === '' || isNaN(f) ? null : Math.max(0, Math.min(100, Math.round(f))) }; });
   var fit = d.fit === null || d.fit === undefined || d.fit === '' || isNaN(Number(d.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(d.fit))));
   var out = { answer: String(d.answer || ''), picks: picks, buy: check ? '' : String(d.buy || ''), wine: check ? String(d.wine || '') : '', fit: check ? fit : null };
   // what the app needs to keep the wine as a discovery, if the owner tastes it
@@ -2225,7 +2226,7 @@ var CONSULTANT_RULES = [
   '7. Follow the focus and wishes of the owner if given.',
   '8. "fit" is how well the wine fits the taste of the owner, from 0 to 100, judged the same way for every wine: from the wines they rated highly or low, their favorites and what they drink often. Be honest, a "New to you" pick usually fits less than a "Safe bet".',
   '9. Write in English. Keep "summary" to two to four sentences about what the cellar needs and how much to buy, "why" and "value" to one sentence each. Do not use dashes as punctuation.',
-  '10. Return ONLY a JSON object, no other text: {"summary": "text", "picks": [{"producer": "", "name": "", "vintage": 2021, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "price": 0, "label": "Safe bet|New to you|Top value", "fit": 80, "why": "", "value": "", "qty": 3, "replaces": "", "replaceWhy": ""}]}.'
+  '10. Return ONLY a JSON object, no other text: {"summary": "text", "picks": [{"producer": "", "name": "", "vintage": 2021, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "region": "region, country", "grapes": "", "price": 0, "label": "Safe bet|New to you|Top value", "fit": 80, "why": "", "value": "", "qty": 3, "replaces": "", "replaceWhy": "", "drinkFrom": 2025, "peakFrom": 2027, "peakUntil": 2032, "drinkUntil": 2036}]}. The four years are the drinking window of exactly this vintage from your knowledge, or null if you cannot judge it.'
 ].join('\n');
 
 /** Finished wines with rating and price, as taste history for the consultant. */
@@ -2282,7 +2283,8 @@ function actionConsultant_(req) {
       label: String(p.label) === 'Discovery' ? 'New to you' : labels.indexOf(String(p.label)) >= 0 ? String(p.label) : 'New to you',
       why: String(p.why || ''), value: String(p.value || ''), qty: Math.max(1, Math.min(24, Math.round(Number(p.qty) || 1))),
       replaces: rep, replaceWhy: rep ? String(p.replaceWhy || '') : '',
-      fit: p.fit === null || p.fit === '' || isNaN(Number(p.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(p.fit))))
+      fit: p.fit === null || p.fit === '' || isNaN(Number(p.fit)) ? null : Math.max(0, Math.min(100, Math.round(Number(p.fit)))),
+      window: windowFrom_(p)
     };
   });
   // only wines that a shop really sells: check the best 5 with one search each, refill only while fewer than 3 have a shop

@@ -12,7 +12,8 @@ function normOrder(x) {
     price: x.price === '' || x.price === null || x.price === undefined || isNaN(Number(x.price)) ? null : Number(x.price), priceCur: str(x.priceCur) || cur(),
     retailer: str(x.retailer), ordered: d(x.ordered), expected: d(x.expected), sub: x.sub === true || str(x.sub).toLowerCase() === 'true',
     note: str(x.note), details, createdAt: str(x.createdAt),
-    fit: x.fit === '' || x.fit === null || x.fit === undefined || isNaN(Number(x.fit)) ? null : Math.round(Number(x.fit)), why: str(x.why), recBy: str(x.recBy)
+    fit: x.fit === '' || x.fit === null || x.fit === undefined || isNaN(Number(x.fit)) ? null : Math.round(Number(x.fit)), why: str(x.why), recBy: str(x.recBy),
+    window: winParse(x.window, details)
   };
 }
 const orderTitle = o => { const w = o.wineId && wineById(o.wineId); return w ? fullName(w) : [o.producer, o.name, o.vintage].filter(Boolean).join(' '); };
@@ -85,7 +86,8 @@ async function saveOrderSheet() {
     qty, price: p === null ? '' : Math.round(p / qty * 100) / 100, priceCur: cur(),
     retailer: P.people.length ? P.people[0].name : '', ordered: st.ordered || todayISO(),
     expected: st.expected || '', sub: false, note: str(st.note).trim(),
-    details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500), recBy: recNames(st)
+    details: s.details || null, fit: s.fit === undefined || s.fit === null ? '' : s.fit, why: str(s.why).slice(0, 500), recBy: recNames(st),
+    window: winParse(s.window, s.details)
   };
   const wishId = st.wishId, delivered = st.delivered, site = str(st.website).trim(), newRet = o.retailer && !S.retailers.some(r => lc(r.name) === lc(o.retailer));
   closeSheet();
@@ -217,7 +219,7 @@ function orderCardHtml(o) {
     <p class="small" style="margin:0">${o.retailer ? `From <b>${esc(o.retailer)}</b> · ` : ''}ordered ${esc(fmtDate(o.ordered || o.createdAt))}${w ? ` · ${w.count} in stock` : ' · new to your cellar'}</p>
     ${recLineHtml(o.recBy)}
     ${o.note ? `<p class="small muted" style="margin:0">${esc(o.note)}</p>` : ''}
-    ${w ? '' : fitBarHtml(o.fit)}
+    ${mwHtml(w ? null : o.fit, w ? winOf(w) : o.window || winParse(null, previewOf(o)))}
     <div class="cons-actions">${w ? '' : `<button class="link-btn" data-act="ord-more" data-id="${esc(o.id)}">${ICON.magic}More about this wine</button>`}<button class="link-btn" data-act="ord-edit" data-id="${esc(o.id)}">${ICON.edit}Edit</button></div>
     <button class="btn outline-gold block" data-act="ord-arrive" data-id="${esc(o.id)}">${ICON.box}Mark as delivered</button>
   </div>`;
@@ -332,24 +334,24 @@ function sgGet(ref) {
   if (k === 'cons') {
     const p = CONS.result && CONS.result.picks[Number(v)];
     if (!p) return null;
-    return { k, ref, base: sgBase(p), fit: p.fit, why: p.why, offer: CONS.offers[wishKey(p)] || null, price: p.price, priceCur: p.priceCur, qty: p.qty, save: () => consSave(p), preview: () => consPreview(Number(v)) };
+    return { k, ref, base: sgBase(p), fit: p.fit, why: p.why, offer: CONS.offers[wishKey(p)] || null, price: p.price, priceCur: p.priceCur, qty: p.qty, window: p.window, save: () => consSave(p), preview: () => consPreview(Number(v)) };
   }
   if (k === 'wl') {
     const res = WL.result, p = res && res.picks[Number(v)];
     if (!p) return null;
-    return { k, ref, base: Object.assign(sgBase(p), p.window || {}), fit: p.fit, why: p.why, offer: p.offer || null, price: p.shopPrice, priceCur: res.currency || cur(), qty: 6, save: () => listSave(p), preview: () => listPreview(Number(v)), taste: () => listTaste(Number(v)) };
+    return { k, ref, base: Object.assign(sgBase(p), p.window || {}), fit: p.fit, why: p.why, offer: p.offer || null, price: p.shopPrice, priceCur: res.currency || cur(), qty: 6, window: p.window, save: () => listSave(p), preview: () => listPreview(Number(v)), taste: () => listTaste(Number(v)) };
   }
   if (k === 'check') {
     const t = sommThread()[Number(v)], a = t && t.a;
     if (!a) return null;
     const x = a.info && (a.info.producer || a.info.name) ? a.info : { producer: '', name: a.wine, vintage: '', type: '', region: a.region || '', grapes: '' };
     const o = a.offer || a.worldOffer || null;
-    return { k, ref, base: sgBase(x), fit: a.fit, why: a.answer, offer: o, price: o ? o.v : null, priceCur: o ? o.cur : cur(), qty: 6, save: () => checkSave(Number(v)), preview: () => sommPreview(Number(v)), taste: () => sommTaste(Number(v)) };
+    return { k, ref, base: sgBase(x), fit: a.fit, why: a.answer, offer: o, price: o ? o.v : null, priceCur: o ? o.cur : cur(), qty: 6, window: a.window, save: () => checkSave(Number(v)), preview: () => sommPreview(Number(v)), taste: () => sommTaste(Number(v)) };
   }
   if (k === 'wish') {
     const x = S.wishlist.find(w => w.id === v);
     if (!x) return null;
-    return { k, ref, base: sgBase(x), fit: x.fit, why: x.why, offer: x.offer, price: x.price, priceCur: x.priceCur, qty: x.qty || 6, wishId: x.id, details: x.details, recBy: x.recBy, preview: () => wishPreview(x.id) };
+    return { k, ref, base: sgBase(x), fit: x.fit, why: x.why, offer: x.offer, price: x.price, priceCur: x.priceCur, qty: x.qty || 6, wishId: x.id, details: x.details, recBy: x.recBy, window: x.window, preview: () => wishPreview(x.id) };
   }
   return null;
 }
@@ -365,7 +367,7 @@ const fitBarHtml = fit => (fit === null || fit === undefined || fit === '' ? '' 
 function sgOrder(g) {
   const o = g.offer;
   openOrderSheet({ ...g.base, qty: g.qty || 6, price: o ? o.v : g.price || null, priceCur: o ? o.cur : g.priceCur, retailer: o ? o.shop : '', website: o ? hostOf(o.url) : '',
-    details: previewOf(g.base) || g.details || null, fit: g.fit, why: g.why, wishId: g.wishId || (wishOf(g.base) || {}).id || '', recBy: g.recBy || (wishOf(g.base) || {}).recBy || '' });
+    details: previewOf(g.base) || g.details || null, window: g.window || null, fit: g.fit, why: g.why, wishId: g.wishId || (wishOf(g.base) || {}).id || '', recBy: g.recBy || (wishOf(g.base) || {}).recBy || '' });
 }
 function sgRefresh() { refreshView(); if (PREV.open) renderPreview(); if (route().p === 'sommelier') sommRefresh(false); }
 const SG_ACTS = {

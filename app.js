@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '4.5.0';
+const APP_VERSION = '4.5.1';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -571,6 +571,13 @@ function timelineScaleHtml(w) {
   return `<div class="tl-scale">${Math.abs(f - t) >= 13 ? lab(f, p.f) : ''}${Math.abs(u - t) >= 13 ? lab(u, p.u) : ''}${lab(t, 'Today', 'now')}</div>`;
 }
 
+/* a drinking window kept with a wine that is not in the cellar: its own, or from what was loaded about it */
+function winParse(v, details) {
+  let w = v;
+  try { w = typeof v === 'string' && v ? JSON.parse(v) : v; } catch (e) { w = null; }
+  if (w && Number(w.drinkFrom) && Number(w.drinkUntil)) return { drinkFrom: Number(w.drinkFrom), peakFrom: Number(w.peakFrom) || Number(w.drinkFrom), peakUntil: Number(w.peakUntil) || Number(w.drinkUntil), drinkUntil: Number(w.drinkUntil) };
+  return details && details !== v ? winParse(details) : null;
+}
 const windowText = w => {
   const p = windowParts(w);
   return p ? `Drink ${p.f} to ${p.u} · peak ${p.pf} to ${p.pt}` : '';

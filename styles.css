@@ -470,7 +470,7 @@ button.ins-col:active .ins-col-bar span { filter: brightness(1.25); }
 .somm-ex:active { border-color: var(--gold); }
 .somm-q { align-self: flex-end; max-width: 85%; padding: 10px 14px; border-radius: 16px 16px 4px 16px; background: var(--surface); border: 1px solid var(--line); font-size: 15px; line-height: 1.45; white-space: pre-wrap; }
 .somm-a { display: flex; flex-direction: column; gap: 10px; }
-.somm-a p { margin: 0; font-size: 15px; line-height: 1.55; }
+.somm-a > p { margin: 0; font-size: 15px; line-height: 1.55; }
 .somm-a.error p { color: var(--danger); }
 .somm-wait { color: var(--muted); }
 .somm-wait span { animation: blink 1.2s infinite; }
@@ -1538,3 +1538,34 @@ canvas.b3 { display: block; }
 .cf-tile.on { background: var(--gold); border-color: var(--gold); color: var(--on-gold); }
 .cf-tile.on svg, .cf-tile.on small { color: var(--on-gold); }
 .cf-tile.wide { grid-column: 1 / 3; flex-direction: row; align-items: center; gap: 12px; }
+/* 4.5.1: one card for every AI suggestion, the advice on top */
+.adv { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; border: 1px solid rgba(230, 203, 152, .45); background: linear-gradient(160deg, #3a1d27, #24121a); }
+.adv h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; font-weight: 600; color: var(--text); }
+.adv h3 svg { width: 19px; height: 19px; color: var(--gold); }
+.adv > p { margin: 0; line-height: 1.55; font-size: 15px; color: var(--text); }
+.adv .price-check { background: rgba(10, 3, 7, .25); }
+.ai-res { display: flex; flex-direction: column; gap: 14px; }
+.somm-a.ai-res { padding: 0; background: none; border: 0; }
+.ai-head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 4px; }
+.ai-head-row h2 { margin: 0; font-size: 20px; }
+.ai-sub { margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--text-2); }
+.ai-card { gap: 10px; }
+.ai-head { display: flex; align-items: flex-start; gap: 12px; }
+.ai-head > svg { flex: none; width: 16px; height: 16px; color: var(--muted); margin-top: 4px; margin-left: auto; }
+.ai-name { flex: 1; min-width: 0; }
+.ai-link { color: var(--text); }
+.ai-link:hover { color: var(--text); }
+.ai-card .somm-take { align-self: flex-start; }
+.mw { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.mw-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+.mw-h b { font-size: 15px; color: var(--text); font-weight: 600; }
+.mw-t { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.price-check .row span small { display: block; margin-top: 1px; font-size: 12px; color: var(--muted); }
+.pc-verdict { margin: -2px 0 0; font-size: 13px; text-align: right; color: var(--text-2); }
+/* one wine, one panel: the card is lighter with a clear edge, everything inside sits on the same darker inset */
+.ai-res .cons-list, .ai-res { gap: 18px; }
+.ai-card { background: var(--surface-2); border: 1px solid #5E3A47; border-radius: 18px; padding: 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, .28); }
+.list-sec .ai-card { background: var(--surface-2); }
+.ai-card .mw, .ai-card .somm-food, .ai-card .price-check, .ai-card .cons-offer-box { background: var(--bg); border: 1px solid #4E2A37; border-radius: 12px; }
+.ai-card .somm-food .verdict b { color: var(--text); }
+.ai-card .somm-take { background: var(--bg); }
