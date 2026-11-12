@@ -207,7 +207,7 @@ function sommAnswerHtml(t) {
     const where = w.stock.map(e => placeLabel(e)).join(' · ');
     return aiCardHtml({ title: `${wineTitle(w)} ${w.vintage}`.trim(), thumb: thumbHtml(w, true), href: `#/wine/${encodeURIComponent(w.id)}`,
       sub: `${flagOf(w)}${esc(w.producer)}${w.count ? ` · ${w.count} btl` : ''}${where && !sim ? `<br>${esc(where)}` : ''}`,
-      fit: sim ? null : p.fit, win: winOf(w), why: p.why,
+      fit: p.fit, win: winOf(w), why: p.why,
       actions: w.count && !sim ? `<button class="somm-take" data-act="minus" data-id="${esc(w.id)}">${ICON.minus}Take a bottle</button>` : '' });
   };
   if (!check) {

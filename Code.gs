@@ -11,7 +11,7 @@
  *   PRICE_MODEL            optional, model for street prices (default claude-haiku-5-5)
  */
 
-var API_VERSION = 57;
+var API_VERSION = 58;
 var SHEETS = { wines: 'Wines', removals: 'Removals', locations: 'Locations', retailers: 'Retailers', people: 'People', wishlist: 'Wishlist', orders: 'Orders', offers: 'Offers', history: 'History', fx: 'FX', info: 'Info' };
 
 var WINE_COLS = [
@@ -1923,9 +1923,9 @@ var CHECK_RULES = [
   '2. Judge how well it fits the taste of the owner, based on the wines they rated highly or low, their favorites and what they drink often. Give "fit" from 0 to 100.',
   '3. In "answer" explain the style and why it fits or not. Do not discuss shop prices: the app checks them in local shops and shows them next to your answer. If the owner mentions a price, put it in "price" with its currency in "priceCur" (three letter ISO code) and the app tells you below whether the owner is in a shop or a restaurant.',
   '4. Say whether the cellar already holds similar wines in enough bottles.',
-  '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Fewer is fine.',
+  '5. As "picks", give up to 3 similar wines from the cellar list for comparison, referenced by their id, and say in "why" how each compares. Give each a "fit" from 0 to 100, how well it fits the taste of the owner, judged the same way as the wine checked. Fewer is fine.',
   '6. Answer in the language of the question; if there is no question, in English. Keep "answer" to three to five sentences and each "why" to one sentence. Do not use dashes as punctuation.',
-  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "why": "one sentence"}], "price": null, "priceCur": "", "priceWhere": "shop", "typicalMarkup": [2, 3], "drinkFrom": 2026, "peakFrom": 2029, "peakUntil": 2035, "drinkUntil": 2040, "drinkNote": "one short sentence", "pairing": null, "dishes": ["dish", "dish"]}.',
+  '7. Return ONLY a JSON object, no other text: {"wine": "producer name vintage", "producer": "", "name": "the wine name without the producer", "vintage": 2019, "type": "Red|White|Rosé|Sparkling|Dessert|Fortified", "grapes": "", "region": "region, country", "fit": 80, "answer": "text", "picks": [{"id": "wine id", "fit": 80, "why": "one sentence"}], "price": null, "priceCur": "", "priceWhere": "shop", "typicalMarkup": [2, 3], "drinkFrom": 2026, "peakFrom": 2029, "peakUntil": 2035, "drinkUntil": 2040, "drinkNote": "one short sentence", "pairing": null, "dishes": ["dish", "dish"]}.',
   '8. "priceWhere" is "restaurant" when the photo shows a wine list or a menu, or the owner says they are in a restaurant; otherwise "shop". If the app tells you where the owner is, follow the app. "typicalMarkup" is the usual range by which restaurants in the country where the owner is now multiply the shop price of a wine in the same price class as this one, for example [2.5, 3.5]. Restaurants usually multiply everyday wines more and expensive wines less, so judge it for the shop price of this wine in that country, not for wine in general. Give it always.',
   '9. Give the drinking window of exactly this vintage from your knowledge, as years: "drinkFrom", "peakFrom", "peakUntil", "drinkUntil". Use null for all four only if you cannot judge it, for example without a vintage. "drinkNote" is one short sentence for today, for example "Still young: decant it for an hour, or keep it until 2029." or "At its best now."',
   '10. Food. If the owner says what they eat or names a dish, judge that pairing in "pairing": {"verdict": "great|works|not ideal", "why": "one sentence"}, and in "answer" talk about their taste. If no food is given, set "pairing" to null and give in "dishes" two dishes the wine goes well with: in a restaurant two dishes that are typical on a menu, otherwise two dishes to cook at home. With a pairing, "dishes" stays empty.'
