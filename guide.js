@@ -27,9 +27,6 @@ const gdStarted = () => [
   ['wine', ICON.camera, 'Add a wine with a photo', 'Photograph the label, the app fills in the rest.', S.wines.some(w => !isDisc(w))]
 ];
 const GD_DAILY = [
-  ['#/sommelier/cellar', ICON.glass, 'Find a wine from my cellar for tonight', 'Say what you eat, the sommelier picks from your bottles.'],
-  ['#/sommelier/check', ICON.camera, 'Will I like this wine, is the price fair?', 'In a shop or a restaurant, before you buy or order.'],
-  ['#/sommelier/list', ICON.dining, 'Choose from a restaurant wine list', 'Photograph the list, get the best three for you.'],
   ['#/discover', ICON.cart, 'What should I buy next?', 'The consultant suggests wines with sensible quantities.'],
   ['ext', ICON.trophy, 'Update the external ratings', 'Published scores of your wines, looked up for you.'],
   ['#/journal-ai', ICON.book, 'Ask my journal', 'For example: what did we drink with Anna?']
@@ -57,7 +54,9 @@ function viewHome() {
     <div class="hm-stat">${stat}</div>
     <h2 class="home-q">What would you like to do?</h2>
     ${started}
-    <h3 class="gd-h">Every day</h3>${daily}
+    <section class="hm-somm"><h2>${ICON.magic}Sommelier</h2>
+      <div class="hm-tiles"><a class="hm-tile" href="#/sommelier/cellar">${ICON.glass}<span>My cellar</span></a><a class="hm-tile" href="#/sommelier/check">${ICON.camera}<span>Will I like it?</span></a><a class="hm-tile" href="#/sommelier/list">${ICON.dining}<span>Wine list</span></a></div></section>
+    <h3 class="gd-h">Plan and review</h3>${daily}
   </main>${nav('home')}`;
 }
 

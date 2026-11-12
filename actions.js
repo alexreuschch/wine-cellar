@@ -151,9 +151,21 @@ const ACTS = {
   'wish-offer': el => { const x = S.wishlist.find(w => w.id === el.dataset.id); if (x) consOffer(x, 'wish:' + x.id, x.id); },
   'wish-del': el => wishDelete(el.dataset.id),
   'wish-add': el => wishToCellar(el.dataset.id),
-  'somm-where': el => { SOMM.where = el.dataset.v; SOMM.whereAt = Date.now(); sommSave(); render(); },
   'somm-send': () => { if (SOMM.mode === 'list') { listAnalyze(); return; } const ta = $('#somm-text'); sommAsk(ta ? ta.value : SOMM.draft); },
   'wl-go': () => listAnalyze(),
+  'wz-next': () => { if (SOMM.listening) sommStopVoice(); if (SOMM.mode === 'list' && !WL.pages.length) return; SOMM.step[SOMM.mode] = Math.min(3, wzStep() + 1); render(); window.scrollTo(0, 0); },
+  'wz-back': () => { if (SOMM.listening) sommStopVoice(); SOMM.step[SOMM.mode] = Math.max(1, wzStep() - 1); render(); window.scrollTo(0, 0); },
+  'wz-go': () => wzGo(),
+  'wz-edit': () => { WL.edit = true; WL.error = ''; SOMM.step.list = WL.pages.length ? 2 : 1; render(); window.scrollTo(0, 0); },
+  'wz-occ': el => {
+    const v = el.dataset.v;
+    SOMM.occ = SOMM.occ === v ? '' : v;
+    // an aperitif comes with the aperitif snacks, unless food was chosen already
+    if (SOMM.occ === 'Aperitif' && !sommFoods().length) { SOMM.foods = ['aperitif']; SOMM.foodsAt = Date.now(); }
+    render();
+  },
+  'wz-ppl': el => { SOMM.people = Math.max(1, Math.min(30, SOMM.people + Number(el.dataset.v))); SOMM.pplSet = true; render(); },
+  'mk-clear': () => { if (SOMM.photo) SOMM.photo.mark = null; render(); },
   'about-more': el => { if (el.closest('.prev-sheet')) { U.aboutOpen = U.aboutOpen === 'preview' ? null : 'preview'; renderPreview(); return; } const id = (location.hash.split('/')[2] || ''); U.aboutOpen = U.aboutOpen === decodeURIComponent(id) ? null : decodeURIComponent(id); refreshView(); },
   'vint-pick': el => vintageChosen(el.dataset.v),
   'vint-ok': () => { const i = $('#vint-in'); vintageChosen(i ? i.value.trim() : ''); },
@@ -181,7 +193,7 @@ const ACTS = {
   'pick-close': () => closePicker(),
   pick: el => pickChoose(el.dataset.v),
   'wl-page-rm': el => { WL.pages.splice(Number(el.dataset.i), 1); sommRefresh(false); },
-  'wl-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.redo = ''; WL.pages = []; WL.result = null; WL.error = ''; SOMM.draft = ''; SOMM.voiced = false; sommSave(); render(); },
+  'wl-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.redo = ''; WL.pages = []; WL.result = null; WL.error = ''; WL.edit = false; SOMM.step.list = 1; SOMM.draft = ''; SOMM.voiced = false; sommSave(); render(); window.scrollTo(0, 0); },
   'wl-taste': el => listTaste(Number(el.dataset.i)),
   'wl-preview': el => listPreview(Number(el.dataset.i)),
   'somm-preview': el => sommPreview(Number(el.dataset.i)),
@@ -195,14 +207,12 @@ const ACTS = {
   'ds-venue': el => { if (RS && RS.kind === 'taste') { saveTasteInputs(); RS.venue = el.dataset.v; renderSheet(); } },
   'ds-rate': el => { if (RS && RS.kind === 'taste') setTasteRating((RS.rating === null ? 80 : RS.rating) + Number(el.dataset.d)); },
   'wl-save': el => { const p = WL.result && WL.result.picks[Number(el.dataset.i)]; if (p) listSave(p); },
-  'somm-example': el => sommAsk(el.dataset.v),
   'somm-cand': el => sommAsk(el.dataset.v, null, el.dataset.v),
   'voice-lang': () => voiceLangNext(),
-  'wl-budget-clear': () => { WL.min = ''; WL.max = ''; document.querySelectorAll('[data-input=wl-min], [data-input=wl-max]').forEach(i => { i.value = ''; }); wlBudgetRefresh(); sommSave(); },
   'somm-mic': () => { if (SOMM.listening) voiceStop(); else sommStartVoice(); },
   'somm-tips': () => { SOMM.tips = !SOMM.tips; render(); },
-  'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.redo = ''; SOMM.threads[SOMM.mode] = []; SOMM.draft = ''; SOMM.voiced = false; SOMM.photo = null; sommSave(); render(); },
-  'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = ['check', 'list'].includes(el.dataset.v) ? el.dataset.v : 'cellar'; SOMM.tips = false; SOMM.photo = null; sommSave(); history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
+  'somm-clear': () => { if (SOMM.listening) sommStopVoice(); SOMM.redo = ''; SOMM.threads[SOMM.mode] = []; SOMM.step[SOMM.mode] = 1; SOMM.draft = ''; SOMM.voiced = false; SOMM.photo = null; SOMM.tips = false; if (SOMM.mode === 'cellar') { SOMM.occ = ''; SOMM.people = 2; SOMM.pplSet = false; } sommSave(); render(); window.scrollTo(0, 0); },
+  'somm-mode': el => { if (SOMM.listening) sommStopVoice(); SOMM.mode = ['check', 'list'].includes(el.dataset.v) ? el.dataset.v : 'cellar'; SOMM.step[SOMM.mode] = 1; SOMM.tips = false; SOMM.photo = null; SOMM.draft = ''; sommSave(); history.replaceState(null, '', '#/sommelier/' + SOMM.mode); render(); window.scrollTo(0, 0); },
   'dup-keep': () => { const w = findDuplicate(D.fields); if (w) D.dupIgnore = w.id; renderDup(); },
   'dup-add': el => { const id = el.dataset.id; D = null; go('#/wine/' + encodeURIComponent(id)); setTimeout(() => openAddSheet(id), 200); },
   'somm-retry': () => { const last = sommThread().pop(); if (last) sommAsk(last.q, last.img, last.picked); },
@@ -213,7 +223,6 @@ const ACTS = {
     SOMM.foodsAt = Date.now();
     sommSave(); sommRefresh(false);
   },
-  'cf-food-all': () => { SOMM.foodsAll = !SOMM.foodsAll; sommRefresh(false); },
   'top-sys': el => { U.topSys = el.dataset.v; render(); },
 
   rate: el => {
@@ -307,7 +316,7 @@ const ACTS = {
   'record-add': () => { if (D && D.id) openAddSheet(D.id, null, 'record'); },
 
   'cancel-form': () => {
-    if (D && D.fromOrder) { D = null; U.jumpTo = 'orders'; go('#/insights', true); return; }
+    if (D && D.fromOrder) { D = null; go('#/orders', true); return; }
     const back = D && D.mode === 'edit' ? '#/wine/' + encodeURIComponent(D.id) : '#/cellar';
     D = null;
     if (navPrev() === back) history.back(); else go(back, true);
@@ -461,14 +470,14 @@ const INPUTS = {
   'ers-score': el => { if (!RT) return; RT.score = el.value; const p = $('#rt-preview'); if (p) p.innerHTML = rtPreview(); },
   'tg-in': el => { if (el.value.includes(',')) { const k = el.dataset.k; addTag(k, el.value); } },
   'qty-in': el => setQty(el, false),
-  'somm-text': el => { SOMM.draft = el.value; autosize(el); },
+  'somm-text': el => { SOMM.draft = el.value; if (!el.closest('.cf-input')) autosize(el); wzGoRefresh(); },
   'somm-vin': el => { const t = sommThread()[Number(el.dataset.i)]; if (t) { t.vin = t.vin || {}; t.vin.draft = el.value.replace(/\D/g, '').slice(0, 4); } },
   'ja-text': el => { JA.draft = el.value; autosize(el); },
-  'wl-min': el => { WL.min = el.value; wlBudgetRefresh(); },
+  'wl-min': el => { WL.min = el.value; },
   'tp-note': el => { const a = D.profile.aromas[Number(el.dataset.i)]; if (a) a.n = el.value; D.touched.add('profile'); },
   'tp-field': el => { D.profile[el.dataset.k] = el.value; D.touched.add('profile'); if (el.classList.contains('autosize')) autosize(el); },
   'pick-q': el => { PICK.q = el.value; const l = $('#pick-list'); if (l) l.innerHTML = pickListHtml(); },
-  'wl-max': el => { WL.max = el.value; wlBudgetRefresh(); },
+  'wl-max': el => { WL.max = el.value; },
   'cons-min': el => { CONS.budget.min = el.value.replace(/[^0-9]/g, ''); },
   'cons-max': el => { CONS.budget.max = el.value.replace(/[^0-9]/g, ''); },
   'cons-note': el => { CONS.note = el.value; },
@@ -549,9 +558,9 @@ const CHANGES = {
     try {
       const c = await loadPhoto(file);
       const full = toJpeg(c, 1280, 0.82), thumb = toJpeg(c, 240, 0.7);
-      SOMM.photo = { b64: full.split(',')[1], thumb };
-      // no keyboard: the question is optional, the steps below stay in view
-      sommRefresh(false);
+      SOMM.photo = { b64: full.split(',')[1], thumb, src: full, mark: null };
+      // next the wine is marked with the finger
+      render();
     } catch (e) { toast(e.message); }
     el.value = '';
   },
@@ -678,7 +687,7 @@ function init() {
     if (e.target && e.target.id === 'rt-score' && e.key === 'Enter') { e.preventDefault(); saveRatingSheet(); }
     if (e.target && e.target.id === 'ja-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); jaAsk(e.target.value); return; }
     if (e.target && e.target.dataset && e.target.dataset.input === 'somm-vin' && e.key === 'Enter') { e.preventDefault(); sommVintage(Number(e.target.dataset.i)); return; }
-    if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (SOMM.mode === 'list') listAnalyze(); else sommAsk(e.target.value); }
+    if (e.target && e.target.id === 'somm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.target.closest('.cf-input')) { e.preventDefault(); sommAsk(e.target.value); }
     if (e.target && e.target.id === 'new-person' && e.key === 'Enter') { e.preventDefault(); ACTS['person-add'](); }
     if (e.target && e.target.id === 'new-ret-site' && e.key === 'Enter') { e.preventDefault(); ACTS['ret-add'](); }
     if (e.target && (e.target.id === 'ed-name' || e.target.id === 'ed-site') && e.key === 'Enter') { e.preventDefault(); saveEdit(); }

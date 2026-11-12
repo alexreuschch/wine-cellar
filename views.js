@@ -93,16 +93,14 @@ function grapeIsRed(name, wines) {
 const insSection = (title, sub, body) => `<section class="ins-sec"><div class="sec-head"><h2>${title}</h2>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>${body}</section>`;
 
 function viewInsights() {
-  const nw = S.wishlist.length, no = S.orders.length, late = S.orders.some(orderOverdue);
   const head = `<header class="top"><h1 class="title">Insights</h1><div class="top-actions"><a class="icon-btn magic-btn" href="#/discover" aria-label="AI consultant">${ICON.magic}</a></div></header>`;
-  // orders and the wishlist as chips, your best wines as a card with the way to the full ranking
-  const chips = no || nw ? `<div class="ins-chips">${no ? `<button data-act="go-orders"${late ? ' class="late"' : ''}>${ICON.box}<b>${no}</b> ordered</button>` : ''}${nw ? `<button data-act="go-wishlist">${ICON.bookmark}<b>${nw}</b> on the wishlist</button>` : ''}</div>` : '';
+  // your best wines as a card with the way to the full ranking
   const best = S.wines.filter(w => w.myRating !== null).sort((a, b) => b.myRating - a.myRating).slice(0, 3);
   const topCard = `<section class="ins-top"><div class="between"><h2>Top rated</h2><a href="#/top" class="small">Show the ranking ›</a></div>
     ${best.length ? best.map((w, i) => `<a class="ins-tr" href="#/wine/${encodeURIComponent(w.id)}"><span class="n">${i + 1}</span><span class="t"><b>${esc([wineTitle(w), w.vintage].filter(Boolean).join(' '))}</b>${segsHtml(w.myRating)}</span><span class="v">${w.myRating}%</span></a>`).join('') : '<p class="muted small" style="margin:0">Rate your wines and your favorites show up here.</p>'}</section>`;
   const wines = S.wines.filter(w => w.count > 0);
   const total = wines.reduce((a, w) => a + w.count, 0);
-  if (!total) return `<main class="screen has-nav">${head}${chips}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div>${ordersSectionHtml()}${wishSectionHtml()}</main>${nav('insights')}`;
+  if (!total) return `<main class="screen has-nav">${head}<div class="empty"><h2>No bottles in stock</h2><p>Insights appear as soon as your cellar has wines.</p></div></main>${nav('insights')}`;
   const bottles = w => w.count;
   const year = now.getFullYear();
   const out = [];
@@ -202,8 +200,7 @@ function viewInsights() {
   out.push(`<section class="ins-sec discover-card"><div class="sec-head"><h2>New wines for your cellar</h2></div>
     <p class="small muted" style="margin:0">The AI consultant suggests wines to add to your cellar, based on your stock, finished wines, ratings, drinking habits and usual prices, with sensible quantities.</p>
     <a class="btn accent block" href="#/discover">${ICON.magic}Open the AI consultant</a></section>`);
-  out.push(ordersSectionHtml(), wishSectionHtml());
-  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${chips}${topCard}${tipHtml('insights')}${out.join('')}</main>${nav('insights')}`;
+  return `<main class="screen has-nav insights">${head}<p class="muted small" style="margin:-8px 0 0">${btl(total)} in stock. Tap a row or column to see the wines.</p>${topCard}${tipHtml('insights')}${out.join('')}</main>${nav('insights')}`;
 }
 
 /* opens the cellar or the journal with the filter that matches a row in Insights */

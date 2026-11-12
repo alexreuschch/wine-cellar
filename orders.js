@@ -95,7 +95,7 @@ async function saveOrderSheet() {
   if (newRet) S.retailers.push({ name: o.retailer, website: site });
   persist();
   refreshView();
-  if (!delivered) toast(wishId ? 'Moved from the wishlist to Ordered in Insights.' : 'Saved under Ordered in Insights.', 3500);
+  if (!delivered) toast(wishId ? 'Moved from the wishlist to Ordered in the Cellar.' : 'Saved under Ordered in the Cellar.', 3500);
   try {
     const saved = normOrder(await api('saveOrder', { order: Object.assign({}, o, { details: o.details ? JSON.stringify(o.details) : '' }) }));
     S.orders = S.orders.filter(x => x.id !== saved.id).concat([saved]);
@@ -223,30 +223,42 @@ function orderCardHtml(o) {
   </div>`;
 }
 
-/* in Insights, above the wishlist */
+/* the wines on their way, on their own page, opened from the Cellar */
 function ordersSectionHtml() {
   const list = S.orders.slice().sort(orderSort);
   const bottles = list.reduce((a, o) => a + o.qty, 0);
   const total = list.reduce((a, o) => a + (o.price !== null ? (conv(o.price, o.priceCur) || 0) * o.qty : 0), 0);
   const old = S.version && S.version < 45;
-  return `<section class="ins-sec list-sec" id="orders"><div class="sec-head"><h2 class="list-sec-h">${ICON.box}Ordered, not yet delivered</h2>${list.length ? `<span class="muted small">${list.length}</span>` : ''}</div>
+  return `<section class="list-sec" id="orders">
     ${old ? '<p class="small" style="margin:0;color:var(--danger)">Orders need the new Code.gs.</p>' : ''}
     ${list.length ? `<p class="small muted" style="margin:-4px 0 0">${bottles} ${bottles === 1 ? 'bottle' : 'bottles'}${total ? `, ${esc(money(total))}` : ''}</p><div class="cons-list">${list.map(orderCardHtml).join('')}</div>`
       : '<p class="small muted" style="margin:0">Nothing on its way. Tap <b>I ordered it</b> on a wine you bought online, at a winery or by phone.</p>'}
   </section>`;
 }
 function wishSectionHtml() {
-  return `<section class="ins-sec list-sec" id="wishlist"><div class="sec-head"><h2 class="list-sec-h">${ICON.bookmark}Wishlist</h2>${S.wishlist.length ? `<span class="muted small">${S.wishlist.length}</span>` : ''}</div>
+  return `<section class="list-sec" id="wishlist">
     ${S.wishlist.length ? `<div class="cons-list">${S.wishlist.map(wishCardHtml).join('')}</div>` : '<p class="small muted" style="margin:0">Save wines here from the consultant, a wine list, Will I like it? or a recommendation of a friend.</p>'}
     <button class="link-btn" style="align-self:flex-start" data-act="rec-paste">${REC_IC}Paste a recommendation</button>
   </section>`;
 }
-/* the header icons in Insights lead to these sections */
+/* ordered and the wishlist each on their own page, with the way back to the Cellar */
+function listPageHtml(key, title, body) {
+  return `<main class="screen has-nav"><div class="detail-top">${backLinkHtml('#/cellar', 'Cellar')}</div>
+    <header class="top"><h1 class="title">${title}</h1></header>${body}</main>${nav('cellar')}`;
+}
+const viewOrders = () => listPageHtml('orders', 'Ordered', ordersSectionHtml());
+const viewWishlist = () => listPageHtml('wishlist', 'Wishlist', wishSectionHtml());
+/* the row under the numbers in the Cellar: only what exists, both side by side */
+function cellarListsHtml() {
+  const no = S.orders.length, nw = S.wishlist.length, late = S.orders.filter(orderOverdue).length, two = no && nw;
+  if (!no && !nw) return '';
+  const o = no ? `<a class="cl-row" href="#/orders">${ICON.box}<span><b>${no}</b> ordered${late ? `, <em>${late} late</em>` : ''}</span>${ICON.chevron}</a>` : '';
+  const w = nw ? `<a class="cl-row" href="#/wishlist">${ICON.bookmark}<span><b>${nw}</b> ${two ? 'wishlist' : 'on the wishlist'}</span>${ICON.chevron}</a>` : '';
+  return `<div class="cl-rows${two ? ' two' : ''}">${o}${w}</div>`;
+}
 function goSection(id) {
   if (typeof PREV !== 'undefined' && PREV.open) closePreview();
-  if (route().p === 'insights') { const el = $('#' + id); if (el) { el.scrollIntoView({ block: 'start' }); window.scrollBy(0, -10); } return; }
-  U.jumpTo = id;
-  go('#/insights');
+  go('#/' + id);
 }
 
 const OR_ACTS = {
@@ -262,7 +274,7 @@ const OR_ACTS = {
   'ord-qty': el => { RS.qty = clamp((Number(RS.qty) || 1) + Number(el.dataset.d), 1, 999); $('#ord-qty').value = RS.qty; totalSetQty(RS); },
   'buy-status': el => buyStatus(el.dataset.v === 'ordered'),
   'go-orders': () => goSection('orders'),
-  'ord-notyet': () => { D = null; U.jumpTo = 'orders'; go('#/insights', true); },
+  'ord-notyet': () => { D = null; go('#/orders', true); },
   'go-wishlist': () => goSection('wishlist'),
   'ord-more': el => { const o = S.orders.find(x => x.id === el.dataset.id); if (!o) return; const base = sgBase(o); if (o.details && !previewOf(base)) prevRemember(base, o.details); openPreview(base, o.why ? esc(o.why) : '', null); }
 };

@@ -1454,3 +1454,87 @@ canvas.b3 { display: block; }
 .crop-shape { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .crop-shape .chip { justify-content: center; height: 36px; }
 .crop-flat input[type=range] { width: 100%; accent-color: var(--gold); }
+
+/* ------------------------------------------------ 4.5: the sommelier in three steps, one decision per screen */
+.somm.wz { min-height: 100dvh; padding-bottom: calc(16px + var(--safe-b)); }
+.wz-lead { margin: -6px 0 0; color: var(--muted); line-height: 1.5; }
+.wz-foot { margin-top: auto; position: sticky; bottom: 0; z-index: 5; display: flex; flex-direction: column; gap: 8px; padding: 14px 0 calc(6px + var(--safe-b)); background: linear-gradient(to bottom, transparent, var(--bg) 22%); }
+.wz-cost { margin: 0; font-size: 12px; color: var(--faint, var(--muted)); text-align: center; }
+.wz-foods { display: flex; flex-direction: column; gap: 6px; margin-top: -4px; }
+.wz-foods .gd-h { margin: 6px 0 0; }
+.wz-foods .tp-food { padding: 7px 2px 6px; }
+.wz-foods .tp-food svg { width: 22px; height: 22px; }
+.wz-occ { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wz-occ .tp-food { min-height: 78px; justify-content: center; font-size: 13.5px; }
+.wz-ppl { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.wz-ppl b { font-weight: 500; }
+.wz-ppl small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.wz-sum { display: flex; flex-wrap: wrap; gap: 8px; }
+.wz-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 7px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; color: var(--text-2); }
+.wz-chip img { width: 22px; height: 22px; border-radius: 6px; object-fit: cover; }
+.wz-chip svg { width: 18px; height: 18px; color: var(--gold); }
+.wz-drop { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px 26px; border: 1.5px dashed var(--line); border-radius: 16px; color: var(--muted); font-size: 14px; text-align: center; line-height: 1.45; }
+.wz-drop .ic { width: 58px; height: 58px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--gold); }
+.wz-drop .ic svg { width: 28px; height: 28px; }
+.wz .wl-pages { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.wl-page.add { border: 1.5px dashed var(--line); background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--gold); font-size: 13px; cursor: pointer; }
+.wl-page.add > span { position: static; background: none; color: var(--gold); height: auto; padding: 0; font-size: 13px; }
+.wl-page.add svg { width: 24px; height: 24px; }
+.mk-photo { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.mk-photo img { display: block; width: 100%; height: auto; pointer-events: none; }
+.mk-band { position: absolute; left: 6px; right: 6px; border-radius: 10px; background: rgba(230, 203, 152, .36); box-shadow: inset 0 0 0 2.5px var(--gold); pointer-events: none; }
+.mk-tag { position: absolute; right: 8px; bottom: -13px; padding: 3px 9px; border-radius: 10px; background: var(--gold); color: var(--on-gold); font-size: 12px; font-weight: 600; }
+.wz-where { display: flex; flex-direction: column; gap: 8px; }
+/* ordered and the wishlist in the Cellar: one slim row, two halves only when both exist */
+.cl-rows { display: grid; gap: 8px; margin-top: -6px; }
+.cl-rows.two { grid-template-columns: 1fr 1fr; }
+.cl-row { display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 10px 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 13.5px; white-space: nowrap; overflow: hidden; }
+.cl-row:hover { color: var(--text-2); }
+.cl-row > svg:first-child { width: 17px; height: 17px; color: var(--gold); flex: none; }
+.cl-row > svg:last-child { width: 15px; height: 15px; color: var(--muted); margin-left: auto; flex: none; }
+.cl-row span { overflow: hidden; text-overflow: ellipsis; }
+.cl-row b { color: var(--text); font-weight: 600; }
+.cl-row em { font-style: normal; color: #E06C6C; }
+.cl-rows.two .cl-row { gap: 7px; padding: 0 10px; }
+/* the sommelier on Home: the three ways in as tiles, My cellar first */
+.hm-somm { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid rgba(230, 203, 152, .35); background: linear-gradient(160deg, #3a1d27, #24121a); }
+.hm-somm h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; font-weight: 600; color: var(--text); }
+.hm-somm h2 svg { width: 20px; height: 20px; color: var(--gold); }
+.hm-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hm-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-height: 84px; padding: 8px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 13px; text-align: center; line-height: 1.2; }
+.hm-tile:hover { color: var(--text); }
+.hm-tile:first-child { border-color: var(--gold); }
+.hm-tile svg { width: 24px; height: 24px; color: var(--gold); }
+/* the wine profile in the consultant: one card, text in the normal font, colour only in the bars */
+.pf-card { display: flex; flex-direction: column; gap: 16px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
+.pf-card h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.pf-lbl { margin: 0 0 7px; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.pf-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; }
+.pf-bar i { display: block; }
+.pf-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 13px; color: var(--text-2); }
+.pf-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+.pf-kpi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pf-k { display: flex; flex-direction: column; gap: 2px; padding: 11px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); min-width: 0; }
+.pf-k b { font-size: 19px; font-weight: 600; color: var(--text); }
+.pf-k span { font-size: 12.5px; color: var(--muted); }
+.pf-txt { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text); }
+.pf-txt + .pf-txt { margin-top: 2px; }
+.pf-tr { display: grid; grid-template-columns: 1fr 70px 40px; gap: 10px; align-items: center; padding: 5px 0; font-size: 14px; color: var(--text); }
+.pf-tr:hover { color: var(--text); }
+.pf-tr > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-tr small { color: var(--muted); font-size: 12px; }
+.pf-tr b { text-align: right; font-weight: 600; }
+.pf-last { display: grid; grid-template-columns: 76px 1fr 72px; gap: 8px; align-items: center; padding: 3px 0; font-size: 13px; color: var(--text-2); }
+.pf-last .t { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+.pf-last .t i { display: block; height: 100%; border-radius: 4px; }
+.pf-last .m { text-align: right; color: var(--muted); }
+/* what you are looking for, as tiles */
+.cf-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cf-tile { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--text); text-align: left; font: inherit; }
+.cf-tile svg { width: 22px; height: 22px; color: var(--gold); }
+.cf-tile span { display: flex; flex-direction: column; gap: 2px; }
+.cf-tile b { font-size: 15px; font-weight: 600; }
+.cf-tile small { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.cf-tile.on { background: var(--gold); border-color: var(--gold); color: var(--on-gold); }
+.cf-tile.on svg, .cf-tile.on small { color: var(--on-gold); }
+.cf-tile.wide { grid-column: 1 / 3; flex-direction: row; align-items: center; gap: 12px; }

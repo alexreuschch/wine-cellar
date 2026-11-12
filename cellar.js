@@ -459,15 +459,14 @@ function statsHtml() {
 }
 
 function viewCellar() {
-  const head = `<header class="top"><div><h1 class="title">Cellar</h1></div>
-    <div class="top-actions"><a class="icon-btn magic-btn" href="#/sommelier" aria-label="AI Sommelier">${ICON.magic}</a></div></header>`;
+  const head = `<header class="top"><div><h1 class="title">Cellar</h1></div></header>`;
   const notice = S.version && S.version < 15 ? `<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">This app version needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>` : '';
   if (!S.wines.length) {
-    return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
+    return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${cellarListsHtml()}<div class="empty"><h2>Your cellar is empty</h2><p>Photograph a label and the details are filled in for you.</p><a class="btn primary" href="#/add">Add your first wine</a></div></main>${nav('cellar')}`;
   }
   const filters = filterArea('cellar');
   const btn = filterButton('cellar');
-  return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${statsHtml()}
+  return `<main class="screen has-nav">${head}${notice}${ttOfferHtml()}${statsHtml()}${cellarListsHtml()}
     <div style="display:flex;gap:8px"><label class="search" style="flex:1;min-width:0">${ICON.search}<input type="search" data-input="search" aria-label="Search" placeholder="Search" value="${esc(U.search)}"></label>${cviewToggleHtml()}${btn}</div>
     ${filters}
     ${CVIEW === 'places' ? `<section><div id="wine-list">${cellarList()}</div></section>` : `<div id="drink-soon">${drinkSoonHtml()}</div>

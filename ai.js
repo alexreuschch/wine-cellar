@@ -6,52 +6,42 @@
 
 /* ------------------------------------------------------------ AI sommelier */
 
-const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', foods: [], foodsAt: 0, foodsAll: false, busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '' };
+const SOMM = { mode: 'cellar', threads: { cellar: [], check: [] }, draft: '', foods: [], foodsAt: 0, busy: false, rec: null, listening: false, voiced: false, tips: false, photo: null, where: null, whereAt: 0, price: '', redo: '',
+  step: { cellar: 1, check: 1, list: 1 }, occ: '', people: 2, pplSet: false };
 const sommThread = () => SOMM.threads[SOMM.mode] || [];
 /* wine list in a restaurant: photos of the pages, price range and food, then three picks */
-const WL = { pages: [], min: '', max: '', result: null, error: '', busy: false };
+const WL = { pages: [], min: '', max: '', result: null, error: '', busy: false, edit: false };
 const WL_KIND = { range: ['Best in your range', 'safe'], value: ['Best value', 'value'], gem: ['Hidden gem', 'disc'] };
-const SOMM_EXAMPLES = ['I feel like a fresh white wine tonight', 'Steak with salad, which wine fits?', 'Cheese fondue for four people', 'Something special for a birthday dinner under CHF 80', 'Which bottles should I open this month?'];
-/* the food for a wine check, chosen as tiles and kept for the evening; the common ones first */
-const CHECK_FOODS = ['beef', 'lamb', 'poultry', 'fish', 'seafood', 'pasta', 'vegetarian', 'hardcheese', 'pork', 'game', 'pizza', 'mushrooms', 'spicy', 'asian', 'softcheese', 'curedmeat', 'dessert', 'aperitif'];
+/* the food for the sommelier, chosen as tiles in groups and kept for the evening */
+const FOOD_GROUPS = [['Meat', ['beef', 'lamb', 'pork', 'game', 'poultry', 'curedmeat']], ['Fish and seafood', ['fish', 'seafood']], ['Pasta, pizza and vegetables', ['pasta', 'pizza', 'vegetarian', 'mushrooms']], ['Cheese', ['hardcheese', 'softcheese']], ['More', ['spicy', 'asian', 'aperitif', 'dessert']]];
+const CHECK_FOODS = FOOD_GROUPS.flatMap(g => g[1]);
+/* the occasion for a wine from the cellar */
+const OCCASIONS = [['Dinner', 'dining'], ['Lunch', 'clock'], ['Aperitif', 'aperitif'], ['Celebration', 'spark'], ['As a gift', 'gift'], ['Just a glass', 'glass']];
 const FOOD_HINT = { beef: 'steak with pepper sauce and fries', lamb: 'rack of lamb with rosemary', poultry: 'roast chicken with lemon', fish: 'grilled sea bass with butter sauce', seafood: 'mussels in white wine', pasta: 'pasta with tomato and basil', vegetarian: 'vegetable risotto', hardcheese: 'aged Gruyère', pork: 'pork roast with mustard', game: 'venison with red cabbage', pizza: 'pizza with salami', mushrooms: 'mushroom risotto', spicy: 'Thai red curry', asian: 'Peking duck', softcheese: 'Brie and Camembert', curedmeat: 'Parma ham and salami', dessert: 'chocolate cake', aperitif: 'nuts and olives' };
 const sommFoods = () => (Date.now() - SOMM.foodsAt < 3 * 3600e3 ? SOMM.foods.filter(k => FOODS[k]) : []);
 const sommFoodText = () => sommFoods().map(k => FOODS[k][0]).join(', ');
 
-/* how to use the sommelier for the cellar, shown before the first question and again with Tips */
+/* tips after an answer, shown with Tips */
 function sommGuideHtml() {
   if (SOMM.mode === 'check') return checkGuideHtml();
-  if (SOMM.mode === 'list') return listGuideHtml();
   return `<div class="somm-guide">
-    <h3>How to ask</h3>
     <ul>
-      <li><b>Say what you feel like</b>, for example light, fruity, bold or something sparkling.</li>
-      <li><b>Name the food</b> and how it is cooked: grilled steak, creamy pasta, spicy curry.</li>
-      <li><b>Add the occasion</b> and how many people join, so it can suggest how many bottles.</li>
-      <li><b>Set a limit</b> if you like: “under CHF 50” or “not my best bottles”.</li>
-      <li><b>Ask a follow-up</b>, for example “something lighter?” or “and for dessert?”.</li>
+      <li><b>Ask a follow-up</b> in the field below, for example “something lighter?” or “and for dessert?”.</li>
+      <li><b>Tap a wine</b> to open it, or Take a bottle when you open it.</li>
+      <li><b>New question</b> starts again with the occasion.</li>
     </ul>
-    <h3>Speak or type</h3>
-    <p>Tap the microphone and speak. Your words appear in the field, so you can correct them before you tap send. Nothing is sent without you.</p>
-    <h3>What it knows</h3>
-    <p>Your wines in stock with their drinking window, ratings, storage place and food pairings, and your recent journal with people, food and favorites. It suggests up to three wines from your cellar. Tap a wine to open it. If nothing fits, it tells you what to buy.</p>
     <p class="tiny muted">Answers come from AI and are suggestions. Each question costs a few cents.</p>
   </div>`;
 }
 
-/* how to check a wine that is not in the cellar */
+/* tips after a wine check */
 function checkGuideHtml() {
   return `<div class="somm-guide">
-    <h3>How it works</h3>
     <ul>
-      <li><b>Compare with</b> the shop price, or in a restaurant with the restaurant price, and check the country.</li>
-      <li><b>Photograph the wine</b>: in a shop the label, in a restaurant the line on the wine list with its price. No photo? Say or type the name in the question.</li>
-      <li><b>Tap what you eat</b> or plan to cook. It is kept for the evening.</li>
-      <li><b>Ask your question</b>, typed or spoken, and tell more about the food, for example “steak with pepper sauce and fries, does it fit?”.</li>
-      <li><b>Ask a follow-up</b> after the answer, for example “is the 2019 better?”.</li>
+      <li><b>Ask a follow-up</b> in the field below, for example “is the 2019 better?”.</li>
+      <li><b>Change the country</b> above and the prices are checked there again.</li>
+      <li><b>New wine</b> starts again with the photo.</li>
     </ul>
-    <h3>What you get</h3>
-    <p>How well the wine fits your taste in percent, how it goes with your food, the price in local shops and in a restaurant a fair price range, and which wines in your cellar are similar.</p>
     <p class="tiny muted">Answers come from AI. Each check costs about 5 cents, a little less when the wine was checked in the last 14 days.</p>
   </div>`;
 }
@@ -60,8 +50,7 @@ function checkGuideHtml() {
    the restaurant is kept for some hours, then it is the shop price again */
 const WHERE_TTL = 3 * 3600e3;
 const sommWhere = () => (SOMM.where === 'restaurant' && Date.now() - SOMM.whereAt < WHERE_TTL ? 'restaurant' : 'shop');
-const whereRowHtml = () => { const w = sommWhere(); const b = (v, ic, label) => `<button class="${w === v ? 'on' : ''}" data-act="somm-where" data-v="${v}" aria-pressed="${w === v}">${ic}${label}</button>`;
-  return `<div class="where-row" id="where-row"><span>Compare with</span><div class="toggle">${b('shop', ICON.cart, 'Shop price')}${b('restaurant', ICON.dining, 'Restaurant price')}</div>${countryBtnHtml('in')}${redoHtml('check')}</div>`; };
+const whereRowHtml = () => `<div id="where-row" class="wz-where">${countryBtnHtml('Prices for')}${redoHtml('check')}</div>`;
 /* the country prices are checked in, shown where you start the analysis */
 const countryBtnHtml = lead => { const c = travelCountry(); return `<button class="travel-row" data-act="pick-open" data-k="travel">${ICON.pin}<span>${lead} ${flagOfCode(c)}<b>${esc(SHOP_COUNTRIES[c])}</b> · ${esc(countryCur(c))}</span><small>Change</small></button>`; };
 /* after the country was changed, offer to run the last analysis again for it */
@@ -218,84 +207,195 @@ async function sommVintage(i) {
   sommSave(); render();
 }
 
-function sommIntroHtml() {
-  if (SOMM.mode === 'check') return checkFlowHtml();
-  return `<div class="somm-intro"><p class="muted">Tell me what you feel like, what you are eating or what the occasion is. I suggest wines from your cellar. Tap an example to try it.</p>
-    <div class="somm-examples">${SOMM_EXAMPLES.map(x => `<button class="somm-ex" data-act="somm-example" data-v="${esc(x)}">${ICON.magic}<span>${esc(x)}</span></button>`).join('')}</div>
-    ${sommGuideHtml()}
-    <button class="somm-switch" data-act="somm-mode" data-v="check">${ICON.camera}<span>Looking at a wine in a shop or restaurant? <b>Will I like it?</b></span></button></div>`;
+/* ------------------------------------------------ the three steps before the first question: one decision per screen */
+const wzOn = () => (SOMM.mode === 'list' ? WL.edit || (!WL.result && !WL.busy && !WL.error) : !sommThread().length);
+const wzStep = () => SOMM.step[SOMM.mode] || 1;
+const occIcon = k => (k === 'aperitif' ? FOODS.aperitif[1] : ICON[k]);
+
+/* all kinds of food in groups, several at once or none */
+function wzFoodHtml() {
+  const on = sommFoods();
+  return `<div class="wz-foods">${FOOD_GROUPS.map(([h, ks]) => `<h3 class="gd-h">${esc(h)}</h3><div class="tp-foods cf-foods">${ks.map(k => `<button class="tp-food${on.includes(k) ? ' on' : ''}" data-act="cf-food" data-v="${k}" aria-pressed="${on.includes(k)}">${FOODS[k][1]}<span>${esc(FOODS[k][0])}</span></button>`).join('')}</div>`).join('')}</div>`;
+}
+/* what was chosen in the steps before, as small chips above the last field */
+function wzChipsHtml() {
+  const c = [], chip = (ic, t) => `<span class="wz-chip">${ic}${esc(t)}</span>`;
+  if (SOMM.mode === 'cellar') {
+    const o = OCCASIONS.find(x => x[0] === SOMM.occ);
+    const ppl = SOMM.pplSet ? `${SOMM.people} ${SOMM.people === 1 ? 'person' : 'people'}` : '';
+    if (o || ppl) c.push(chip(o ? occIcon(o[1]) : ICON.heart, [o ? o[0] : '', ppl].filter(Boolean).join(' · ')));
+  }
+  if (SOMM.mode === 'check') c.push(SOMM.photo ? `<span class="wz-chip"><img src="${esc(SOMM.photo.thumb)}" alt="">${SOMM.photo.mark ? 'Marked wine' : 'Photo'}</span>` : chip(ICON.camera, 'No photo'));
+  if (SOMM.mode === 'list') c.push(`<span class="wz-chip"><img src="${esc(WL.pages[0] ? WL.pages[0].thumb : '')}" alt="">${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'}</span>`);
+  const f = sommFoods();
+  if (f.length) f.forEach(k => c.push(chip(FOODS[k][1], FOODS[k][0])));
+  else if (SOMM.mode !== 'cellar') c.push(chip(ICON.dining, 'No food'));
+  return c.length ? `<div class="wz-sum">${c.join('')}</div>` : '';
+}
+const wzAskHtml = () => `<div class="somm-input cf-input${SOMM.listening ? ' listening' : ''}">
+      <textarea id="somm-text" data-input="somm-text" rows="4" placeholder="${esc(sommPlaceholder())}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
+      ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div>
+    <p id="somm-hint" class="tiny muted somm-hint" style="margin:0">${sommHint()}</p>`;
+/* Will I like it? without a photo needs the name of the wine */
+const wzCanGo = () => SOMM.mode !== 'check' || !!SOMM.photo || !!str(SOMM.draft).trim();
+function wzGoRefresh() {
+  const b = $('#wz-go'), n = $('#wz-cost');
+  if (b) b.disabled = SOMM.busy || !wzCanGo();
+  if (n && SOMM.mode === 'check') n.textContent = wzCanGo() ? 'About 5 cents. I look the wine up and tell you how it fits you.' : 'Enter the name of a wine first.';
 }
 
-/* Will I like it?, from top to bottom: where (above), the photo, the food as tiles, one field for the question */
-function checkFlowHtml() {
-  const resto = sommWhere() === 'restaurant', ph = SOMM.photo;
-  const step = (n, title, body, opt) => `<section class="cf-step"><h3><span class="cf-n">${n}</span>${title}${opt ? ' <small>optional</small>' : ''}</h3>${body}</section>`;
-  const photo = ph
-    ? `<div class="cf-photo"><img src="${esc(ph.thumb)}" alt="Photo of the wine"><span class="small">Photo ready.</span><label class="link-btn">Retake<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><button class="icon-btn" data-act="somm-photo-rm" aria-label="Remove photo">${ICON.x}</button></div>`
-    : `<div class="grid2"><label class="btn primary">${ICON.camera}Take a photo<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><label class="btn">Gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label></div>
-      ${resto ? '<p class="tiny muted" style="margin:0">Name, vintage and price in the picture. Or the bottle, if the waiter shows it before opening.</p>' : ''}
-      <p class="cf-nophoto">${ICON.edit}<span>No photo? Type or dictate the wine name in the question field below.</span></p>
-      ${resto ? '<button class="cf-link" data-act="somm-mode" data-v="list">Comparing several wines? Use <b>Wine list</b></button>' : ''}`;
-  const on = sommFoods();
-  const keys = SOMM.foodsAll ? CHECK_FOODS : CHECK_FOODS.slice(0, 8).concat(CHECK_FOODS.slice(8).filter(k => on.includes(k)));
-  const tiles = `<div class="tp-foods cf-foods">${keys.map(k => `<button class="tp-food${on.includes(k) ? ' on' : ''}" data-act="cf-food" data-v="${k}" aria-pressed="${on.includes(k)}">${FOODS[k][1]}<span>${esc(FOODS[k][0])}</span></button>`).join('')}</div>
-    <button class="link-btn vq-all" data-act="cf-food-all">${SOMM.foodsAll ? 'Show fewer' : `Show all ${CHECK_FOODS.length} kinds of food`}${ICON.chevron}</button>`;
-  const ask = `<div class="somm-input cf-input${SOMM.listening ? ' listening' : ''}">
-      <textarea id="somm-text" data-input="somm-text" rows="3" placeholder="${esc(sommPlaceholder())}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
-      ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
-      <button class="somm-send" data-act="somm-send" aria-label="Check the wine"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button></div>
-    <p id="somm-hint" class="tiny muted somm-hint" style="margin:0">${sommHint()}</p>`;
-  return `<div class="check-flow">
-    ${step(2, resto ? 'Photograph the wine on the list' : 'Photograph the label', photo, true)}
-    ${step(3, resto ? 'What are you eating?' : 'What do you plan to cook?', tiles, true)}
-    ${step(4, 'Your question', ask)}
-    ${checkGuideHtml()}</div>`;
+/* the photo of a label or a wine list, with the wine marked by finger like with a highlighter */
+function markPhotoHtml() {
+  const ph = SOMM.photo, m = ph.mark;
+  return `<div class="mk-photo" id="mk-photo"><img src="${esc(ph.src || ph.thumb)}" alt="Photo of the wine" draggable="false">
+      ${m ? `<div class="mk-band" style="top:${(m.y0 * 100).toFixed(2)}%;height:${((m.y1 - m.y0) * 100).toFixed(2)}%"><span class="mk-tag">This one</span></div>` : ''}</div>
+    <div class="between"><label class="link-btn">${ICON.camera}Retake<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label>${m ? '<button class="link-btn" data-act="mk-clear">Clear the mark</button>' : ''}</div>`;
 }
+
+function wzBody() {
+  const m = SOMM.mode, n = wzStep();
+  const next = (dis) => `<button class="btn primary big block" data-act="wz-next"${dis ? ' disabled' : ''}>Next</button>`;
+  if (n === 2) return ['What are you eating?', 'Tap all that apply, or just tap Next.', wzFoodHtml(), next()];
+  if (m === 'cellar') {
+    if (n === 1) return ['What is the occasion?', 'I pick from the wines in your cellar.',
+      `<div class="tp-foods wz-occ">${OCCASIONS.map(([t, ic]) => `<button class="tp-food${SOMM.occ === t ? ' on' : ''}" data-act="wz-occ" data-v="${esc(t)}" aria-pressed="${SOMM.occ === t}">${occIcon(ic)}<span>${esc(t)}</span></button>`).join('')}</div>
+      <div class="wz-ppl"><span><b>How many people?</b><small>For how many bottles to open</small></span><div class="stepper"><button data-act="wz-ppl" data-v="-1" aria-label="Fewer"${SOMM.people <= 1 ? ' disabled' : ''}>${ICON.minus}</button><span id="wz-ppl-n">${SOMM.people}</span><button data-act="wz-ppl" data-v="1" aria-label="More"${SOMM.people >= 30 ? ' disabled' : ''}>${ICON.plus}</button></div></div>`, next()];
+    return ['Anything else?', 'Optional. Say it or type it.', wzChipsHtml() + wzAskHtml(),
+      `<button class="btn primary big block" id="wz-go" data-act="wz-go"${SOMM.busy ? ' disabled' : ''}>${ICON.magic}Find my wine</button><p class="wz-cost">A few cents per question.</p>`];
+  }
+  if (m === 'check') {
+    if (n === 1) return SOMM.photo
+      ? ['Which wine?', 'Mark the wine with your finger. For a label just tap Next.', markPhotoHtml() + countryBtnHtml('Prices for'), next()]
+      : ['Which wine?', 'A label in the shop or one wine on the wine list.',
+        `<div class="wz-drop"><span class="ic">${ICON.camera}</span>Take a photo of the label, or of one wine on the wine list.</div>
+        <div class="grid2"><label class="btn primary">${ICON.camera}Take a photo<input type="file" accept="image/*" capture="environment" data-change="somm-photo" hidden></label><label class="btn">Gallery<input type="file" accept="image/*" data-change="somm-photo" hidden></label></div>
+        ${countryBtnHtml('Prices for')}`, '<button class="btn outline-gold big block" data-act="wz-next">Skip</button>'];
+    const ph = !!SOMM.photo;
+    return [ph ? 'Anything else?' : 'Which wine?', ph ? 'Optional. Say it or type it.' : 'Say or type the name. Add anything else you want to know.', wzChipsHtml() + wzAskHtml(),
+      `<button class="btn primary big block" id="wz-go" data-act="wz-go"${SOMM.busy || !wzCanGo() ? ' disabled' : ''}>${ICON.magic}Check the wine</button><p class="wz-cost" id="wz-cost">${wzCanGo() ? 'About 5 cents. I look the wine up and tell you how it fits you.' : 'Enter the name of a wine first.'}</p>`];
+  }
+  // wine list
+  if (n === 1) {
+    const pages = WL.pages.map((pg, i) => `<div class="wl-page"><img src="${esc(pg.thumb)}" alt="Page ${i + 1}"><span>${i + 1}</span><button class="icon-btn" data-act="wl-page-rm" data-i="${i}" aria-label="Remove page ${i + 1}">${ICON.x}</button></div>`).join('');
+    const full = WL.pages.length >= 10;
+    return ['Photograph the wine list', 'One photo per page, up to ten.',
+      `<div class="wl-pages">${pages}${full ? '' : `<label class="wl-page add">${ICON.camera}<span>${WL.pages.length ? 'Add page' : 'First page'}</span><input type="file" accept="image/*" capture="environment" data-change="wl-photo" hidden></label>`}</div>
+      ${full ? '' : '<label class="link-btn" style="align-self:flex-start">Choose from gallery<input type="file" accept="image/*" multiple data-change="wl-photo" hidden></label>'}
+      ${countryBtnHtml('Restaurant in')}`, next(!WL.pages.length)];
+  }
+  const c = countryCur(travelCountry());
+  return ['Your budget per bottle', `Optional. In ${esc(c)}, as on the list.`,
+    `<div class="grid2"><label class="field">From (${esc(c)})<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">to (${esc(c)})<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
+    ${wzAskHtml()}${wzChipsHtml()}`,
+    `<button class="btn primary big block" id="wz-go" data-act="wz-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}Find the best wines</button><p class="wz-cost">About 10 to 20 cents, takes up to a minute.</p>`];
+}
+
+function viewWizard() {
+  const n = wzStep(), [title, lead, body, foot] = wzBody();
+  const modeBtn = (m, ic, label) => `<button class="${SOMM.mode === m ? 'on' : ''}" data-act="somm-mode" data-v="${m}">${ic}${label}</button>`;
+  const old = S.version && S.version < (SOMM.mode === 'cellar' ? 14 : 17);
+  return `<main class="screen somm wz">
+    <div class="detail-top tq-top">${n === 1 ? backLinkHtml('#/home', 'Home') : `<button class="back" data-act="wz-back">${ICON.back}Back</button>`}
+      <div class="tq-dots" aria-label="Step ${n} of 3">${[1, 2, 3].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div></div>
+    ${n === 1 ? `<div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>` : ''}
+    ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
+    <p class="tq-step">Step ${n} of 3</p><h1 class="title tq-title">${title}</h1><p class="wz-lead">${lead}</p>
+    ${body}
+    <div class="wz-foot">${foot}</div>
+  </main>`;
+}
+
+/* the question for a wine from the cellar, from the occasion, the people and the food */
+function cellarQuestion() {
+  const t = str(SOMM.draft).trim(), f = sommFoods().map(k => FOODS[k][0].toLowerCase());
+  const head = [SOMM.occ ? SOMM.occ.replace('As a gift', 'A wine to give as a gift').replace('Just a glass', 'Just a glass of wine') : '', SOMM.pplSet ? `for ${SOMM.people} ${SOMM.people === 1 ? 'person' : 'people'}` : '', f.length ? `with ${f.join(', ')}` : ''].filter(Boolean).join(' ');
+  return [head ? head.charAt(0).toUpperCase() + head.slice(1) + '.' : '', t].filter(Boolean).join(' ') || 'Which wine should I open?';
+}
+/* the photo with the marked wine burnt in, so the AI sees which line is meant */
+async function markedPhoto(ph) {
+  if (!ph.mark) return ph;
+  const img = new Image();
+  img.src = ph.src;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const g = c.getContext('2d'), y = ph.mark.y0 * c.height, h = (ph.mark.y1 - ph.mark.y0) * c.height, lw = Math.max(3, c.width * 0.006);
+  g.drawImage(img, 0, 0);
+  g.fillStyle = 'rgba(255, 214, 0, 0.28)'; g.fillRect(0, y, c.width, h);
+  g.strokeStyle = '#FFD400'; g.lineWidth = lw; g.strokeRect(lw / 2, y, c.width - lw, h);
+  return { b64: c.toDataURL('image/jpeg', 0.82).split(',')[1], thumb: toJpeg(c, 240, 0.7), marked: true };
+}
+async function wzGo() {
+  if (SOMM.listening) sommStopVoice();
+  const ta = $('#somm-text');
+  if (ta) SOMM.draft = ta.value;
+  if (SOMM.mode === 'list') { listAnalyze(); return; }
+  if (SOMM.mode === 'cellar') { const q = cellarQuestion(); SOMM.draft = ''; sommAsk(q); return; }
+  if (!wzCanGo()) return;
+  let img = null;
+  try { img = SOMM.photo ? await markedPhoto(SOMM.photo) : null; } catch (e) { img = SOMM.photo; }
+  sommAsk(SOMM.draft, img, '', img && img.marked ? '\n(On the photo the wine to check is marked with a yellow box. Check only that wine.)' : '');
+}
+/* the finger on the photo: drag over the line of the wine, or tap it */
+const MK = { y: null };
+function mkY(e) { const r = $('#mk-photo').getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)); }
+function mkSet(a, b) {
+  let y0 = Math.min(a, b), y1 = Math.max(a, b);
+  if (y1 - y0 < 0.07) { const c = (y0 + y1) / 2; y0 = Math.max(0, c - 0.035); y1 = Math.min(1, c + 0.035); }
+  SOMM.photo.mark = { y0, y1 };
+  const box = $('#mk-photo');
+  let band = box.querySelector('.mk-band');
+  if (!band) { box.insertAdjacentHTML('beforeend', '<div class="mk-band"><span class="mk-tag">This one</span></div>'); band = box.querySelector('.mk-band'); }
+  band.style.top = (y0 * 100).toFixed(2) + '%'; band.style.height = ((y1 - y0) * 100).toFixed(2) + '%';
+}
+document.addEventListener('pointerdown', e => { if (SOMM.photo && e.target.closest && e.target.closest('#mk-photo')) { MK.y = mkY(e); mkSet(MK.y, MK.y); e.preventDefault(); } });
+document.addEventListener('pointermove', e => { if (MK.y !== null && $('#mk-photo')) mkSet(MK.y, mkY(e)); });
+document.addEventListener('pointerup', () => { if (MK.y !== null) { MK.y = null; render(); } });
 
 function sommThreadHtml() {
   if (SOMM.mode === 'list') return listHtml();
   const th = sommThread();
-  if (!th.length) return sommIntroHtml();
   return (SOMM.tips ? sommGuideHtml() : '') + th.map(t => `<div class="somm-q">${t.photo ? `<img class="somm-q-photo" src="${esc(t.photo)}" alt="Label photo">` : ''}${t.q ? esc(t.q) : ''}</div>${sommAnswerHtml(t)}`).join('');
 }
 
 const sommTopHtml = () => `${backLinkHtml('#/home', 'Home')}${SOMM.mode === 'list' ? (WL.pages.length || WL.result ? `<button class="btn ghost" style="height:40px" data-act="wl-clear">New wine list</button>` : '') : sommThread().length ? `<div style="display:flex;gap:6px"><button class="btn ghost" style="height:40px" data-act="somm-tips">${SOMM.tips ? 'Hide tips' : 'Tips'}</button><button class="btn ghost" style="height:40px" data-act="somm-clear">${SOMM.mode === 'check' ? 'New wine' : 'New question'}</button></div>` : ''}`;
-const sommPlaceholder = () => (SOMM.listening ? 'Listening…' : SOMM.mode === 'list' ? 'What are you eating? (optional)' : SOMM.mode === 'check' ? checkPlaceholder() : 'What do you feel like?');
-function checkPlaceholder() {
+function sommPlaceholder() {
+  if (SOMM.listening) return 'Listening…';
+  if (SOMM.mode === 'list') return 'Anything else? For example a red, not too heavy';
+  if (SOMM.mode === 'cellar') return sommThread().length ? 'Ask a follow-up, for example something lighter?' : 'For example: something light, or not my best bottles';
   if (sommThread().length) return 'Ask a follow-up, for example is the 2019 better?';
-  if (!SOMM.photo) return 'Wine name and your question, for example Barolo 2019 with steak and pepper sauce, does it fit?';
+  if (!SOMM.photo) return 'For example: Gantenbein Pinot Noir 2020';
   const f = sommFoods();
-  return f.length ? `Tell more, for example ${FOOD_HINT[f[0]] || 'what exactly you eat'}` : 'Your question, for example with pasta, does it fit?';
+  return `For example: ${f.length ? FOOD_HINT[f[0]] || 'what exactly you eat' : 'is it ready to drink?'}`;
 }
-const sommLead = () => (SOMM.mode === 'check' ? 'Check a wine you see in a shop or restaurant.' : SOMM.mode === 'list' ? 'Find the best wines on a restaurant wine list.' : 'Advice from the wines in your cellar.');
 
 function viewSommelier() {
   const r = route();
-  if (r.id === 'check' || r.id === 'cellar' || r.id === 'list') SOMM.mode = r.id;
-  const old = S.version && S.version < (SOMM.mode === 'cellar' ? 14 : 17);
+  SOMM.mode = r.id === 'check' || r.id === 'list' ? r.id : 'cellar';
+  if (wzOn()) return viewWizard();
   const check = SOMM.mode === 'check', list = SOMM.mode === 'list';
   const modeBtn = (m, ic, label) => `<button class="${SOMM.mode === m ? 'on' : ''}" data-act="somm-mode" data-v="${m}">${ic}${label}</button>`;
   return `<main class="screen somm">
     <div class="detail-top" id="somm-top">${sommTopHtml()}</div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Sommelier</h1></header>
     <div class="toggle somm-modes three">${modeBtn('cellar', ICON.glass, 'My cellar')}${modeBtn('check', ICON.camera, 'Will I like it?')}${modeBtn('list', ICON.dining, 'Wine list')}</div>
-    ${tipHtml('som-' + SOMM.mode)}
-    <p class="small muted" style="margin:-4px 0 0">${sommLead()}</p>
-    ${check ? `<section class="cf-step cf-where"><h3><span class="cf-n">1</span>Where are you?</h3>${whereRowHtml()}</section>` : ''}
-    ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The sommelier needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
+    ${check ? whereRowHtml() : ''}
     <div id="somm-thread" class="somm-thread">${sommThreadHtml()}</div>
   </main>
-  ${check && !sommThread().length ? '' : `<div class="somm-bar${check ? ' check' : ''}${list ? ' list' : ''}">
+  ${list ? '' : `<div class="somm-bar${check ? ' check' : ''}">
     <div class="somm-input${SOMM.listening ? ' listening' : ''}">
       <textarea id="somm-text" data-input="somm-text" rows="1" placeholder="${sommPlaceholder()}" aria-label="Your question">${esc(SOMM.draft)}</textarea>
       ${voiceLangHtml()}<button class="somm-mic${SOMM.listening ? ' on' : ''}" data-act="somm-mic" aria-label="${SOMM.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button>
-      <button class="somm-send" data-act="somm-send" aria-label="${list ? 'Find the best wines' : 'Send'}"${SOMM.busy || (list && (WL.busy || !WL.pages.length)) ? ' disabled' : ''}>${ICON.send}</button>
+      <button class="somm-send" data-act="somm-send" aria-label="Send"${SOMM.busy ? ' disabled' : ''}>${ICON.send}</button>
     </div>
     <p id="somm-hint" class="tiny muted somm-hint">${sommHint()}</p>
   </div>`}`;
 }
 
 function sommRefresh(scroll) {
+  // in the steps: the screens without a text field are drawn again, the field keeps its focus
+  if (location.hash.startsWith('#/sommelier') && wzOn() && !$('#somm-text')) { render(); return; }
+  wzGoRefresh();
   const th = $('#somm-thread');
   if (th) th.innerHTML = sommThreadHtml();
   const top = $('#somm-top');
@@ -314,21 +414,7 @@ function sommRefresh(scroll) {
   if (scroll) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
-const sommHint = () => (SOMM.listening ? 'Listening. Take your time, tap stop when you are done.' : SOMM.voiced ? (SOMM.mode === 'list' ? 'Check the text and correct it if needed, then tap Find the best wines.' : 'Check the text and correct it if needed, then tap send.') : '');
-
-function listGuideHtml() {
-  return `<div class="somm-guide">
-    <h3>How it works</h3>
-    <ul>
-      <li><b>Photograph the pages</b> of the wine list you want to compare, one after the other, up to 10. Hold the phone straight and make sure the prices are sharp.</li>
-      <li><b>Set your budget per bottle</b>, what you want to spend on one bottle, in the currency of the list. You can leave it empty.</li>
-      <li><b>Say what you eat</b> in the field at the bottom, by typing or with the microphone. Check the text before you start.</li>
-    </ul>
-    <h3>What you get</h3>
-    <p>Three wines from the list: the best one in your price range, the best value for money, and the hidden gem that is priced too low compared with the rest of the list. Each with the price on the list, the price in local shops, the markup of the restaurant and how well it fits your taste. Prices are shown in the currency of the list and in yours.</p>
-    <p class="tiny muted">The shop prices of the three picks are checked in online shops of the country set above. One analysis costs about 10 to 20 cents. The photos are not stored.</p>
-  </div>`;
-}
+const sommHint = () => (SOMM.listening ? 'Listening. Take your time, tap stop when you are done.' : SOMM.voiced ? (wzOn() ? 'Check the text and correct it if needed.' : 'Check the text and correct it if needed, then tap send.') : '');
 
 /* is the whole list expensive for this country? its average markup against the usual one */
 function listLevelHtml(res) {
@@ -376,50 +462,35 @@ function listPickHtml(p, i, cur0) {
 function listHtml() {
   const res = WL.result;
   const cur0 = res && res.currency ? res.currency : cur();
-  const pages = WL.pages.map((pg, i) => `<div class="wl-page"><img src="${esc(pg.thumb)}" alt="Page ${i + 1}"><span>${i + 1}</span><button class="icon-btn" data-act="wl-page-rm" data-i="${i}" aria-label="Remove page ${i + 1}"${WL.busy ? ' disabled' : ''}>${ICON.x}</button></div>`).join('');
-  const full = WL.pages.length >= 10;
-  const wait = WL.busy
-    ? `<div class="somm-a wl-wait" id="wl-wait"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'}, comparing the wines and checking shop prices<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes up to a minute. Keep the app open.</p></div>` : '';
-  const result = WL.busy ? ''
-    : WL.error ? `<div class="somm-a error"><p>${esc(WL.error)}</p></div>`
-    : res ? `<div class="wl-result">
-        <p class="small muted" style="margin:0">${res.restaurant ? `${esc(res.restaurant)} · ` : ''}${res.count ? `${res.count} wines read from ${res.pages} ${res.pages === 1 ? 'page' : 'pages'}` : `${res.pages} ${res.pages === 1 ? 'page' : 'pages'} read`}${res.food ? ` · food: ${esc(res.food)}` : ''}</p>
-        ${listLevelHtml(res)}
-        ${res.picks.map((p, i) => listPickHtml(p, i, cur0)).join('')}
-        ${res.note ? `<p class="small" style="margin:0">${esc(res.note)}</p>` : ''}
-        <p class="tiny muted" style="margin:0">Quality and the average markup are AI estimates. Change the range or the food below and analyze again, or start a new wine list.</p></div>` : '';
-  const setup = `<section class="wl-setup">
-      <div class="sec-head"><h2>Pages</h2><span class="small muted">${WL.pages.length} of 10</span></div>
-      ${WL.pages.length ? `<div class="wl-pages">${pages}</div>` : '<p class="small muted" style="margin:0">Photograph the pages of the wine list you want to compare, one after the other.</p>'}
-      ${full ? '' : `<label class="btn ${WL.pages.length ? '' : 'primary big '}block">${ICON.camera}${WL.pages.length ? 'Add page' : 'Take a photo of the first page'}<input type="file" accept="image/*" capture="environment" data-change="wl-photo" hidden></label>
-      <label class="btn ghost block">Choose from gallery<input type="file" accept="image/*" multiple data-change="wl-photo" hidden></label>`}
-      <div class="sec-head" style="margin-top:6px"><h2>Your budget per bottle</h2><span id="wl-budget-end">${wlBudgetEnd()}</span></div>
-      <p class="small muted" style="margin:-4px 0 0">How much you want to spend on one bottle, in ${esc(countryCur(travelCountry()))} as on the list. The best wine within it becomes your first pick, <b>Best in your range</b>. Leave it empty for no limit.</p>
-      <div class="wl-range"><label class="field">From<input inputmode="decimal" data-input="wl-min" placeholder="No minimum" value="${esc(WL.min)}"></label><label class="field">To<input inputmode="decimal" data-input="wl-max" placeholder="No limit" value="${esc(WL.max)}"></label></div>
-      <p class="small muted" style="margin:0">Say what you eat in the field below, then tap the button.</p>
-      <div class="wl-country">${countryBtnHtml('Restaurant in')}${redoHtml('list')}</div>
-      ${wait}
-      <button class="btn accent big block" data-act="wl-go"${WL.busy || !WL.pages.length ? ' disabled' : ''}>${ICON.magic}${res ? 'Analyze again' : 'Find the best wines'}</button>
-    </section>`;
-  return `${result}${setup}${res || WL.busy ? '' : listGuideHtml()}`;
+  if (WL.busy) return `<div class="somm-a wl-wait" id="wl-wait"><p class="somm-wait">Reading ${WL.pages.length} ${WL.pages.length === 1 ? 'page' : 'pages'}, comparing the wines and checking shop prices<span>.</span><span>.</span><span>.</span></p><p class="tiny muted" style="margin:0">This takes up to a minute. Keep the app open.</p></div>`;
+  const again = '<button class="btn outline-gold big block" data-act="wz-edit">Change and analyze again</button>';
+  if (WL.error) return `<div class="somm-a error"><p>${esc(WL.error)}</p></div>${again}`;
+  if (!res) return '';
+  return `<div class="wl-country">${countryBtnHtml('Restaurant in')}${redoHtml('list')}</div>
+    <div class="wl-result">
+      <p class="small muted" style="margin:0">${res.restaurant ? `${esc(res.restaurant)} · ` : ''}${res.count ? `${res.count} wines read from ${res.pages} ${res.pages === 1 ? 'page' : 'pages'}` : `${res.pages} ${res.pages === 1 ? 'page' : 'pages'} read`}${res.food ? ` · ${esc(res.food)}` : ''}</p>
+      ${listLevelHtml(res)}
+      ${res.picks.map((p, i) => listPickHtml(p, i, cur0)).join('')}
+      ${res.note ? `<p class="small" style="margin:0">${esc(res.note)}</p>` : ''}
+      <p class="tiny muted" style="margin:0">Quality and the average markup are AI estimates.</p></div>
+    ${again}`;
 }
 
-/* Clear only while something is set, else the hint that it is optional */
-const wlBudgetEnd = () => (str(WL.min).trim() || str(WL.max).trim() ? `<button class="link-btn" data-act="wl-budget-clear" style="height:auto">${ICON.x}Clear</button>` : '<span class="small muted">optional</span>');
-function wlBudgetRefresh() { const e = $('#wl-budget-end'); if (e) e.innerHTML = wlBudgetEnd(); }
 async function listAnalyze(foodAgain) {
   if (WL.busy || !WL.pages.length) { if (!WL.pages.length) toast('Take a photo of at least one page first.'); return; }
   // pages kept from an earlier session are only previews: a new analysis needs the photos again
-  if (WL.pages.some(pg => !pg.b64)) { WL.pages = WL.pages.filter(pg => pg.b64); toast('Take the photos of the wine list again for a new analysis.'); sommRefresh(false); return; }
+  if (WL.pages.some(pg => !pg.b64)) { WL.pages = WL.pages.filter(pg => pg.b64); SOMM.step.list = 1; WL.edit = true; toast('Take the photos of the wine list again for a new analysis.'); render(); return; }
   if (SOMM.listening) sommStopVoice();
   const ta = $('#somm-text');
-  const food = foodAgain !== undefined ? str(foodAgain).trim() : str(ta ? ta.value : SOMM.draft).trim();
+  // the food from the tiles and the wishes from the field
+  const food = foodAgain !== undefined ? str(foodAgain).trim() : [sommFoodText(), str(ta ? ta.value : SOMM.draft).trim()].filter(Boolean).join('. ');
   SOMM.redo = '';
+  WL.edit = false;
   WL.busy = true;
   WL.error = '';
   WL.result = null;
   SOMM.voiced = false;
-  sommRefresh(false);
+  render();
   const w = $('#wl-wait');
   if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' });
   try {
@@ -429,7 +500,7 @@ async function listAnalyze(foodAgain) {
   }
   WL.busy = false;
   sommSave();
-  sommRefresh(false);
+  render();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -464,7 +535,7 @@ async function listSave(p) {
 }
 
 
-async function sommAsk(text, photo, picked) {
+async function sommAsk(text, photo, picked, note) {
   const q = str(text).trim();
   const img = photo || SOMM.photo;
   if (SOMM.busy) return;
@@ -482,14 +553,15 @@ async function sommAsk(text, photo, picked) {
   SOMM.busy = true;
   SOMM.tips = false;
   // the first wine of a check: the steps make room for the answer and the field for follow-ups
-  if (mode === 'check' && th.length === 1) { render(); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } else sommRefresh(true);
+  if (th.length === 1) { render(); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } else sommRefresh(true);
   try {
-    const where = mode === 'check' ? sommWhere() : '';
+    // shop or restaurant: the sommelier sees it on the photo or in the question
+    const where = '';
     const price = null;   // no price field: a price you mention in the question is read by the sommelier
     turn.where = where; turn.price = price;
     if (mode === 'check' && SOMM.redo) { SOMM.redo = ''; const row = $('#where-row'); if (row) row.outerHTML = whereRowHtml(); }
     turn.food = mode === 'check' ? sommFoodText() : '';
-    turn.a = await api('sommelier', { question: q, history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '', food: turn.food, picked: picked || '' });
+    turn.a = await api('sommelier', { question: q + (note || ''), history, image: img ? img.b64 : null, mode, country: mode === 'check' ? travelCountry() : '', where, price, priceCur: price ? countryCur(travelCountry()) : '', food: turn.food, picked: picked || '' });
   } catch (e) {
     turn.error = /Unknown action/i.test(e.message) ? 'The sommelier needs the new Code.gs. Update the script, then try again.' : e.message.replace(/Claude API/g, 'AI service');
   }
@@ -545,7 +617,6 @@ function sommLoad() {
   try { d = JSON.parse(localStorage.getItem('wc-somm') || 'null'); } catch (e) { d = null; }
   if (!d) return;
   ['cellar', 'check'].forEach(m => { if (d.threads && Array.isArray(d.threads[m])) SOMM.threads[m] = d.threads[m]; });
-  if (['cellar', 'check', 'list'].includes(d.mode)) SOMM.mode = d.mode;
   if (d.where) { SOMM.where = d.where; SOMM.whereAt = Number(d.whereAt) || 0; }
   if (Array.isArray(d.foods)) { SOMM.foods = d.foods.filter(k => FOODS[k]); SOMM.foodsAt = Number(d.foodsAt) || 0; }
   if (d.wl) { WL.result = d.wl.result || null; WL.min = str(d.wl.min); WL.max = str(d.wl.max); WL.pages = Array.isArray(d.wl.pages) ? d.wl.pages : []; }
@@ -565,7 +636,7 @@ function sommStartVoice() {
 function consVoiceUi() {
   const b = $('#cons-mic'), h = $('#cons-mic-hint');
   if (b) { b.classList.toggle('on', CONS.listening); b.setAttribute('aria-label', CONS.listening ? 'Stop listening' : 'Speak'); }
-  if (h) h.textContent = CONS.listening ? 'Listening. Take your time, tap stop when you are done. Then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.';
+  if (h) h.textContent = CONS.listening ? 'Listening. Tap stop when you are done.' : '';
 }
 function consStopVoice() {
   if (CONS.listening) voiceCancel();
@@ -729,7 +800,12 @@ function tasteProfile() {
     ...cover.map(c => `${c.t}: ${btl(c.stock)} in stock, ${c.used} opened in 12 months${c.months !== null ? `, lasts about ${c.months} months` : ''}`)
   ].filter(Boolean).join('\n');
   const round5 = v => Math.max(5, Math.round(v / 5) * 5);
-  return { lines, cover, text, budget: p50 !== null ? { min: round5(p25 * 0.8), max: round5(p75 * 1.2) } : { min: '', max: '' } };
+  // the same, as parts for the profile card
+  const regionCode = {};
+  all.forEach(x => { const r = lc(str(x.w.region).split(',')[0].trim()), c = countryOf(x.w); if (r && c && !regionCode[r]) regionCode[r] = c.code; });
+  const card = { types: byType.map(x => ({ t: x.t, p: pct(x.n, totalOwned) })), grapes, regions: regions.map(r => ({ r, code: regionCode[lc(r)] || '' })), price: p50 !== null ? { lo: fmtP(p25), hi: fmtP(p75), mid: fmtP(p50) } : null,
+    top, tags, perMonth, occ, tw, cs };
+  return { lines, cover, text, card, budget: p50 !== null ? { min: round5(p25 * 0.8), max: round5(p75 * 1.2) } : { min: '', max: '' } };
 }
 
 function offerLineHtml(o, qty, ref) {
@@ -771,34 +847,57 @@ function wishCardHtml(x) {
   </div>`;
 }
 
+/* about a quarter of a bottle: 1, 1½, 2¼ */
+function bottlesText(v) {
+  const q = Math.round(v * 4) / 4, whole = Math.floor(q), part = ['', '¼', '½', '¾'][Math.round((q - whole) * 4)];
+  if (q <= 0) return 'less than ¼';
+  return `${whole || part ? (whole ? whole : '') + part : '0'}`;
+}
+/* your wine profile as one card: the types as a bar, two key figures, the rest as short text and bars */
+function profileCardHtml(prof) {
+  const c = prof.card, out = [];
+  if (c.types.length) {
+    const top = c.types.slice(0, 3), rest = 100 - top.reduce((a, x) => a + x.p, 0);
+    out.push(`<div><p class="pf-lbl">What you drink</p><div class="pf-bar">${c.types.map(x => `<i style="flex:${Math.max(1, x.p)};background:${TYPE_CHART[x.t] || OTHER_C}"></i>`).join('')}</div>
+      <div class="pf-leg">${top.map(x => `<span><i style="background:${TYPE_CHART[x.t] || OTHER_C}"></i>${esc(x.t)} ${x.p}%</span>`).join('')}${c.types.length > 3 && rest > 0 ? `<span>Other ${rest}%</span>` : ''}</div></div>`);
+  }
+  const n = c.perMonth, bt = n ? bottlesText(n) : '';
+  const kpi = (label, big, small) => `<div class="pf-k"><span>${label}</span><b>${big}</b><span>${small}</span></div>`;
+  out.push(`<div class="pf-kpi">${c.price ? kpi('Usual price', `${esc(cur())} ${c.price.lo} to ${c.price.hi}`, `median ${c.price.mid}`) : kpi('Usual price', 'N/A', 'add purchase prices')}${n ? kpi('You drink', `${bt} ${n > 1.125 ? 'bottles' : 'bottle'}`, 'per month') : kpi('You drink', 'None yet', 'in the last 12 months')}</div>`);
+  if (c.tags.length) { const t = c.tags.join(' · '); out.push(`<div><p class="pf-lbl">Style you like</p><p class="pf-txt">${esc(t.charAt(0).toUpperCase() + t.slice(1))}</p></div>`); }
+  if (c.grapes.length || c.regions.length) out.push(`<div><p class="pf-lbl">Grapes and regions</p>${c.grapes.length ? `<p class="pf-txt">${c.grapes.map(esc).join(' · ')}</p>` : ''}${c.regions.length ? `<p class="pf-txt">${c.regions.map(x => `${x.code ? flagOfCode(x.code) : ''}${esc(x.r)}`).join(' · ')}</p>` : ''}</div>`);
+  if (c.top.length) out.push(`<div><p class="pf-lbl">Rated highest</p>${c.top.slice(0, 3).map(w => `<a class="pf-tr" href="#/wine/${encodeURIComponent(w.id)}"><span>${esc(wineTitle(w))} <small>${esc(w.vintage)}</small></span>${segsHtml(w.myRating, 6)}<b>${w.myRating}%</b></a>`).join('')}</div>`);
+  const cov = prof.cover.filter(x => x.stock);
+  if (cov.length) {
+    const max = Math.max(24, ...cov.map(x => Math.min(99, x.months || 0)));
+    out.push(`<div><p class="pf-lbl">Your stock lasts</p>${cov.map(x => `<div class="pf-last"><span>${esc(x.t)}</span><span class="t"><i style="width:${x.months === null ? 0 : Math.max(3, Math.min(100, Math.min(99, x.months) / max * 100))}%;background:${TYPE_CHART[x.t] || OTHER_C}"></i></span><span class="m">${x.months === null ? 'not opened' : x.months > 99 ? '99+ mo.' : `${x.months} mo.`}</span></div>`).join('')}
+      ${c.cs.cap ? `<p class="tiny muted" style="margin:6px 0 0">About ${c.cs.free} of ${c.cs.cap} places free in your cellar.</p>` : ''}</div>`);
+  }
+  if (c.tw) out.push(`<p class="tiny muted" style="margin:0">Your taste test counts about ${Math.round(c.tw * 100)}% until you have rated more wines.</p>`);
+  return `<section class="pf-card"><h2>Your wine profile</h2>${out.join('')}</section>`;
+}
+/* what you are looking for, as tiles with one short line */
+const CONS_FOCUS_TILES = { 'Like my favorites': ['heart', 'More of what you rated high'], 'Something new': ['spark', 'Grapes and regions you do not have'], 'Everyday wines': ['glass', 'Good bottles for every day'], 'Special bottles': ['trophy', 'For celebrations and to keep'], 'Top value': ['cash', 'The most quality for the money'] };
+
 function viewDiscover() {
   const prof = tasteProfile();
   if (!CONS.budget) CONS.budget = prof.budget;
   const old = S.version && S.version < 12;
   const savedKeys = new Set(S.wishlist.map(wishKey));
   const res = CONS.result;
-  const cover = prof.cover.length ? `<div class="cons-cover"><div class="cons-cover-row head"><span>Type</span><span>In stock</span><span>Opened</span><span>Lasts</span></div>
-    ${prof.cover.map(c => `<div class="cons-cover-row"><span><span class="sw" style="background:${TYPE_CHART[c.t] || OTHER_C}"></span>${esc(c.t)}</span><span>${c.stock}</span><span>${c.used}</span><span>${c.months === null ? 'n/a' : c.months > 99 ? '99+ mo.' : `${c.months} mo.`}</span></div>`).join('')}</div>` : '';
   return `<main class="screen has-nav discover">
     <div class="detail-top"><a class="back" href="#/insights">${ICON.back}Insights</a></div>
     <header><h1 class="title somm-title"><span class="magic-ic">${ICON.magic}</span>Consultant</h1></header>
-    ${tipHtml('consultant')}
-    <a class="cons-check" href="#/sommelier/check">${ICON.search}<span><b>Know which wine you want?</b> Check it in Will I like it?: type or say its name.</span>${ICON.chevron}</a>
-    ${S.wishlist.length ? `<button class="cons-check" data-act="go-wishlist">${ICON.bookmark}<span><b>Your wishlist: ${S.wishlist.length} ${S.wishlist.length === 1 ? 'wine' : 'wines'}</b> in Insights</span>${ICON.chevron}</button>` : ''}
     ${ttOfferHtml()}
     ${old ? '<div class="card notice"><b>Script update needed</b><p class="small" style="margin:4px 0 0">The consultant needs the new Code.gs. Replace the script code and create a new version under Manage deployments.</p></div>' : ''}
-    <section class="ins-sec" style="border-top:0;padding-top:0"><div class="sec-head"><h2>Your profile</h2></div>
-      <p class="small muted" style="margin:0">Calculated in the app from your stock, finished wines, discoveries, ratings, journal and purchase prices${ttWeight() ? ', plus your taste test' : ''}. The consultant bases its suggestions on it.</p>
-      <div class="info-list">${prof.lines.map(l => infoRowWide(l[0], l[1])).join('')}</div>
-      <p class="small muted" style="margin:6px 0 0">Stock compared with what you drank in the last 12 months</p>${cover}
-    </section>
+    ${profileCardHtml(prof)}
     <section class="ins-sec"><div class="sec-head"><h2>What are you looking for?</h2></div>
-      <div class="chips">${CONS_FOCUS.map(f => `<button class="chip${CONS.focus === f ? ' on' : ''}" data-act="cons-focus" data-v="${esc(f)}">${esc(f)}</button>`).join('')}</div>
+      <div class="cf-tiles">${CONS_FOCUS.map((f, i) => { const [ic, d] = CONS_FOCUS_TILES[f]; const wide = i === CONS_FOCUS.length - 1 && CONS_FOCUS.length % 2; return `<button class="cf-tile${CONS.focus === f ? ' on' : ''}${wide ? ' wide' : ''}" data-act="cons-focus" data-v="${esc(f)}" aria-pressed="${CONS.focus === f}">${ICON[ic]}<span><b>${esc(f)}</b><small>${esc(d)}</small></span></button>`; }).join('')}</div>
       <div class="grid2"><label class="field">Budget from (${esc(cur())})<input inputmode="numeric" data-input="cons-min" value="${esc(CONS.budget.min)}"></label><label class="field">to (${esc(cur())})<input inputmode="numeric" data-input="cons-max" value="${esc(CONS.budget.max)}"></label></div>
       <div class="field"><label for="cons-note">Anything else? (optional)</label><div class="note-voice"><textarea id="cons-note" data-input="cons-note" rows="2" placeholder="Type or speak, for example more whites for summer, wines for guests">${esc(CONS.note)}</textarea><div class="voice-btns">${voiceLangHtml()}<button class="somm-mic${CONS.listening ? ' on' : ''}" id="cons-mic" data-act="cons-mic" aria-label="${CONS.listening ? 'Stop listening' : 'Speak'}">${ICON.mic}</button></div></div>
-        <span class="tiny muted" id="cons-mic-hint">${CONS.listening ? 'Listening. Take your time, tap stop when you are done. Then check the text before you tap the button.' : 'Tap the microphone to speak. You can correct the text before you send it.'}</span></div>
+        <span class="tiny muted" id="cons-mic-hint">${CONS.listening ? 'Listening. Tap stop when you are done.' : ''}</span></div>
       <button class="btn primary big block" data-act="cons-run"${CONS.busy || old ? ' disabled' : ''}>${ICON.magic}${CONS.busy ? 'Choosing wines and checking shops…' : res ? 'Get new recommendations' : 'Get recommendations'}</button>
-      <p class="tiny muted" style="margin:0">${CONS.busy ? 'This takes about a minute. Every suggestion is checked in online shops for ' + esc(shopCountryName()) + ', so you only get wines you can buy.' : 'You only get wines that an online shop for ' + esc(shopCountryName()) + ' sells right now, with price and link. One round takes about a minute and costs about 15 to 20 cents, less when offers from the last 14 days can be reused.'}</p>
+      <p class="wz-cost">${CONS.busy ? 'This takes about a minute.' : 'About 15 to 20 cents, takes about a minute.'}</p>
     </section>
     ${CONS.error ? `<p class="small" style="color:var(--danger);margin:0">${esc(CONS.error)}</p>` : ''}
     ${res ? `<section class="ins-sec"><div class="sec-head"><h2>Recommendations</h2></div>${res.summary ? `<p style="margin:0;line-height:1.5">${esc(res.summary)}</p>` : ''}
@@ -847,7 +946,7 @@ async function consOffer(p, key, wishId) {
   refreshView();
 }
 
-const wishSavedToast = x => toastAct('Saved to your wishlist in Insights.', [['Show', () => goSection('wishlist')], ['Who recommended it?', () => recWishOpen(x.id)]]);
+const wishSavedToast = x => toastAct('Saved to your wishlist in the Cellar.', [['Show', () => goSection('wishlist')], ['Who recommended it?', () => recWishOpen(x.id)]]);
 async function consSave(p) {
   const x = normWish(Object.assign({}, p, { id: newId('x'), offer: CONS.offers[wishKey(p)] || null, createdAt: new Date().toISOString(), details: previewOf(p) }));
   S.wishlist.push(x);

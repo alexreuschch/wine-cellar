@@ -3,7 +3,7 @@
 /* Wine Cellar, a private wine cellar app.
    Data lives in your Google Sheet, reached through your Google Apps Script web app. */
 
-const APP_VERSION = '4.4.4';
+const APP_VERSION = '4.5.0';
 const OPENCV_URL = 'https://docs.opencv.org/4.7.0/opencv.js';
 const JSCANIFY_URL = 'https://cdn.jsdelivr.net/gh/ColonelParrot/jscanify@master/src/jscanify.min.js';
 
@@ -606,13 +606,13 @@ const typeBadge = t => (t === 'Gift' ? `<span class="badge gift">${ICON.gift}Gif
   : `<span class="badge${t === 'Celebration' ? ' celebration' : ''}">${esc(t)}</span>`);
 
 function nav(active) {
-  // badges, if wanted in Settings: wines past their window on Window, a dot on Insights for an overdue delivery
+  // badges, if wanted in Settings: wines past their window on Window, a dot on Cellar for an overdue delivery
   const on = notifyOf().badges;
   const past = on ? S.wines.filter(w => w.count > 0 && statusOf(w) === 'Past its window').length : 0;
   const late = on && S.orders.some(orderOverdue);
   const badge = (n, label) => (n ? `<span class="nav-n" aria-label="${n} ${label}">${n > 99 ? '99+' : n}</span>` : '');
   const item = (href, key, icon, label, extra = '') => `<a href="${href}" class="${active === key ? 'on' : ''}"><span class="nav-ic">${icon}${extra}</span>${label}</a>`;
-  return `<nav class="nav" aria-label="Main">${item('#/home', 'home', ICON.home, 'Home')}${item('#/cellar', 'cellar', ICON.glass, 'Cellar')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/insights', active === 'top' ? 'top' : 'insights', ICON.chart, 'Insights', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
+  return `<nav class="nav" aria-label="Main">${item('#/home', 'home', ICON.home, 'Home')}${item('#/cellar', 'cellar', ICON.glass, 'Cellar', late ? '<span class="nav-dot" aria-label="A delivery is overdue"></span>' : '')}${item('#/window', 'window', ICON.clock, 'Window', badge(past, past === 1 ? 'wine past its window' : 'wines past their window'))}${item('#/insights', active === 'top' ? 'top' : 'insights', ICON.chart, 'Insights')}${item('#/journal', 'journal', ICON.book, 'Journal')}</nav>`;
 }
 /* the monthly email and the badges, as chosen in Settings */
 const notifyOf = () => Object.assign({ mail: true, to: '', window: true, orders: true, month: true, badges: true }, (S.settings && S.settings.notify) || {});
@@ -890,7 +890,7 @@ const go = (hash, replace) => { if (replace) { NAV.replacing = true; location.re
 
 /* where you came from: the screens of this session in order, and how far down each was scrolled */
 const NAV = { stack: [location.hash || '#/cellar'], scroll: {}, replacing: false, restore: null };
-const NAV_LABEL = { home: 'Home', cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', orders: 'Ordered', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back', import: 'Import' };
+const NAV_LABEL = { home: 'Home', cellar: 'Cellar', window: 'Window', top: 'Top rated', insights: 'Insights', journal: 'Journal', sommelier: 'Sommelier', discover: 'Consultant', orders: 'Ordered', wishlist: 'Wishlist', 'journal-ai': 'Journal Assistant', taste: 'Taste test', settings: 'Settings', wine: 'Back', import: 'Import' };
 const hashRoute = h => { const [p, id] = String(h || '').replace(/^#\/?/, '').split('/'); return { p: p || 'cellar', id: id ? decodeURIComponent(id) : null }; };
 /* called on every change of the screen, before it is drawn */
 function navTrack() {
@@ -931,7 +931,8 @@ function render() {
     case 'insights': html = viewInsights(); break;
     case 'sommelier': html = viewSommelier(); break;
     case 'discover': html = viewDiscover(); break;
-    case 'orders': setTimeout(() => { U.jumpTo = 'orders'; go('#/insights', true); }); html = viewInsights(); break;
+    case 'orders': html = viewOrders(); break;
+    case 'wishlist': html = viewWishlist(); break;
     case 'journal': html = viewJournal(); break;
     case 'journal-ai': html = viewJournalAI(); break;
     case 'taste': html = viewTaste(); break;
