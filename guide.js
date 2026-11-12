@@ -2,15 +2,11 @@
 
 /* ------------------------------------------------ one-time tips on the spot, kept on this phone */
 const TIPS = {
-  'som-cellar': ['Sommelier, My cellar', 'Say what you eat or what you feel like. The sommelier picks the best bottles from your cellar and tells you why.', 'Each question costs a few cents.'],
-  'som-check': ['Will I like it?', 'For a wine that is <b>not in your cellar</b>: how well it fits your taste, how it goes with your food and what a fair price is. Follow the four steps from top to bottom.', 'One check costs about 5 cents.'],
-  'som-list': ['Wine list', 'Photograph the pages of a restaurant wine list. You get the best wine in your price range, the best value and a hidden gem, each with the markup of the restaurant.', 'One analysis costs about 10 to 20 cents.'],
-  consultant: ['Consultant', 'Suggests wines to add to your cellar, based on your stock, your ratings and what you drink, with sensible quantities and the best shop price.', 'One round costs about 15 to 20 cents.'],
   'top-ext': ['External ratings', 'Published scores of your wines from critics and guides. The gold symbol at the top looks them up for the wines you see.', 'About 3 to 4 cents per wine.'],
   'journal-ai': ['Journal Assistant', 'Ask about your journal in your own words, for example what you drank with Anna or which wines you bought at Gerstl.', 'Each question costs a few cents.'],
   wine: ['Your wine', 'Tap region, grape or producer for its background. Further down: the drinking window, prices in shops and the best offer.', ''],
   places: ['Places', 'Your bottles by location and shelf. <b>Check this place</b> compares the counts with what really lies there, <b>Move bottles</b> brings many bottles to another place at once.', ''],
-  insights: ['Insights', 'Tap a row or a column to see its wines. At the bottom you find your orders and the wishlist, with who recommended a wine.', '']
+  insights: ['Insights', 'Tap a row or a column to see its wines. The gold symbol at the top opens the consultant. Your orders and the wishlist are in the Cellar.', '']
 };
 const tipState = () => { const v = store.get('wc-tips', null); return v && typeof v === 'object' ? { off: !!v.off, seen: Array.isArray(v.seen) ? v.seen : [] } : { off: false, seen: [] }; };
 function tipHtml(k) {
