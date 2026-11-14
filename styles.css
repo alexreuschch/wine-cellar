@@ -1501,9 +1501,8 @@ canvas.b3 { display: block; }
 .hm-somm h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; font-weight: 600; color: var(--text); }
 .hm-somm h2 svg { width: 20px; height: 20px; color: var(--gold); }
 .hm-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.hm-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-height: 84px; padding: 8px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 13px; text-align: center; line-height: 1.2; }
+.hm-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-height: 84px; padding: 8px 4px; border-radius: 14px; border: 1px solid rgba(230, 203, 152, .35); background: var(--bg); color: var(--text); font-size: 13px; text-align: center; line-height: 1.2; }
 .hm-tile:hover { color: var(--text); }
-.hm-tile:first-child { border-color: var(--gold); }
 .hm-tile svg { width: 24px; height: 24px; color: var(--gold); }
 /* the wine profile in the consultant: one card, text in the normal font, colour only in the bars */
 .pf-card { display: flex; flex-direction: column; gap: 16px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
